@@ -136,6 +136,11 @@ class RunnerViewProvider {
         this.setRunnerFocused(false);
       }
     });
+    webviewView.onDidChangeVisibility(() => {
+      if (this.view === webviewView && !webviewView.visible) {
+        this.setRunnerFocused(false);
+      }
+    });
     this.refreshActiveFile(vscode.window.activeTextEditor);
 
     webviewView.webview.options = {
