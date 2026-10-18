@@ -2,7 +2,7 @@
   "name": "piyoyo",
   "displayName": "Piyoyo",
   "description": "A friendly Python stdin runner and input snippet helper for competitive programming in VS Code.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "local",
   "license": "GPL-3.0-only",
   "repository": {
@@ -30,6 +30,8 @@
   "activationEvents": [
     "onCommand:piyoyo.open",
     "onCommand:ioSprint.open",
+    "onCommand:piyoyo.saveAndRun",
+    "onCommand:piyoyo.toggleInputFocus",
     "onView:piyoyo.runnerView"
   ],
   "main": "./extension.js",
@@ -42,14 +44,98 @@
           "light": "resources/piyoyo.png",
           "dark": "resources/piyoyo.png"
         }
+      },
+      {
+        "command": "piyoyo.openSettings",
+        "title": "Piyoyo: 設定を開く",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "piyoyo.saveAndRun",
+        "title": "Piyoyo: 保存して実行"
+      },
+      {
+        "command": "piyoyo.toggleInputFocus",
+        "title": "Piyoyo: パネルとエディタを切り替え"
+      },
+      {
+        "command": "piyoyo.workspaceShortcut",
+        "title": "Piyoyo: パネルのタブ切り替えキー"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "piyoyo.saveAndRun",
+        "key": "ctrl+enter",
+        "mac": "cmd+enter",
+        "when": "editorTextFocus && editorLangId == python && !notebookEditorFocused"
+      },
+      {
+        "command": "piyoyo.toggleInputFocus",
+        "key": "alt+i",
+        "mac": "alt+i",
+        "args": {
+          "target": "input"
+        },
+        "when": "editorTextFocus && editorLangId == python && !notebookEditorFocused && config.piyoyo.inputFocusShortcut != shiftShift"
+      },
+      {
+        "command": "piyoyo.toggleInputFocus",
+        "key": "alt+i",
+        "mac": "alt+i",
+        "args": {
+          "target": "editor"
+        },
+        "when": "piyoyo.runnerFocused && !editorTextFocus && config.piyoyo.inputFocusShortcut != shiftShift"
+      },
+      {
+        "command": "piyoyo.toggleInputFocus",
+        "key": "shift shift",
+        "args": {
+          "target": "input"
+        },
+        "when": "editorTextFocus && editorLangId == python && !notebookEditorFocused && config.piyoyo.inputFocusShortcut != altI"
+      },
+      {
+        "command": "piyoyo.toggleInputFocus",
+        "key": "shift shift",
+        "args": {
+          "target": "editor"
+        },
+        "when": "piyoyo.runnerFocused && !editorTextFocus && config.piyoyo.inputFocusShortcut != altI"
+      },
+      {
+        "command": "piyoyo.workspaceShortcut",
+        "key": "alt+1",
+        "mac": "alt+1",
+        "when": "piyoyo.runnerFocused && !editorTextFocus"
+      },
+      {
+        "command": "piyoyo.workspaceShortcut",
+        "key": "alt+2",
+        "mac": "alt+2",
+        "when": "piyoyo.runnerFocused && !editorTextFocus"
       }
     ],
     "menus": {
+      "commandPalette": [
+        {
+          "command": "piyoyo.workspaceShortcut",
+          "when": "false"
+        }
+      ],
       "editor/title": [
         {
           "command": "piyoyo.open",
           "when": "resourceLangId == python",
           "group": "navigation@1"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "piyoyo.openSettings",
+          "when": "view == piyoyo.runnerView",
+          "group": "navigation"
         }
       ]
     },
@@ -77,24 +163,65 @@
         "piyoyo.pythonPath": {
           "type": "string",
           "default": "",
-          "description": "Python executable path. When empty, Piyoyo uses python.defaultInterpreterPath, then python on Windows or python3 elsewhere."
+          "description": "Pythonの実行ファイルのパスです。パネルの「実行環境」で選んだ値が優先されます。空の場合は python.defaultInterpreterPath を使い、それも空ならWindowsでは python、それ以外では python3 を使います。"
         },
         "piyoyo.timeoutMs": {
           "type": "number",
           "default": 5000,
           "minimum": 100,
-          "description": "Maximum execution time in milliseconds."
+          "description": "Pythonの最大実行時間をミリ秒で指定します（1000 ミリ秒 = 1 秒）。この時間を超えると実行を止めます。"
+        },
+        "piyoyo.errorDisplayMode": {
+          "type": "string",
+          "enum": [
+            "friendly",
+            "both",
+            "original"
+          ],
+          "enumItemLabels": [
+            "やさしい表示",
+            "両方表示",
+            "原文表示"
+          ],
+          "enumDescriptions": [
+            "日本語の説明を表示します。Pythonの原文（エラーとトレースバック）は「原文を見る」を開いたときだけ表示します。",
+            "日本語の説明と、Pythonの原文の両方を表示します。",
+            "Pythonの原文を中心に表示します。日本語の説明は「日本語の説明を見る」を開くと表示します。"
+          ],
+          "default": "friendly",
+          "description": "Pythonのエラーが起きたときの表示方法を選びます。"
+        },
+        "piyoyo.inputFocusShortcut": {
+          "type": "string",
+          "enum": [
+            "altI",
+            "shiftShift",
+            "both"
+          ],
+          "enumItemLabels": [
+            "Alt+I",
+            "Shiftを2回",
+            "両方"
+          ],
+          "enumDescriptions": [
+            "Alt+I（macOSはOption+I）で、PythonのエディタとPiyoyoパネルを行き来します。",
+            "Shiftキーを素早く2回押して、PythonのエディタとPiyoyoパネルを行き来します。日本語入力（IME）がShiftで入力モードを切り替える場合は、その動作も起きることがあります。",
+            "Alt+I と Shiftを2回の両方を使えます。"
+          ],
+          "default": "altI",
+          "description": "Pythonのエディタと、Piyoyoパネル（最後に開いていたタブ）を行き来するキーを選びます。キーボードショートカットの画面で別のキーにすることもできます。"
         },
         "piyoyo.advanced.showOriginalErrors": {
           "type": "boolean",
           "default": false,
-          "description": "日本語のエラー説明に加え、元のエラーとトレースバックを表示します。"
+          "description": "日本語のエラー説明に加え、元のエラーとトレースバックを表示します。",
+          "deprecationMessage": "代わりに piyoyo.errorDisplayMode を使ってください。piyoyo.errorDisplayMode を設定していない場合に限り、true は「両方表示」として扱います。"
         }
       }
     }
   },
   "scripts": {
     "test": "node --test test/*.test.js",
-    "check": "node --check extension.js && node --check src/webviewHtml.js && node --check src/snippetLibrary.js && node --check src/snippetPreferences.js && node --check src/snippetInsertion.js && node --check src/pythonImportInsertion.js && node --check src/pythonStatements.js && node --check src/runners/pythonRunner.js && node --check src/runners/pythonErrorExplainer.js && node --check src/runners/boundedOutput.js && node --check src/runners/processTermination.js && node --check src/targetSelection.js && node --check src/pythonPathSelection.js && node --check src/pythonPathPreference.js && node --check src/pythonLauncherAvailability.js && node --check src/pythonLauncherAvailabilityCache.js"
+    "check": "node --check extension.js && node --check src/webviewHtml.js && node --check src/snippetLibrary.js && node --check src/snippetPreferences.js && node --check src/snippetInsertion.js && node --check src/pythonImportInsertion.js && node --check src/pythonHelperInsertion.js &&node --check src/pythonStatements.js && node --check src/runners/pythonRunner.js && node --check src/runners/pythonErrorExplainer.js && node --check src/runners/boundedOutput.js && node --check src/runners/processTermination.js && node --check src/errorDisplayMode.js && node --check src/piyoyoSettings.js && node --check src/targetSelection.js && node --check src/keyboardShortcuts.js && node --check src/inputFocus.js && node --check src/pythonPathSelection.js && node --check src/pythonPathPreference.js && node --check src/pythonLauncherAvailability.js && node --check src/pythonLauncherAvailabilityCache.js && node --check src/ruffImportOrganizer.js"
   }
 }

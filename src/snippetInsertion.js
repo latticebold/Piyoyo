@@ -1,6 +1,8 @@
 'use strict';
 
+const { getHelperInsertion } = require('./pythonHelperInsertion');
 const { getImportInsertion } = require('./pythonImportInsertion');
+const { organizeImportsWithRuff } = require('./ruffImportOrganizer');
 const { applySnippetPlaceholderValues } = require('./snippetLibrary');
 
 async function insertInputSnippet({ vscodeApi, editor, snippet, placeholderValues }) {
@@ -17,10 +19,7 @@ async function insertInputSnippet({ vscodeApi, editor, snippet, placeholderValue
   }
 
   const requiredImports = Array.isArray(snippet.imports) ? snippet.imports : [];
-  const source = typeof editor.document.getText === 'function'
-    ? editor.document.getText()
-    : '';
-  const importInsertion = getImportInsertion(source, requiredImports);
+  const importInsertion = getImportInsertion(readText(editor.document), requiredImports);
   let addedImports = [];
 
   if (importInsertion.imports.length > 0) {
@@ -29,13 +28,7 @@ async function insertInputSnippet({ vscodeApi, editor, snippet, placeholderValue
     }
 
     try {
-      const importsInserted = await editor.edit((editBuilder) => {
-        editBuilder.insert(
-          new vscodeApi.Position(importInsertion.line, importInsertion.character || 0),
-          importInsertion.text
-        );
-      });
-
+      const importsInserted = await insertText(vscodeApi, editor, importInsertion);
       if (!importsInserted) {
         return failure('必要なimportを追加できませんでした。', addedImports);
       }
@@ -47,11 +40,47 @@ async function insertInputSnippet({ vscodeApi, editor, snippet, placeholderValue
         addedImports
       );
     }
+
+    // Before insertSnippet so a whole-document edit cannot break tab stops.
+    await organizeImportsWithRuff(createRuffDependencies(vscodeApi, editor.document));
   }
 
+  // Computed after Ruff, so organizing imports never sees or moves the helper.
+  const requiredHelpers = Array.isArray(snippet.helpers) ? snippet.helpers : [];
+  const helperInsertion = getHelperInsertion(readText(editor.document), requiredHelpers);
+  let addedHelpers = [];
+
+  if (helperInsertion.helpers.length > 0) {
+    const helperFailure = (detail = '') => failure(
+      (addedImports.length > 0
+        ? 'importは追加しましたが、関数の定義を追加できませんでした'
+        : '関数の定義を追加できませんでした') + (detail ? `: ${detail}` : '。'),
+      addedImports
+    );
+    if (typeof editor.edit !== 'function' || typeof vscodeApi.Position !== 'function') {
+      return helperFailure();
+    }
+
+    try {
+      const helpersInserted = await insertText(vscodeApi, editor, helperInsertion);
+      if (!helpersInserted) {
+        return helperFailure();
+      }
+
+      addedHelpers = helperInsertion.helpers;
+    } catch (error) {
+      return helperFailure(error.message || String(error));
+    }
+  }
+
+  const addedSomething = addedImports.length > 0 || addedHelpers.length > 0;
+  const partialPrefix = addedHelpers.length > 0
+    ? '関数の定義などは追加しましたが、'
+    : 'importは追加しましたが、';
+
   try {
-    // Adding imports can shift every cursor down. Use the tracked selections
-    // after the edit rather than inserting at their former document positions.
+    // Earlier edits can shift every cursor down. Use the tracked selections
+    // after the edits rather than inserting at their former document positions.
     const locations = Array.isArray(editor.selections) && editor.selections.length > 0
       ? editor.selections
       : editor.selection;
@@ -64,42 +93,90 @@ async function insertInputSnippet({ vscodeApi, editor, snippet, placeholderValue
 
     if (!inserted) {
       return failure(
-        addedImports.length > 0
-          ? 'importは追加しましたが、スニペットを挿入できませんでした。'
+        addedSomething
+          ? `${partialPrefix}スニペットを挿入できませんでした。`
           : 'スニペットを挿入できませんでした。',
-        addedImports
+        addedImports,
+        addedHelpers
       );
     }
 
     await vscodeApi.commands.executeCommand('workbench.action.focusActiveEditorGroup');
     return {
       ok: true,
-      message: createSuccessMessage(addedImports),
-      addedImports
+      message: createSuccessMessage(addedImports, addedHelpers),
+      addedImports,
+      addedHelpers
     };
   } catch (error) {
     return failure(
-      addedImports.length > 0
-        ? `importは追加しましたが、スニペットを挿入できませんでした: ${error.message || String(error)}`
+      addedSomething
+        ? `${partialPrefix}スニペットを挿入できませんでした: ${error.message || String(error)}`
         : `スニペットを挿入できませんでした: ${error.message || String(error)}`,
-      addedImports
+      addedImports,
+      addedHelpers
     );
   }
 }
 
-function createSuccessMessage(addedImports) {
-  if (addedImports.length === 0) {
-    return 'スニペットを挿入しました。';
-  }
-
-  return `スニペットを挿入しました。importを追加しました: ${addedImports.join('、')}`;
+function readText(document) {
+  return document && typeof document.getText === 'function' ? document.getText() : '';
 }
 
-function failure(message, addedImports = []) {
+function insertText(vscodeApi, editor, insertion) {
+  return editor.edit((editBuilder) => {
+    editBuilder.insert(
+      new vscodeApi.Position(insertion.line, insertion.character || 0),
+      insertion.text
+    );
+  });
+}
+
+function createRuffDependencies(vscodeApi, document) {
+  const extensions = vscodeApi && vscodeApi.extensions;
+  const commands = vscodeApi && vscodeApi.commands;
+  const workspace = vscodeApi && vscodeApi.workspace;
+  const lineCount = document && Number.isInteger(document.lineCount) ? document.lineCount : 0;
+  return {
+    getExtension: extensions && typeof extensions.getExtension === 'function'
+      ? (id) => extensions.getExtension(id)
+      : undefined,
+    executeCommand: commands && typeof commands.executeCommand === 'function'
+      ? (...args) => commands.executeCommand(...args)
+      : undefined,
+    applyEdit: workspace && typeof workspace.applyEdit === 'function'
+      ? (edit) => workspace.applyEdit(edit)
+      : undefined,
+    document,
+    range: vscodeApi && typeof vscodeApi.Range === 'function'
+      ? validateRange(document, new vscodeApi.Range(0, 0, lineCount, 0))
+      : undefined
+  };
+}
+
+function validateRange(document, range) {
+  return document && typeof document.validateRange === 'function'
+    ? document.validateRange(range)
+    : range;
+}
+
+function createSuccessMessage(addedImports, addedHelpers) {
+  const notes = [];
+  if (addedImports.length > 0) {
+    notes.push(`importを追加しました: ${addedImports.join('、')}`);
+  }
+  if (addedHelpers.length > 0) {
+    notes.push(`関数の定義を追加しました: ${addedHelpers.join('、')}`);
+  }
+  return ['スニペットを挿入しました。', notes.join('。')].join('');
+}
+
+function failure(message, addedImports = [], addedHelpers = []) {
   return {
     ok: false,
     message,
-    addedImports
+    addedImports,
+    addedHelpers
   };
 }
 

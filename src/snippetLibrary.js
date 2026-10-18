@@ -2,47 +2,81 @@
 
 const SNIPPET_CATEGORY_ORDER = Object.freeze([
   'input',
-  'output',
   'number-conversion',
-  'list-comprehension',
-  'index-slice',
   'string',
-  'condition-check',
-  'aggregation',
-  'prefix-sum',
-  'brute-force',
-  'binary-search',
-  'queue',
+  'list',
   'tuple',
-  'debug'
+  'aggregation',
+  'queue',
+  'brute-force',
+  'prefix-sum',
+  'binary-search',
+  'output'
 ]);
 
 const CATEGORY_LABELS = Object.freeze({
   input: '入力',
-  output: '出力',
   'number-conversion': '数値・型変換',
   string: '文字列',
-  'list-comprehension': 'リスト・内包表記',
-  'index-slice': '添字・スライス',
-  'condition-check': '条件分岐・文字判定',
-  aggregation: '集計・辞書',
-  'prefix-sum': '累積和',
-  'brute-force': '全探索',
-  'binary-search': '二分探索',
-  queue: 'キュー・deque',
+  list: 'リスト',
   tuple: 'タプル・座標',
-  debug: 'デバッグ・型確認'
+  aggregation: '集合・辞書・数え上げ',
+  queue: 'キュー・deque',
+  'brute-force': '全探索',
+  'prefix-sum': '累積和',
+  'binary-search': '二分探索',
+  output: '出力・デバッグ'
 });
 
-const SNIPPET_USAGE_ORDER = new Map([
-  'queue-deque-empty',
-  'queue-deque',
-  'queue-append',
-  'queue-popleft',
-  'queue-appendleft',
-  'queue-pop',
-  'queue-index'
-].map((snippetId, index) => [snippetId, index]));
+// Row order inside each category: built-ins first, then imports, then helpers (自作).
+const SNIPPET_DISPLAY_ORDER = Object.freeze([
+  'basic-string', 'basic-int', 'basic-float', 'basic-chars',
+  'split-strings', 'split-map-int', 'split-int-list', 'split-float-list',
+  'multiline-strings', 'multiline-ints', 'multiline-int-matrix', 'multiline-char-grid',
+  'convenient-sorted-ints', 'convenient-int-set', 'convenient-indexed-ints',
+
+  'conversion-int', 'conversion-float', 'conversion-str', 'conversion-digit-list',
+  'number-floor-division', 'number-remainder', 'number-abs',
+  'number-max-two', 'number-min-two',
+  'math-gcd', 'math-lcm', 'math-isqrt',
+
+  'string-contains', 'string-find', 'string-count', 'string-replace', 'string-set-char',
+  'string-reverse', 'string-lower', 'string-upper',
+  'string-isdigit', 'string-isalpha', 'string-isalnum',
+  'string-islower', 'string-isupper', 'string-isspace',
+  'string-find-all', 'string-z-algorithm',
+  'string-hamming-distance', 'string-levenshtein-distance',
+
+  'sequence-length', 'list-access', 'list-access-from-end', 'list-slice',
+  'list-append', 'list-pop', 'list-pop-first',
+  'list-contains', 'list-count', 'list-index',
+  'list-sum', 'list-max', 'list-min',
+  'list-sort-ascending', 'list-sort-descending',
+  'comprehension-range', 'comprehension-squares', 'comprehension-zero-matrix',
+  'comprehension-even-filter', 'comprehension-conditional-expression',
+
+  'tuple-coordinate', 'tuple-single-item', 'tuple-unpack-coordinate',
+
+  'set-add', 'set-contains', 'dict-lookup',
+  'aggregation-counter', 'aggregation-counter-value',
+  'aggregation-defaultdict-int', 'aggregation-increment', 'aggregation-defaultdict-list',
+
+  'queue-deque-empty', 'queue-deque',
+  'queue-append', 'queue-popleft', 'queue-appendleft', 'queue-pop', 'queue-index',
+
+  'brute-combinations', 'brute-permutations',
+
+  'aggregation-accumulate', 'prefix-sum-range',
+
+  'binary-bisect-left', 'binary-bisect-right', 'binary-count-closed-interval',
+
+  'output-value', 'output-text', 'output-two-values', 'output-unpack-list',
+  'debug-type', 'debug-isinstance-int', 'debug-isinstance-str'
+]);
+
+const SNIPPET_USAGE_ORDER = new Map(
+  SNIPPET_DISPLAY_ORDER.map((snippetId, index) => [snippetId, index])
+);
 
 // n は対象の要素数・文字数、m は検索する文字列の長さ。入力・出力では総文字数を使う。
 // Python の整数は任意精度なので、整数演算には固定桁数の仮定を明示する。
@@ -98,9 +132,6 @@ const COMPLEXITY_BY_ID = Object.freeze({
   'list-access': ['O(1)', '最悪', 'リスト A の先頭から i+1 番目の要素を取得'],
   'list-access-from-end': ['O(1)', '最悪', 'i は1以上。リスト A の末尾から i 番目の要素を取得'],
   'list-slice': ['O(k)', '最悪', 'k=作成するリストの要素数'],
-  'string-slice': ['O(k)', '最悪', 'k=作成する文字列の文字数'],
-  'string-first': ['O(1)', '最悪', '文字列 s の先頭1文字を取得'],
-  'string-last': ['O(1)', '最悪', '文字列 s の末尾1文字を取得'],
   'string-count': ['O(n + m)', '最悪', 'CPython。n=文字列 s、m=探す文字列の長さ'],
   'string-find': ['O(n + m)', '最悪', 'CPython。n=文字列 s、m=探す文字列の長さ'],
   'string-contains': ['O(n + m)', '最悪', 'CPython。n=文字列 s、m=探す文字列の長さ'],
@@ -108,12 +139,17 @@ const COMPLEXITY_BY_ID = Object.freeze({
   'string-lower': ['O(n)', '最悪', 'n=文字列 s の長さ'],
   'string-upper': ['O(n)', '最悪', 'n=文字列 s の長さ'],
   'string-replace': ['入力長に依存', '最悪', '検索対象・置換前後の文字列の長さと置換回数に依存'],
+  'string-set-char': ['O(n)', '最悪', 'n=文字列 s の長さ。新しい文字列を作る'],
   'string-isdigit': ['O(n)', '最悪', 'n=文字列 s の長さ'],
   'string-isalpha': ['O(n)', '最悪', 'n=文字列 s の長さ'],
   'string-isalnum': ['O(n)', '最悪', 'n=文字列 s の長さ'],
   'string-islower': ['O(n)', '最悪', 'n=文字列 s の長さ'],
   'string-isupper': ['O(n)', '最悪', 'n=文字列 s の長さ'],
   'string-isspace': ['O(n)', '最悪', 'n=文字列 s の長さ'],
+  'string-hamming-distance': ['O(n)', '最悪', 'n=文字列 s、t の長さ'],
+  'string-levenshtein-distance': ['O(n × m)', '最悪', 'n=文字列 s、m=文字列 t の長さ'],
+  'string-find-all': ['O(n × m)', '最悪', 'CPython。n=文字列 s、m=探す文字列 t の長さ。重なる一致が多いと最悪になる'],
+  'string-z-algorithm': ['O(n)', '最悪', 'n=文字列 s の長さ'],
   'aggregation-counter': ['O(n)', '平均', 'n=入力 a の要素数。ハッシュ衝突が集中すると最悪 O(n²)'],
   'aggregation-defaultdict-int': ['O(1)', '最悪', '空の辞書を作成。キーの検索は含まない'],
   'aggregation-defaultdict-list': ['O(1)', '最悪', '空の辞書を作成。キーの検索は含まない'],
@@ -122,7 +158,6 @@ const COMPLEXITY_BY_ID = Object.freeze({
   'set-add': ['O(1)', '平均', '集合 S に要素を追加。衝突が集中すると最悪 O(n)'],
   'set-contains': ['O(1)', '平均', '集合 S の要素を検索。衝突が集中すると最悪 O(n)'],
   'dict-lookup': ['O(1)', '平均', '辞書 d のキーを検索。衝突が集中すると最悪 O(n)'],
-  'dict-contains': ['O(1)', '平均', '辞書 d のキーを検索。衝突が集中すると最悪 O(n)'],
   'aggregation-accumulate': ['O(n)', '最悪', 'n=入力 a の要素数。加算の費用は別'],
   'prefix-sum-range': ['O(1)', '最悪', '添字2か所の参照と減算。大きな整数の費用は別'],
   'brute-combinations': ['O(r × C(n,r))', '最悪', 'n=リスト A の要素数。全ての組み合わせをリストに作る'],
@@ -149,7 +184,6 @@ const SNIPPET_DEFINITIONS = [
   createSnippet({
     id: 'basic-string',
     category: 'input',
-    categoryLabel: '入力',
     selectorGroup: 'single-line-type',
     selectorGroupLabel: '1行を読む',
     choiceLabel: '文字列',
@@ -162,7 +196,6 @@ const SNIPPET_DEFINITIONS = [
   createSnippet({
     id: 'basic-int',
     category: 'input',
-    categoryLabel: '入力',
     selectorGroup: 'single-line-type',
     selectorGroupLabel: '1行を読む',
     choiceLabel: '整数',
@@ -176,7 +209,6 @@ const SNIPPET_DEFINITIONS = [
   createSnippet({
     id: 'basic-float',
     category: 'input',
-    categoryLabel: '入力',
     selectorGroup: 'single-line-type',
     selectorGroupLabel: '1行を読む',
     choiceLabel: '小数',
@@ -190,8 +222,7 @@ const SNIPPET_DEFINITIONS = [
   createSnippet({
     id: 'basic-chars',
     category: 'input',
-    categoryLabel: '入力',
-    summary: '文字列を1文字ずつに分ける',
+    summary: '1行の文字列を1文字ずつのリストにする',
     description: '文字列を1文字ずつのリストに分けます。',
     input: '標準入力から1行の文字列を受け取ります。',
     returns: '各文字を要素に持つlist[str]を返します。',
@@ -201,7 +232,6 @@ const SNIPPET_DEFINITIONS = [
   createSnippet({
     id: 'split-strings',
     category: 'input',
-    categoryLabel: '入力',
     summary: '1行の文字列を空白で分ける',
     description: '空白で区切られた文字列を受け取ります。',
     input: '空白で区切られた文字列が並ぶ1行を受け取ります。',
@@ -211,7 +241,6 @@ const SNIPPET_DEFINITIONS = [
   createSnippet({
     id: 'split-map-int',
     category: 'input',
-    categoryLabel: '入力',
     selectorGroup: 'number-line-type',
     selectorGroupLabel: '1行の数列を読む',
     choiceLabel: '整数（map）',
@@ -225,7 +254,6 @@ const SNIPPET_DEFINITIONS = [
   createSnippet({
     id: 'split-int-list',
     category: 'input',
-    categoryLabel: '入力',
     selectorGroup: 'number-line-type',
     selectorGroupLabel: '1行の数列を読む',
     choiceLabel: '整数（list）',
@@ -239,7 +267,6 @@ const SNIPPET_DEFINITIONS = [
   createSnippet({
     id: 'split-float-list',
     category: 'input',
-    categoryLabel: '入力',
     selectorGroup: 'number-line-type',
     selectorGroupLabel: '1行の数列を読む',
     choiceLabel: '小数（list）',
@@ -254,9 +281,8 @@ const SNIPPET_DEFINITIONS = [
   createSnippet({
     id: 'multiline-strings',
     category: 'input',
-    categoryLabel: '入力',
     selectorGroup: 'multiline-list-type',
-    selectorGroupLabel: 'N行をリストにする',
+    selectorGroupLabel: 'n行をリストにする',
     choiceLabel: '文字列',
     summary: 'n行の文字列をリストにする',
     description: 'n行の文字列をリストにします。',
@@ -268,9 +294,8 @@ const SNIPPET_DEFINITIONS = [
   createSnippet({
     id: 'multiline-ints',
     category: 'input',
-    categoryLabel: '入力',
     selectorGroup: 'multiline-list-type',
-    selectorGroupLabel: 'N行をリストにする',
+    selectorGroupLabel: 'n行をリストにする',
     choiceLabel: '整数',
     summary: 'n行の整数をリストにする',
     description: 'n行の整数をリストにします。',
@@ -283,9 +308,8 @@ const SNIPPET_DEFINITIONS = [
   createSnippet({
     id: 'multiline-int-matrix',
     category: 'input',
-    categoryLabel: '入力',
     selectorGroup: 'multiline-grid-type',
-    selectorGroupLabel: 'N行を二次元リストにする',
+    selectorGroupLabel: 'n行を二次元リストにする',
     choiceLabel: '整数列',
     summary: 'n行の整数列を二次元リストにする',
     description: 'n行の整数列を二次元リストにします。',
@@ -298,9 +322,8 @@ const SNIPPET_DEFINITIONS = [
   createSnippet({
     id: 'multiline-char-grid',
     category: 'input',
-    categoryLabel: '入力',
     selectorGroup: 'multiline-grid-type',
-    selectorGroupLabel: 'N行を二次元リストにする',
+    selectorGroupLabel: 'n行を二次元リストにする',
     choiceLabel: '文字グリッド',
     summary: 'n行の文字列を文字グリッドにする',
     description: '文字グリッドを二次元リストにします。',
@@ -313,7 +336,6 @@ const SNIPPET_DEFINITIONS = [
   createSnippet({
     id: 'convenient-sorted-ints',
     category: 'input',
-    categoryLabel: '入力',
     summary: '整数列を昇順に並べる',
     description: '整数列を昇順に並べます。',
     input: '空白で区切られた整数が並ぶ1行を受け取ります。',
@@ -324,7 +346,6 @@ const SNIPPET_DEFINITIONS = [
   createSnippet({
     id: 'convenient-int-set',
     category: 'input',
-    categoryLabel: '入力',
     summary: '整数列を重複のない集合にする',
     description: '整数列を重複のない集合にします。',
     input: '空白で区切られた整数が並ぶ1行を受け取ります。',
@@ -335,7 +356,6 @@ const SNIPPET_DEFINITIONS = [
   createSnippet({
     id: 'convenient-indexed-ints',
     category: 'input',
-    categoryLabel: '入力',
     summary: '整数列の先頭に0を加える',
     description: '1-indexedで使えるよう先頭に0を加えます。',
     input: '空白で区切られた整数が並ぶ1行を受け取ります。',
@@ -347,9 +367,8 @@ const SNIPPET_DEFINITIONS = [
   createSnippet({
     id: 'math-gcd',
     category: 'number-conversion',
-    categoryLabel: '数値・型変換',
-    summary: 'A（整数）とB（整数）の最大公約数',
-    description: '2つの整数の最大公約数を求めます。',
+    summary: '整数aとbの最大公約数',
+    description: '整数aとbの最大公約数を求めます。',
     input: '整数aと整数bを受け取ります。',
     returns: 'aとbの最大公約数を返します。',
     label: 'gcd(a, b)',
@@ -359,8 +378,7 @@ const SNIPPET_DEFINITIONS = [
   createSnippet({
     id: 'math-isqrt',
     category: 'number-conversion',
-    categoryLabel: '数値・型変換',
-    summary: 'n（0以上の整数）の平方根の整数部分',
+    summary: '0以上の整数nの平方根（切り捨て）',
     description: '整数の平方根を小数点以下切り捨てで求めます。',
     input: '0以上の整数nを受け取ります。',
     returns: '√n以下で最大の整数を返します。例えばisqrt(10)は3です。',
@@ -373,9 +391,8 @@ const SNIPPET_DEFINITIONS = [
   createSnippet({
     id: 'binary-bisect-left',
     category: 'binary-search',
-    categoryLabel: '二分探索',
     selectorGroup: 'bisect-bound',
-    selectorGroupLabel: '二分探索の境界',
+    selectorGroupLabel: '昇順リストaでxの境界を二分探索',
     choiceLabel: '左端（以上）',
     summary: '昇順リストaでx以上の左端を探す',
     description: '昇順リストから、x以上になる最初の位置を探します。',
@@ -389,9 +406,8 @@ const SNIPPET_DEFINITIONS = [
   createSnippet({
     id: 'binary-bisect-right',
     category: 'binary-search',
-    categoryLabel: '二分探索',
     selectorGroup: 'bisect-bound',
-    selectorGroupLabel: '二分探索の境界',
+    selectorGroupLabel: '昇順リストaでxの境界を二分探索',
     choiceLabel: '右端（超過）',
     summary: '昇順リストaでxより大きい位置を探す',
     description: '昇順リストから、xより大きくなる最初の位置を探します。',
@@ -406,7 +422,6 @@ const SNIPPET_DEFINITIONS = [
   createSnippet({
     id: 'aggregation-counter',
     category: 'aggregation',
-    categoryLabel: '集計・辞書',
     summary: 'リストaの要素の出現回数を数える',
     description: 'リストの各要素が何回現れるかを数えます。',
     input: '数えたい要素を含むリストaを受け取ります。',
@@ -418,8 +433,7 @@ const SNIPPET_DEFINITIONS = [
   createSnippet({
     id: 'aggregation-defaultdict-int',
     category: 'aggregation',
-    categoryLabel: '集計・辞書',
-    summary: 'キーを数え上げる辞書を作る',
+    summary: '数え上げ用の辞書を作る（初期値0）',
     description: '存在しないキーを0として扱う辞書を作ります。',
     input: '追加の入力はありません。',
     returns: '未登録キーを参照すると0になるdefaultdictを返します。',
@@ -429,8 +443,7 @@ const SNIPPET_DEFINITIONS = [
   createSnippet({
     id: 'aggregation-defaultdict-list',
     category: 'aggregation',
-    categoryLabel: '集計・辞書',
-    summary: 'キーごとのリスト用辞書を作る',
+    summary: 'キーごとにリストを持つ辞書を作る（初期値は空リスト）',
     description: '存在しないキーを空リストとして扱う辞書を作ります。',
     input: '追加の入力はありません。',
     returns: '未登録キーを参照すると空リストになるdefaultdictを返します。',
@@ -440,7 +453,6 @@ const SNIPPET_DEFINITIONS = [
   createSnippet({
     id: 'aggregation-accumulate',
     category: 'prefix-sum',
-    categoryLabel: '累積和',
     summary: 'リストaの累積和を作る',
     description: 'リストの累積和を作ります。',
     input: '数値リストaを受け取ります。',
@@ -453,7 +465,9 @@ const SNIPPET_DEFINITIONS = [
   createSnippet({
     id: 'queue-deque',
     category: 'queue',
-    categoryLabel: 'キュー・deque',
+    selectorGroup: 'deque-create',
+    selectorGroupLabel: 'キューを作る',
+    choiceLabel: 'startを入れる',
     summary: 'startを入れたキューを作る',
     description: '先頭から取り出すキューを作ります。',
     input: '最初に入れておきたい要素startを受け取ります。',
@@ -480,7 +494,9 @@ function createSnippet({
   precondition = '',
   label,
   body = label,
-  imports = []
+  imports = [],
+  helpers = [],
+  externalPackages = []
 }) {
   const complexityValues = COMPLEXITY_BY_ID[id];
   if (!complexityValues) {
@@ -501,6 +517,8 @@ function createSnippet({
     label,
     body,
     imports: Object.freeze([...imports]),
+    helpers: Object.freeze(helpers.map((helper) => Object.freeze({ ...helper }))),
+    externalPackages: Object.freeze([...externalPackages]),
     complexity: Object.freeze({
       time: complexityValues[0],
       qualifier: complexityValues[1],
@@ -514,7 +532,10 @@ function createAdditionalSnippets() {
     createSnippet({
       id: 'output-value',
       category: 'output',
-      summary: 'xを1行で出力',
+      selectorGroup: 'output-single-value',
+      selectorGroupLabel: '値xや文字列を出力',
+      choiceLabel: '値x',
+      summary: '値xを出力',
       description: '1つの値を標準出力へ表示します。',
       input: '出力したい値xを受け取ります。',
       returns: '戻り値はNone。xと改行を出力します。',
@@ -524,7 +545,10 @@ function createAdditionalSnippets() {
     createSnippet({
       id: 'output-text',
       category: 'output',
-      summary: '固定文字列を1行で出力',
+      selectorGroup: 'output-single-value',
+      selectorGroupLabel: '値xや文字列を出力',
+      choiceLabel: '文字列',
+      summary: '文字列"Yes"を出力',
       description: 'Yesなどの決まった文字列を表示します。',
       input: '出力したい文字列を受け取ります。',
       returns: '戻り値はNone。文字列と改行を出力します。',
@@ -556,7 +580,7 @@ function createAdditionalSnippets() {
     createSnippet({
       id: 'number-abs',
       category: 'number-conversion',
-      summary: 'x（数）の絶対値',
+      summary: '数xの絶対値',
       description: '数xの絶対値を返します。',
       input: '数xを受け取ります。',
       returns: 'xの絶対値を返します。',
@@ -567,7 +591,7 @@ function createAdditionalSnippets() {
     id: 'number-max-two',
     category: 'number-conversion',
     selectorGroup: 'number-min-max',
-    selectorGroupLabel: '2つの値の最大・最小',
+    selectorGroupLabel: 'aとbの最大・最小',
     choiceLabel: '最大',
       summary: 'aとbの大きい方',
       description: '2つの値を比較して大きい方を求めます。',
@@ -581,7 +605,7 @@ function createAdditionalSnippets() {
     id: 'number-min-two',
     category: 'number-conversion',
     selectorGroup: 'number-min-max',
-    selectorGroupLabel: '2つの値の最大・最小',
+    selectorGroupLabel: 'aとbの最大・最小',
     choiceLabel: '最小',
       summary: 'aとbの小さい方',
       description: '2つの値を比較して小さい方を求めます。',
@@ -594,7 +618,7 @@ function createAdditionalSnippets() {
     createSnippet({
       id: 'number-floor-division',
       category: 'number-conversion',
-      summary: 'a÷bの整数商',
+      summary: 'aをbで割った商（切り捨て）',
       description: 'aをbで割り、負の無限大方向へ丸めた商を求めます。',
       input: '数a、0でない数bを受け取ります。',
       returns: 'a // bの商を返します。',
@@ -605,7 +629,7 @@ function createAdditionalSnippets() {
     createSnippet({
       id: 'number-remainder',
       category: 'number-conversion',
-      summary: 'a÷bの余り',
+      summary: 'aをbで割った余り',
       description: 'aをbで割った余りを求めます。',
       input: '数a、0でない数bを受け取ります。',
       returns: 'a % bの余りを返します。',
@@ -616,8 +640,8 @@ function createAdditionalSnippets() {
     createSnippet({
       id: 'math-lcm',
       category: 'number-conversion',
-      summary: 'a（整数）とb（整数）の最小公倍数',
-      description: '2つの整数の最小公倍数を求めます。',
+      summary: '整数aとbの最小公倍数',
+      description: '整数aとbの最小公倍数を求めます。',
       input: '整数a、整数bを受け取ります。',
       returns: 'aとbの最小公倍数を返します。',
       label: 'lcm(a, b)',
@@ -627,7 +651,10 @@ function createAdditionalSnippets() {
     createSnippet({
       id: 'conversion-int',
       category: 'number-conversion',
-      summary: '文字列sを整数へ変換',
+      selectorGroup: 'string-to-number',
+      selectorGroupLabel: '文字列sを数に変換',
+      choiceLabel: '整数',
+      summary: '文字列sを整数に変換',
       description: '整数を表す文字列をint型へ変換します。',
       input: '文字列sを受け取ります。',
       returns: 'int型の整数を返します。',
@@ -638,7 +665,10 @@ function createAdditionalSnippets() {
     createSnippet({
       id: 'conversion-float',
       category: 'number-conversion',
-      summary: '文字列sを小数へ変換',
+      selectorGroup: 'string-to-number',
+      selectorGroupLabel: '文字列sを数に変換',
+      choiceLabel: '小数',
+      summary: '文字列sを小数に変換',
       description: '数を表す文字列をfloat型へ変換します。',
       input: '文字列sを受け取ります。',
       returns: 'float型の数を返します。',
@@ -649,7 +679,7 @@ function createAdditionalSnippets() {
     createSnippet({
       id: 'conversion-str',
       category: 'number-conversion',
-      summary: '値xを文字列へ変換',
+      summary: '値xを文字列に変換',
       description: '数値などの値を表示用の文字列へ変換します。',
       input: '値xを受け取ります。',
       returns: 'str型の文字列を返します。',
@@ -659,7 +689,7 @@ function createAdditionalSnippets() {
     createSnippet({
       id: 'conversion-digit-list',
       category: 'number-conversion',
-      summary: '数字文字列sを各桁の整数リストへ変換',
+      summary: '数字の文字列sを1桁ずつの整数リストにする',
       description: '数字文字列sの各文字を整数に変換し、リストを返します。',
       input: '数字だけからなる文字列sを受け取ります。',
       returns: '各文字を整数にしたリストを返します。',
@@ -670,8 +700,8 @@ function createAdditionalSnippets() {
 
     createSnippet({
       id: 'sequence-length',
-      category: 'string',
-      summary: '文字列またはリストaの長さ',
+      category: 'list',
+      summary: '文字列やリストaの長さ',
       description: '値aの要素数または文字数を返します。',
       input: '長さを持つ値aを受け取ります。',
       returns: 'aの要素数を返します。',
@@ -680,32 +710,10 @@ function createAdditionalSnippets() {
       body: 'len(${1:a})'
     }),
     createSnippet({
-      id: 'string-first',
-      category: 'index-slice',
-      summary: '文字列sの先頭文字',
-      description: '文字列sの先頭1文字を返します。',
-      input: '文字列sを受け取ります。',
-      returns: '先頭の1文字を返します。',
-      precondition: 'sが空文字列でない必要があります。',
-      label: 's[0]',
-      body: '${1:s}[0]'
-    }),
-    createSnippet({
-      id: 'string-last',
-      category: 'index-slice',
-      summary: '文字列sの末尾文字',
-      description: '文字列sの末尾1文字を返します。',
-      input: '文字列sを受け取ります。',
-      returns: '末尾の1文字を返します。',
-      precondition: 'sが空文字列でない必要があります。',
-      label: 's[-1]',
-      body: '${1:s}[-1]'
-    }),
-    createSnippet({
       id: 'list-access',
-      category: 'index-slice',
+      category: 'list',
       summary: 'リストAの先頭からi+1番目の要素を見る',
-      description: '添字は0から始まります。A[i]は先頭からi+1番目の要素です。',
+      description: '添字は0から始まります。A[i]は先頭からi+1番目の要素です。文字列でもs[0]で先頭の1文字を取り出せます。',
       input: 'リストAと添字iを受け取ります。',
       returns: 'Aの先頭からi+1番目の要素を返します。',
       precondition: '0 <= i < len(A)である必要があります。',
@@ -714,9 +722,9 @@ function createAdditionalSnippets() {
     }),
     createSnippet({
       id: 'list-access-from-end',
-      category: 'index-slice',
+      category: 'list',
       summary: 'リストAの末尾からi番目の要素を見る',
-      description: 'iは1から数えます。iが1なら末尾、2なら末尾から2番目の要素を返します。',
+      description: 'iは1から数えます。iが1なら末尾、2なら末尾から2番目の要素を返します。文字列でもs[-1]で末尾の1文字を取り出せます。',
       input: 'リストAと、末尾から数えた順番i（1が末尾）を受け取ります。',
       returns: 'Aの末尾からi番目の要素を返します。',
       precondition: '1 <= i <= len(A)である必要があります。',
@@ -725,32 +733,21 @@ function createAdditionalSnippets() {
     }),
     createSnippet({
       id: 'list-slice',
-      category: 'index-slice',
+      category: 'list',
       summary: 'リストAを添字startからendの直前まで取り出す',
-      description: '0 <= start < end <= len(A)なら、先頭からstart+1番目からend番目までを取り出します。',
-      input: 'リストA、開始位置start、終了位置endを受け取ります。',
-      returns: '添字startを含み、添字endを含まない新しいリストを返します。',
-      precondition: '添字は0から始まります。負の添字は末尾から数えます。範囲外の添字は端に合わせられます。範囲に要素がなければ空リストです。',
+      description: '0 <= start < end <= len(A)なら、先頭からstart+1番目からend番目までを取り出します。文字列でも同じ書き方で部分文字列を取り出せます。',
+      input: 'リストA（文字列も可）、開始位置start、終了位置endを受け取ります。',
+      returns: '添字startを含み、添字endを含まない新しいリストを返します。Aが文字列なら新しい文字列を返します。',
+      precondition: '添字は0から始まります。負の添字は末尾から数えます。範囲外の添字は端に合わせられます。範囲に要素がなければ空リスト（文字列なら空文字列）です。',
       label: 'A[start:end]',
       body: '${1:A}[${2:start}:${3:end}]'
     }),
     createSnippet({
-      id: 'string-slice',
-      category: 'index-slice',
-      summary: '文字列sを添字startからendの直前まで取り出す',
-      description: '0 <= start < end <= len(s)なら、先頭からstart+1番目からend番目までを取り出します。',
-      input: '文字列s、開始位置start、終了位置endを受け取ります。',
-      returns: '添字startを含み、添字endを含まない新しい文字列を返します。',
-      precondition: '添字は0から始まります。負の添字は末尾から数えます。範囲外の添字は端に合わせられます。範囲に文字がなければ空文字列です。',
-      label: 's[start:end]',
-      body: '${1:s}[${2:start}:${3:end}]'
-    }),
-    createSnippet({
       id: 'string-count',
       category: 'string',
-      summary: '文字列sに含まれる文字tの個数',
-      description: '文字列sで文字列tが重ならずに現れる回数を返します。',
-      input: '文字列s、数えたい文字列tを受け取ります。',
+      summary: '文字列sに"a"が何回現れるか数える',
+      description: '文字列sで文字列"a"が重ならずに現れる回数を返します。"a"は2文字以上の文字列にもできます。',
+      input: '文字列s、数えたい文字列"a"を受け取ります。',
       returns: '重ならない出現回数を返します。',
       label: 's.count("a")',
       body: '${1:s}.count("${2:a}")'
@@ -758,7 +755,7 @@ function createAdditionalSnippets() {
     createSnippet({
       id: 'string-find',
       category: 'string',
-      summary: '文字列sから文字列tを探す',
+      summary: '文字列sで文字列tが最初に現れる位置',
       description: '文字列sで文字列tが最初に現れる位置を返します。見つからない場合は-1を返します。',
       input: '文字列s、探す文字列tを受け取ります。',
       returns: '最初に現れる添字iを返します。見つかれば先頭からi+1番目の位置です。見つからなければ-1を返します。',
@@ -768,9 +765,9 @@ function createAdditionalSnippets() {
     createSnippet({
       id: 'string-contains',
       category: 'string',
-      summary: '文字列sに文字列tが含まれるか判定',
-      description: '文字列sに文字列tが含まれるかを返します。',
-      input: '文字列s、探す文字列tを受け取ります。',
+      summary: '文字列sに"a"が含まれるか判定',
+      description: '文字列sに文字列"a"が含まれるかを返します。',
+      input: '文字列s、探す文字列"a"を受け取ります。',
       returns: '含まれればTrue、なければFalseを返します。',
       label: '"a" in s',
       body: '"${2:a}" in ${1:s}'
@@ -789,7 +786,7 @@ function createAdditionalSnippets() {
       id: 'string-lower',
       category: 'string',
       selectorGroup: 'string-case',
-      selectorGroupLabel: '文字列の大文字・小文字',
+      selectorGroupLabel: '文字列sを大文字・小文字にする',
       choiceLabel: '小文字',
       summary: '文字列sの英字を小文字にする',
       description: '英字の大文字を小文字へ変換します。',
@@ -802,7 +799,7 @@ function createAdditionalSnippets() {
       id: 'string-upper',
       category: 'string',
       selectorGroup: 'string-case',
-      selectorGroupLabel: '文字列の大文字・小文字',
+      selectorGroupLabel: '文字列sを大文字・小文字にする',
       choiceLabel: '大文字',
       summary: '文字列sの英字を大文字にする',
       description: '英字の小文字を大文字へ変換します。',
@@ -814,17 +811,28 @@ function createAdditionalSnippets() {
     createSnippet({
       id: 'string-replace',
       category: 'string',
-      summary: '文字列sのoldをnewへ置換',
+      summary: '文字列sの"a"をすべて"b"に置き換える',
       description: '一致する部分文字列をすべて置き換えます。',
-      input: '文字列s、置換前old、置換後newを受け取ります。',
+      input: '文字列s、置換前の文字列"a"、置換後の文字列"b"を受け取ります。',
       returns: '置換後の新しい文字列を返します。',
       precondition: '元のs自体は変更されません。',
       label: 's.replace("a", "b")',
       body: '${1:s}.replace("${2:a}", "${3:b}")'
     }),
     createSnippet({
+      id: 'string-set-char',
+      category: 'string',
+      summary: '文字列sの添字iの文字（i+1番目）を"a"に置き換える',
+      description: '文字列（str）は一部だけを書き換えられない（immutable）ため、s[i] = "a"とは書けません。添字iの前後をつないで新しい文字列を作ります。',
+      input: '文字列s、添字i、置き換える1文字"a"を受け取ります。',
+      returns: '先頭からi+1番目だけを置き換えた新しい文字列を返します。元のs自体は変更されません。',
+      precondition: '0 <= i < len(s)である必要があります。負の添字や範囲外の添字では正しく置き換わりません。置き換える文字は1文字にします。何度も書き換えるなら、t = list(s)でリストにしてt[i] = "a"で更新し、最後に"".join(t)で文字列に戻す方が速いです。',
+      label: 's[:i] + "a" + s[i + 1:]',
+      body: '${1:s}[:${2:i}] + "${3:a}" + ${1:s}[${2:i} + 1:]'
+    }),
+    createSnippet({
       id: 'list-max',
-      category: 'list-comprehension',
+      category: 'list',
       selectorGroup: 'list-min-max',
       selectorGroupLabel: 'リストAの最大・最小',
       choiceLabel: '最大値',
@@ -838,7 +846,7 @@ function createAdditionalSnippets() {
     }),
     createSnippet({
       id: 'list-min',
-      category: 'list-comprehension',
+      category: 'list',
       selectorGroup: 'list-min-max',
       selectorGroupLabel: 'リストAの最大・最小',
       choiceLabel: '最小値',
@@ -852,7 +860,7 @@ function createAdditionalSnippets() {
     }),
     createSnippet({
       id: 'list-sum',
-      category: 'list-comprehension',
+      category: 'list',
       summary: '数値リストAの合計',
       description: 'リスト内の数をすべて足します。',
       input: '数値リストAを受け取ります。',
@@ -863,7 +871,7 @@ function createAdditionalSnippets() {
     }),
     createSnippet({
       id: 'list-contains',
-      category: 'list-comprehension',
+      category: 'list',
       summary: 'リストAにxが含まれるか判定',
       description: '指定した値がリストにあるか調べます。',
       input: 'リストA、探す値xを受け取ります。',
@@ -873,8 +881,8 @@ function createAdditionalSnippets() {
     }),
     createSnippet({
       id: 'list-count',
-      category: 'list-comprehension',
-      summary: 'リストAにあるxの個数',
+      category: 'list',
+      summary: 'リストAにxが何個あるか数える',
       description: '指定した値と等しい要素を数えます。',
       input: 'リストA、数える値xを受け取ります。',
       returns: 'xの出現回数を返します。',
@@ -883,7 +891,7 @@ function createAdditionalSnippets() {
     }),
     createSnippet({
       id: 'list-sort-ascending',
-      category: 'list-comprehension',
+      category: 'list',
       selectorGroup: 'list-sort-order',
       selectorGroupLabel: 'リストAの並び替え',
       choiceLabel: '昇順',
@@ -897,7 +905,7 @@ function createAdditionalSnippets() {
     }),
     createSnippet({
       id: 'list-sort-descending',
-      category: 'list-comprehension',
+      category: 'list',
       selectorGroup: 'list-sort-order',
       selectorGroupLabel: 'リストAの並び替え',
       choiceLabel: '降順',
@@ -911,8 +919,8 @@ function createAdditionalSnippets() {
     }),
     createSnippet({
       id: 'comprehension-range',
-      category: 'list-comprehension',
-      summary: '0以上n未満の整数リスト',
+      category: 'list',
+      summary: '0以上n未満の整数を並べたリスト',
       description: 'rangeの各整数をリストにします。',
       input: '0以上の整数nを受け取ります。',
       returns: '[0, 1, ..., n-1]を返します。',
@@ -922,8 +930,8 @@ function createAdditionalSnippets() {
     }),
     createSnippet({
       id: 'comprehension-squares',
-      category: 'list-comprehension',
-      summary: '0以上n未満の整数の二乗リスト',
+      category: 'list',
+      summary: '0以上n未満の整数iの二乗を並べたリスト',
       description: '0からn-1までをそれぞれ二乗します。',
       input: '0以上の整数nを受け取ります。',
       returns: '各iのi * iを持つリストを返します。',
@@ -933,8 +941,8 @@ function createAdditionalSnippets() {
     }),
     createSnippet({
       id: 'comprehension-even-filter',
-      category: 'list-comprehension',
-      summary: '条件を満たす要素のリストを作る',
+      category: 'list',
+      summary: 'Aの要素xのうち条件を満たすものでリストを作る',
       description: '反復対象の各要素について条件を調べ、条件を満たすときだけリストに加える要素を作ります。',
       input: '反復対象A、ループ変数x、リストに加える要素、条件を指定します。',
       returns: '条件を満たす要素から作った値を、順番どおり持つリストを返します。',
@@ -944,8 +952,8 @@ function createAdditionalSnippets() {
     }),
     createSnippet({
       id: 'comprehension-conditional-expression',
-      category: 'list-comprehension',
-      summary: '条件で各要素の値を選んだリストを作る',
+      category: 'list',
+      summary: 'Aの各要素xについて条件で値を選んだリストを作る',
       description: '反復対象の各要素で条件を調べ、真なら要素1、偽なら要素2をリストに加えます。元の要素は除外しません。',
       input: '反復対象A、ループ変数x、条件、真の場合に加える要素1、偽の場合に加える要素2を指定します。',
       returns: 'Aの各要素に対応する値を順番どおり持つリストを返します。結果の長さはAと同じです。',
@@ -955,8 +963,8 @@ function createAdditionalSnippets() {
     }),
     createSnippet({
       id: 'comprehension-zero-matrix',
-      category: 'list-comprehension',
-      summary: 'h行w列の0の二次元リスト',
+      category: 'list',
+      summary: 'h行w列の0で埋めた二次元リスト',
       description: '各行が独立した二次元リストを作ります。',
       input: '行数h、列数wを受け取ります。',
       returns: 'h行w列の0のリストを返します。',
@@ -967,7 +975,10 @@ function createAdditionalSnippets() {
 
     createSnippet({
       id: 'string-isdigit',
-      category: 'condition-check',
+      category: 'string',
+      selectorGroup: 'string-char-kind',
+      selectorGroupLabel: '文字列sの文字の種類を判定',
+      choiceLabel: '数字',
       summary: '文字列sが数字だけか判定',
       description: 'すべての文字が数字か調べます。',
       input: '文字列sを受け取ります。',
@@ -978,8 +989,11 @@ function createAdditionalSnippets() {
     }),
     createSnippet({
       id: 'string-isalpha',
-      category: 'condition-check',
-      summary: '文字列sが文字だけか判定',
+      category: 'string',
+      selectorGroup: 'string-char-kind',
+      selectorGroupLabel: '文字列sの文字の種類を判定',
+      choiceLabel: '英字など',
+      summary: '文字列sが英字などの文字だけか判定',
       description: 'すべての文字がアルファベットなどの文字か調べます。',
       input: '文字列sを受け取ります。',
       returns: '文字だけで空でなければTrueを返します。',
@@ -988,7 +1002,10 @@ function createAdditionalSnippets() {
     }),
     createSnippet({
       id: 'string-isalnum',
-      category: 'condition-check',
+      category: 'string',
+      selectorGroup: 'string-char-kind',
+      selectorGroupLabel: '文字列sの文字の種類を判定',
+      choiceLabel: '英数字',
       summary: '文字列sが文字か数字だけか判定',
       description: 'すべての文字が英数字などか調べます。',
       input: '文字列sを受け取ります。',
@@ -998,7 +1015,10 @@ function createAdditionalSnippets() {
     }),
     createSnippet({
       id: 'string-islower',
-      category: 'condition-check',
+      category: 'string',
+      selectorGroup: 'string-char-kind',
+      selectorGroupLabel: '文字列sの文字の種類を判定',
+      choiceLabel: '小文字',
       summary: '文字列sの英字がすべて小文字か判定',
       description: '大文字小文字を持つ文字がすべて小文字か調べます。',
       input: '文字列sを受け取ります。',
@@ -1008,7 +1028,10 @@ function createAdditionalSnippets() {
     }),
     createSnippet({
       id: 'string-isupper',
-      category: 'condition-check',
+      category: 'string',
+      selectorGroup: 'string-char-kind',
+      selectorGroupLabel: '文字列sの文字の種類を判定',
+      choiceLabel: '大文字',
       summary: '文字列sの英字がすべて大文字か判定',
       description: '大文字小文字を持つ文字がすべて大文字か調べます。',
       input: '文字列sを受け取ります。',
@@ -1018,7 +1041,10 @@ function createAdditionalSnippets() {
     }),
     createSnippet({
       id: 'string-isspace',
-      category: 'condition-check',
+      category: 'string',
+      selectorGroup: 'string-char-kind',
+      selectorGroupLabel: '文字列sの文字の種類を判定',
+      choiceLabel: '空白',
       summary: '文字列sが空白文字だけか判定',
       description: '半角空白や改行などの空白文字だけか調べます。',
       input: '文字列sを受け取ります。',
@@ -1027,9 +1053,109 @@ function createAdditionalSnippets() {
       body: '${1:s}.isspace()'
     }),
     createSnippet({
+      id: 'string-hamming-distance',
+      category: 'string',
+      summary: '同じ長さの文字列sとtのハミング距離',
+      description: '同じ長さの文字列sとtで、同じ位置の文字が異なる箇所の数を数えます。',
+      input: '同じ長さの文字列sとtを受け取ります。',
+      returns: '文字が異なる位置の数を返します。sとtが両方とも空文字列なら0です。',
+      precondition: 'sとtの長さが違うとValueErrorが発生します。',
+      label: 'hamming_distance(s, t)',
+      body: 'hamming_distance(${1:s}, ${2:t})',
+      helpers: [{
+        name: 'hamming_distance',
+        code: [
+          'def hamming_distance(s, t):',
+          '    if len(s) != len(t):',
+          '        raise ValueError("sとtの長さが違います")',
+          '    return sum(a != b for a, b in zip(s, t))'
+        ].join('\n')
+      }]
+    }),
+    createSnippet({
+      id: 'string-levenshtein-distance',
+      category: 'string',
+      summary: '文字列sとtの編集距離（レーベンシュタイン距離）',
+      description: '1文字の挿入・削除・置換を何回行えばsをtに変えられるか、その最小回数を求めます。',
+      input: '文字列sとtを受け取ります。長さは違っても構いません。',
+      returns: '最小の操作回数を返します。片方が空文字列なら、もう片方の長さです。',
+      precondition: '動的計画法（DP）で、直前の行だけを残して計算します。',
+      label: 'levenshtein_distance(s, t)',
+      body: 'levenshtein_distance(${1:s}, ${2:t})',
+      helpers: [{
+        name: 'levenshtein_distance',
+        code: [
+          'def levenshtein_distance(s, t):',
+          '    prev = list(range(len(t) + 1))',
+          '    for i, a in enumerate(s, 1):',
+          '        cur = [i] + [0] * len(t)',
+          '        for j, b in enumerate(t, 1):',
+          '            cur[j] = min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a != b))',
+          '        prev = cur',
+          '    return prev[-1]'
+        ].join('\n')
+      }]
+    }),
+    createSnippet({
+      id: 'string-find-all',
+      category: 'string',
+      summary: '文字列sで文字列tが現れる位置をすべて探す',
+      description: '文字列sで文字列tが現れる添字を、重なる一致も含めてすべて集めます。',
+      input: '文字列sと探す文字列tを受け取ります。',
+      returns: '一致が始まる添字iを小さい順に並べたリストを返します。添字iは先頭からi+1番目の位置です。見つからなければ空リストです。',
+      precondition: 'tが空文字列だとValueErrorが発生します。"aaa"から"aa"を探すと[0, 1]のように重なる一致も数えます。',
+      label: 'find_all(s, t)',
+      body: 'find_all(${1:s}, ${2:t})',
+      helpers: [{
+        name: 'find_all',
+        code: [
+          'def find_all(s, t):',
+          '    if t == "":',
+          '        raise ValueError("tが空文字列です")',
+          '    result = []',
+          '    i = s.find(t)',
+          '    while i != -1:',
+          '        result.append(i)',
+          '        i = s.find(t, i + 1)',
+          '    return result'
+        ].join('\n')
+      }]
+    }),
+    createSnippet({
+      id: 'string-z-algorithm',
+      category: 'string',
+      summary: '文字列sの各位置から先頭と一致する長さ（Z algorithm）',
+      description: '各添字iについて、sとs[i:]の先頭が何文字一致するかをまとめて求めます。',
+      input: '文字列sを受け取ります。',
+      returns: '長さlen(s)のリストzを返します。z[i]はsとs[i:]の共通する先頭部分の長さで、z[0]はlen(s)です。sが空文字列なら空リストです。',
+      precondition: 't + "#" + sのように区切り文字でつなぐと、z[i]がlen(t)になる位置iでsの中のtが見つかります。sでの添字はi - len(t) - 1です。区切り文字はsとtに含まれない文字にします。',
+      label: 'z_algorithm(s)',
+      body: 'z_algorithm(${1:s})',
+      helpers: [{
+        name: 'z_algorithm',
+        code: [
+          'def z_algorithm(s):',
+          '    n = len(s)',
+          '    z = [0] * n',
+          '    if n == 0:',
+          '        return z',
+          '    z[0] = n',
+          '    left = right = 0',
+          '    for i in range(1, n):',
+          '        if i < right:',
+          '            z[i] = min(right - i, z[i - left])',
+          '        while i + z[i] < n and s[z[i]] == s[i + z[i]]:',
+          '            z[i] += 1',
+          '        if i + z[i] > right:',
+          '            left, right = i, i + z[i]',
+          '    return z'
+        ].join('\n')
+      }]
+    }),
+    createSnippet({
       id: 'aggregation-counter-value',
       category: 'aggregation',
-      summary: 'Counter cntでxの個数を取得',
+      summary: 'Counter cntからxの個数を取り出す',
       description: 'Counterから指定要素の出現回数を取り出します。',
       input: 'Counter cnt、調べる値xを受け取ります。',
       returns: 'xの個数。未登録なら0を返します。',
@@ -1041,7 +1167,7 @@ function createAdditionalSnippets() {
     createSnippet({
       id: 'aggregation-increment',
       category: 'aggregation',
-      summary: '辞書dでxの個数を1増やす',
+      summary: '辞書dのキーxの個数を1増やす',
       description: 'defaultdict(int)のカウンタを更新します。',
       input: 'defaultdict d、数える値xを受け取ります。',
       returns: '戻り値はNone。d[x]を1増やします。',
@@ -1054,7 +1180,7 @@ function createAdditionalSnippets() {
     createSnippet({
       id: 'prefix-sum-range',
       category: 'prefix-sum',
-      summary: '累積和cumでA[l:r]の合計',
+      summary: '累積和cumで添字lからrの直前までの合計',
       description: '2つの累積値の差から半開区間の合計を求めます。',
       input: '先頭0付き累積和cum、左端l、右端の1つ外側rを受け取ります。',
       returns: '元のAの添字lからrの直前までの合計を返します。0 <= l < rなら先頭からl+1番目からr番目までです。',
@@ -1066,7 +1192,7 @@ function createAdditionalSnippets() {
     createSnippet({
       id: 'brute-combinations',
       category: 'brute-force',
-      summary: 'Aからr個選ぶ全ての組み合わせが入ったリストを作る',
+      summary: 'リストAからr個選ぶ全ての組み合わせが入ったリストを作る',
       description: 'Aから順番を区別せずにr個選ぶ全ての組み合わせをリストにします。',
       input: 'リストAと、選ぶ個数rを受け取ります。',
       returns: '各組み合わせをr要素のタプルにしたリストを返します。',
@@ -1078,7 +1204,7 @@ function createAdditionalSnippets() {
     createSnippet({
       id: 'brute-permutations',
       category: 'brute-force',
-      summary: 'Aの全ての並び順が入ったリストを作る',
+      summary: 'リストAの全ての並び順が入ったリストを作る',
       description: 'Aの要素を並べ替えた全ての順番をリストにします。',
       input: 'リストAを受け取ります。',
       returns: '各並び順をタプルにしたリストを返します。',
@@ -1104,6 +1230,9 @@ function createAdditionalSnippets() {
     createSnippet({
       id: 'queue-deque-empty',
       category: 'queue',
+      selectorGroup: 'deque-create',
+      selectorGroupLabel: 'キューを作る',
+      choiceLabel: '空',
       summary: '空のキューを作る',
       description: '左から高速に取り出せる空のdequeを作ります。',
       input: '追加の入力はありません。',
@@ -1116,9 +1245,9 @@ function createAdditionalSnippets() {
       id: 'queue-append',
       category: 'queue',
       selectorGroup: 'deque-add-end',
-      selectorGroupLabel: 'dequeの端に追加',
+      selectorGroupLabel: 'deque qの端にxを追加',
       choiceLabel: '右端に追加',
-      summary: 'キューの右端へ要素を追加',
+      summary: 'キューqの右端にxを追加',
       description: 'dequeの末尾へ要素を追加します。',
       input: 'deque q、追加する値xを受け取ります。',
       returns: '戻り値はNone。qを変更します。',
@@ -1131,9 +1260,9 @@ function createAdditionalSnippets() {
       id: 'queue-popleft',
       category: 'queue',
       selectorGroup: 'deque-remove-end',
-      selectorGroupLabel: 'dequeの端から削除して取得',
+      selectorGroupLabel: 'deque qの端から取り出す',
       choiceLabel: '左端から取り出す',
-      summary: 'キューの左端から要素を取り出す',
+      summary: 'キューqの左端から取り出す',
       description: 'dequeの先頭要素を削除して取得します。',
       input: 'deque qを受け取ります。',
       returns: '削除した左端要素を返します。',
@@ -1146,9 +1275,9 @@ function createAdditionalSnippets() {
       id: 'queue-appendleft',
       category: 'queue',
       selectorGroup: 'deque-add-end',
-      selectorGroupLabel: 'dequeの端に追加',
+      selectorGroupLabel: 'deque qの端にxを追加',
       choiceLabel: '左端に追加',
-      summary: 'dequeの左端へ要素を追加',
+      summary: 'deque qの左端にxを追加',
       description: 'dequeの左端へ要素を追加します。',
       input: 'deque q、追加する値xを受け取ります。',
       returns: '戻り値はNone。qを変更します。',
@@ -1161,9 +1290,9 @@ function createAdditionalSnippets() {
       id: 'queue-pop',
       category: 'queue',
       selectorGroup: 'deque-remove-end',
-      selectorGroupLabel: 'dequeの端から削除して取得',
+      selectorGroupLabel: 'deque qの端から取り出す',
       choiceLabel: '右端から取り出す',
-      summary: 'dequeの右端から要素を取り出す',
+      summary: 'deque qの右端から取り出す',
       description: 'dequeの右端要素を削除して取得します。見るだけではなく、取り出した要素はqから消えます。',
       input: 'deque qを受け取ります。',
       returns: '削除した右端要素を返します。',
@@ -1175,7 +1304,7 @@ function createAdditionalSnippets() {
     createSnippet({
       id: 'queue-index',
       category: 'queue',
-      summary: 'dequeのi+1番目の要素を見る（iが0以上）',
+      summary: 'deque qの添字iの要素を見る（i+1番目）',
       description: 'deque qの要素を削除せずに返します。iが0以上なら先頭からi+1番目、i=-1なら末尾です。',
       input: 'deque qと添字iを受け取ります。',
       returns: 'qの添字iにある要素を返します。負のiは末尾から数えます。',
@@ -1199,7 +1328,7 @@ function createAdditionalSnippets() {
     createSnippet({
       id: 'tuple-single-item',
       category: 'tuple',
-      summary: '値xを1要素タプルにする',
+      summary: '値xを1要素のタプルにする',
       description: '末尾のカンマを付けて、値xを1要素のタプルとして作ります。',
       input: '値xを受け取ります。',
       returns: 'xだけを要素に持つtupleを返します。',
@@ -1210,7 +1339,7 @@ function createAdditionalSnippets() {
     createSnippet({
       id: 'tuple-unpack-coordinate',
       category: 'tuple',
-      summary: '座標タプルをxとyに分ける',
+      summary: '座標タプルpointをxとyに分ける',
       description: '2要素のタプルを、xとyの2つの変数へ一度に代入します。',
       input: '2要素のタプルpointを受け取ります。',
       returns: 'pointの1番目をx、2番目をyへ代入します。',
@@ -1222,7 +1351,7 @@ function createAdditionalSnippets() {
 
     createSnippet({
       id: 'list-append',
-      category: 'list-comprehension',
+      category: 'list',
       summary: 'リストAの末尾にxを追加',
       description: 'リストAの末尾に要素xを追加します。',
       input: 'リストAと追加する要素xを受け取ります。',
@@ -1232,8 +1361,8 @@ function createAdditionalSnippets() {
     }),
     createSnippet({
       id: 'list-pop',
-      category: 'list-comprehension',
-      summary: 'リストAの末尾の要素を削除',
+      category: 'list',
+      summary: 'リストAの末尾の要素を取り出す',
       description: 'リストAの末尾の要素を削除し、その要素を返します。',
       input: 'リストAを受け取ります。',
       returns: '削除した末尾の要素を返します。',
@@ -1243,8 +1372,8 @@ function createAdditionalSnippets() {
     }),
     createSnippet({
       id: 'list-pop-first',
-      category: 'list-comprehension',
-      summary: 'リストAの先頭の要素を削除',
+      category: 'list',
+      summary: 'リストAの先頭の要素を取り出す',
       description: 'リストAの先頭の要素を削除し、その要素を返します。',
       input: 'リストAを受け取ります。',
       returns: '削除した先頭の要素を返します。',
@@ -1254,8 +1383,8 @@ function createAdditionalSnippets() {
     }),
     createSnippet({
       id: 'list-index',
-      category: 'list-comprehension',
-      summary: 'リストAでxの位置を探す',
+      category: 'list',
+      summary: 'リストAでxが最初に現れる位置',
       description: 'リストAで要素xが最初に現れる位置を返します。',
       input: 'リストAと探す要素xを受け取ります。',
       returns: '最初に現れる添字iを返します。先頭からi+1番目の位置です。',
@@ -1278,8 +1407,8 @@ function createAdditionalSnippets() {
       id: 'set-contains',
       category: 'aggregation',
       summary: '集合Sにxがあるか判定',
-      description: '集合Sに要素xが含まれるかを調べます。',
-      input: '集合Sと探す要素xを受け取ります。',
+      description: '集合Sに要素xが含まれるかを調べます。辞書dでもx in dでキーxがあるかを同じ速さで調べられます。',
+      input: '集合S（辞書も可）と探す要素xを受け取ります。',
       returns: '含まれればTrue、なければFalseを返します。',
       precondition: 'xはハッシュ可能である必要があります。',
       label: 'x in S',
@@ -1297,19 +1426,9 @@ function createAdditionalSnippets() {
       body: '${1:d}[${2:x}]'
     }),
     createSnippet({
-      id: 'dict-contains',
-      category: 'aggregation',
-      summary: '辞書dにキーxがあるか判定',
-      description: '辞書dにキーxがあるかを調べます。',
-      input: '辞書dと探すキーxを受け取ります。',
-      returns: 'キーがあればTrue、なければFalseを返します。',
-      label: 'x in d',
-      body: '${2:x} in ${1:d}'
-    }),
-    createSnippet({
       id: 'debug-type',
-      category: 'debug',
-      summary: 'xの型を確認',
+      category: 'output',
+      summary: '値xの型を確認',
       description: 'デバッグ時に値の実際の型を調べます。',
       input: '値xを受け取ります。',
       returns: 'xの型オブジェクトを返します。',
@@ -1318,8 +1437,11 @@ function createAdditionalSnippets() {
     }),
     createSnippet({
       id: 'debug-isinstance-int',
-      category: 'debug',
-      summary: 'xがint型か判定',
+      category: 'output',
+      selectorGroup: 'isinstance-type',
+      selectorGroupLabel: '値xの型を判定',
+      choiceLabel: 'int',
+      summary: '値xがint型か判定',
       description: '継承関係も含めてint型か調べます。',
       input: '値xを受け取ります。',
       returns: 'int型ならTrue、それ以外はFalseを返します。',
@@ -1329,8 +1451,11 @@ function createAdditionalSnippets() {
     }),
     createSnippet({
       id: 'debug-isinstance-str',
-      category: 'debug',
-      summary: 'sがstr型か判定',
+      category: 'output',
+      selectorGroup: 'isinstance-type',
+      selectorGroupLabel: '値xの型を判定',
+      choiceLabel: 'str',
+      summary: '値sがstr型か判定',
       description: '値が文字列型か調べます。',
       input: '値sを受け取ります。',
       returns: 'str型ならTrue、それ以外はFalseを返します。',
@@ -1365,7 +1490,15 @@ function getInputSnippet(snippetId) {
   return INPUT_SNIPPETS.find((snippet) => snippet.id === snippetId);
 }
 
-const SNIPPET_PLACEHOLDER_PATTERN = /\$\{(\d+)(?::([^}]*))?\}/g;
+// Removed snippet ids mapped to the snippet that replaced them.
+const SNIPPET_ID_ALIASES = Object.freeze({
+  'string-first': 'list-access',
+  'string-last': 'list-access-from-end',
+  'string-slice': 'list-slice',
+  'dict-contains': 'set-contains'
+});
+
+const SNIPPET_PLACEHOLDER_PATTERN =/\$\{(\d+)(?::([^}]*))?\}/g;
 
 function getSnippetPlaceholders(body) {
   const placeholders = [];
@@ -1406,6 +1539,8 @@ function applySnippetPlaceholderValues(body, values) {
 module.exports = {
   INPUT_SNIPPETS,
   SNIPPET_CATEGORY_ORDER,
+  SNIPPET_DISPLAY_ORDER,
+  SNIPPET_ID_ALIASES,
   getInputSnippet,
   getSnippetPlaceholders,
   applySnippetPlaceholderValues

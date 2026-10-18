@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { Script } = require('node:vm');
 
-const { getWebviewHtml } = require('../src/webviewHtml');
+const { getComplexityShortForm, getWebviewHtml } = require('../src/webviewHtml');
 const { INPUT_SNIPPETS } = require('../src/snippetLibrary');
 
 test('webview keeps the document title without a visible brand heading', () => {
@@ -26,7 +26,7 @@ test('webview uses white input and yellow output surfaces with dark text', () =>
   assert.match(html, /id="stdin"[^>]*class="stdinBox"/);
   assert.match(html, /id="stdout"[^>]*class="outputBox stdoutBox"/);
   assert.match(html, /id="errorExplanation"[^>]*class="outputBox stderrBox"/);
-  assert.doesNotMatch(html, /id="stderr"/);
+  assert.match(html, /id="stderr"[^>]*class="outputBox stderrBox"/);
   assert.match(html, /\.stdinBox\s*\{(?=[^}]*color:\s*var\(--piyoyo-bg\))(?=[^}]*background:\s*var\(--piyoyo-text\))(?=[^}]*border-color:\s*var\(--piyoyo-text\))[^}]*\}/s);
   assert.match(html, /\.stdoutBox\s*\{(?=[^}]*color:\s*var\(--piyoyo-bg\))(?=[^}]*background:\s*var\(--piyoyo-yellow\))(?=[^}]*border-color:\s*var\(--piyoyo-yellow\))[^}]*\}/s);
   assert.match(html, /\.stderrBox\s*\{[^}]*color:\s*var\(--piyoyo-red\)/s);
@@ -53,8 +53,8 @@ test('webview separates execution and snippet insertion into two workspaces', ()
   assert.ok(stdinIndex < stdoutIndex);
   assert.ok(stdoutIndex < detailsIndex);
   assert.ok(detailsIndex < launcherIndex);
-  assert.match(html, /data-workspace="run">実行/);
-  assert.match(html, /data-workspace="snippets">コード挿入/);
+  assert.match(html, /data-workspace="run"[^>]*>実行</);
+  assert.match(html, /data-workspace="snippets"[^>]*>コード挿入</);
   assert.match(html, /id="snippetWorkspace"[^>]*hidden/);
   assert.doesNotMatch(html, /id="targetFile"/);
   assert.doesNotMatch(html, /id="activeFile"/);
@@ -159,14 +159,12 @@ test('webview renders every snippet row in the intended category order', () => {
 
   assert.match(html, /class="snippetCategoryList" aria-label="入力コードのジャンル"/);
   const categoryIds = [
-    'input', 'output', 'number-conversion', 'list-comprehension', 'index-slice', 'string',
-    'condition-check', 'aggregation', 'prefix-sum', 'brute-force',
-    'binary-search', 'queue', 'tuple', 'debug'
+    'input', 'number-conversion', 'string', 'list', 'tuple', 'aggregation',
+    'queue', 'brute-force', 'prefix-sum', 'binary-search', 'output'
   ];
   const categoryLabels = [
-    '入力', '出力', '数値・型変換', 'リスト・内包表記', '添字・スライス', '文字列',
-    '条件分岐・文字判定', '集計・辞書', '累積和', '全探索', '二分探索',
-    'キュー・deque', 'タプル・座標', 'デバッグ・型確認'
+    '入力', '数値・型変換', '文字列', 'リスト', 'タプル・座標', '集合・辞書・数え上げ',
+    'キュー・deque', '全探索', '累積和', '二分探索', '出力・デバッグ'
   ];
   let previousIndex = html.indexOf('class="snippetCategoryList"');
   categoryIds.forEach((categoryId, index) => {
@@ -185,7 +183,7 @@ test('webview renders every snippet row in the intended category order', () => {
   });
   assert.match(html, /<summary>\s*<span[^>]*>入力<\/span>/s);
   assert.equal((html.match(/class="snippetCategoryDropdown"/g) || []).length, categoryIds.length);
-  assert.equal((html.match(/data-snippet-variants=/g) || []).length, 11);
+  assert.equal((html.match(/data-snippet-variants=/g) || []).length, 16);
   assert.ok((html.match(/data-snippet-entry=/g) || []).length > 60);
   assert.doesNotMatch(html, /data-snippet-select=/);
   assert.doesNotMatch(html, /class="snippetVariantSelect"/);
@@ -198,7 +196,7 @@ test('webview renders every snippet row in the intended category order', () => {
   assert.match(html, /data-snippet-group="input-multiline-list-type"/);
   assert.match(html, /&quot;id&quot;:&quot;multiline-ints&quot;[^>]*&quot;choiceLabel&quot;:&quot;整数&quot;/);
   assert.match(html, /data-snippet-entry="basic-chars"[^>]*data-snippet-label="list\(input\(\)\)"/);
-  assert.match(html, /data-snippet-group="list-comprehension-list-min-max"/);
+  assert.match(html, /data-snippet-group="list-list-min-max"/);
   assert.match(html, /&quot;id&quot;:&quot;list-max&quot;[^>]*&quot;choiceLabel&quot;:&quot;最大値&quot;/);
   assert.match(html, /&quot;id&quot;:&quot;list-min&quot;[^>]*&quot;choiceLabel&quot;:&quot;最小値&quot;/);
   assert.match(html, /data-snippet-entry="binary-count-closed-interval"[^>]*data-snippet-label="bisect_right\(a, A\) - bisect_left\(a, B\)"/);
@@ -219,7 +217,7 @@ test('webview uses compact clickable rows, search, and bottom variant choice', (
 
   assert.match(html, /\.snippetCategoryDropdown\s*\{[^}]*border:/s);
   assert.match(html, /\.snippetCategoryDropdown\[open\] > summary \.snippetCategoryChevron/);
-  assert.match(html, /\.runner\s*\{[^}]*grid-template-rows:\s*auto minmax\(0, 1fr\);/s);
+  assert.match(html, /\.runner\s*\{[^}]*grid-template-rows:\s*auto auto minmax\(0, 1fr\);/s);
   assert.match(html, /\.snippetLibrary\s*\{[^}]*grid-template-rows:\s*auto minmax\(0, 1fr\);/s);
   assert.match(html, /\.snippetBrowsePanel,\s*\.snippetPreferencesPanel\s*\{[^}]*grid-template-rows:\s*auto minmax\(0, 1fr\) auto;/s);
   assert.match(html, /\.snippetChoice\s*\{[^}]*grid-template-columns:/s);
@@ -227,13 +225,13 @@ test('webview uses compact clickable rows, search, and bottom variant choice', (
   assert.match(html, /\.snippetCategoryList\s*\{[^}]*grid-auto-rows:\s*max-content;/s);
   assert.match(html, /\.snippetCategoryList\s*\{[^}]*align-content:\s*start;/s);
   assert.match(html, /\.snippetCategoryList\s*\{[^}]*overflow-y:\s*auto;/s);
-  assert.match(html, /\.snippetComplexity\s*\{[^}]*font-size:\s*10px/s);
-  assert.match(html, /id="snippetSearchInput"[^>]*placeholder="操作を検索"/);
+  assert.match(html, /\.snippetComplexity\s*\{[^}]*font-size:\s*var\(--piyoyo-font-small\)/s);
+  assert.match(html, /id="snippetSearchInput"[^>]*placeholder="操作を検索 \(\/\)"/);
   assert.match(html, /id="snippetVariantField"[^>]*hidden/);
   assert.match(html, /button\.className = 'snippetVariantButton'/);
   assert.match(html, /id="snippetImportHint"[^>]*hidden/);
   assert.match(html, /id="snippetDetails"[^>]*hidden/);
-  assert.match(html, /自動追加: ' \+ imports\.join/);
+  assert.match(html, /自動追加: ' \+ autoAdded\.join/);
   assert.match(html, /snippetDetailsText\.textContent = source\.dataset\.snippetTooltip/);
   assert.match(html, /\.snippetInsertFooter\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\);/s);
   assert.match(html, /\.snippetInsertButton\s*\{[^}]*width:\s*100%;/s);
@@ -279,7 +277,7 @@ test('webview styles IO labels and compact high-contrast snippets', () => {
   assert.match(html, /\.snippetParameter\s*\{[^}]*color:\s*var\(--piyoyo-orange\)/s);
   assert.match(html, /--piyoyo-muted:\s*#c5c5c5/);
   assert.match(html, /\.snippetChoice\s*\{[^}]*min-height:\s*30px/s);
-  assert.match(html, /\.snippetRowSummary\s*\{[^}]*white-space:\s*nowrap/s);
+  assert.match(html, /\.snippetRowSummary\s*\{(?=[^}]*white-space:\s*normal)(?![^}]*text-overflow)[^}]*\}/s);
   assert.match(html, /\.snippetComplexity\s*\{[^}]*color:\s*var\(--piyoyo-text\)/s);
   assert.match(html, /\.snippetDetailsText\s*\{(?=[^}]*color:\s*var\(--piyoyo-text\))(?=[^}]*font-size:\s*14px)(?=[^}]*line-height:\s*1\.8)[^}]*\}/s);
   assert.match(html, /\.snippetDetails\s*>\s*summary\s*\{(?=[^}]*color:\s*var\(--piyoyo-text\))(?=[^}]*font-size:\s*14px)[^}]*\}/s);
@@ -320,21 +318,122 @@ test('webview shows complexity in each row and updates grouped variants', () => 
     summary: 'リストの先頭を削除して返す', label: 'A.pop(0)', body: 'A.pop(0)',
     complexity: { qualifier: '最悪', time: 'O(n)', detail: 'リストAの要素数をnとする。' }
   }] });
-  assert.match(html, /class="snippetComplexity"[^>]*>最悪 O\(n\)<\/span>/);
-  assert.match(html, /title="リストAの要素数をnとする。"/);
-  assert.match(html, /complexityBadge\.textContent = complexity\.qualifier \+ ' ' \+ complexity\.time/);
+  const chip = html.match(/<button type="button" class="snippetComplexity"[^>]*>[^<]*<\/button>/)[0];
+  assert.match(chip, />O\(n\)<\/button>$/);
+  assert.match(chip, /data-complexity-full="最悪 O\(n\)"/);
+  assert.match(chip, /data-complexity-detail="リストAの要素数をnとする。"/);
+  assert.match(chip, /aria-expanded="false"/);
+  assert.match(chip, /aria-controls="snippetComplexityPopover"/);
+  // The chip is a sibling of the row button, never nested inside it.
+  assert.match(html, /<\/code>\s*<\/button>\s*<button type="button" class="snippetComplexity"/);
+  assert.match(html, /id="snippetComplexityPopover"[^>]*role="dialog"[^>]*hidden/);
+  assert.match(html, /complexityChip\.textContent = complexity \? complexity\.short : ''/);
+  assert.match(html, /complexityChip\.dataset\.complexityDetail = /);
+  assert.match(html, /event\.key === 'Escape' && openComplexityChip/);
+  assert.match(html, /function openComplexityPopover\(chip\)/);
   assert.doesNotMatch(html, /snippetEditorExpression/);
+
+  const noComplexity = getWebviewHtml({ snippets: [{
+    id: 'no-complexity', category: 'custom', categoryLabel: 'テスト', summary: '値', label: 'x', body: 'x'
+  }] });
+  assert.match(noComplexity, /class="snippetComplexity"[^>]*hidden><\/button>/);
 });
 
-test('webview displays Japanese errors and gates original stderr', () => {
-  const html = getWebviewHtml();
+test('complexity short form keeps compact notation and falls back to 詳細', () => {
+  const cases = [
+    ['O(1)', 'O(1)'],
+    ['O(n)', 'O(n)'],
+    ['O(log n)', 'O(log n)'],
+    ['O(n log n)', 'O(n log n)'],
+    ['O(n + k)', 'O(n + k)'],
+    ['O(n × m)', 'O(mn)'],
+    ['O(m*n)', 'O(mn)'],
+    ['O(h × w)', 'O(hw)'],
+    ['O(n × n!)', '詳細'],
+    ['O(r × C(n,r))', '詳細'],
+    ['O(log min(a, b))', '詳細'],
+    ['入力長に依存', '詳細'],
+    ['', ''],
+    [undefined, '']
+  ];
+  for (const [time, expected] of cases) {
+    assert.equal(getComplexityShortForm(time), expected, String(time));
+  }
 
-  assert.match(html, /id="stderrField"[^>]*hidden/);
+  for (const snippet of INPUT_SNIPPETS) {
+    const short = getComplexityShortForm(snippet.complexity?.time);
+    assert.ok(short === '詳細' || /^O\(.{1,8}\)$/.test(short), `${snippet.id}: ${short}`);
+    assert.doesNotMatch(short, /最悪|平均|償却/);
+  }
+});
+
+test('grouped rows carry short complexity and badges for every variant', () => {
+  const html = getWebviewHtml({ snippets: INPUT_SNIPPETS });
+  const unescape = (value) => value.replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  const variants = Array.from(html.matchAll(/data-snippet-variants="([^"]*)"/g))
+    .flatMap((match) => JSON.parse(unescape(match[1])));
+  const byId = new Map(variants.map((variant) => [variant.id, variant]));
+  for (const snippet of INPUT_SNIPPETS.filter((item) => item.selectorGroup)) {
+    const variant = byId.get(snippet.id);
+    assert.ok(variant, snippet.id);
+    assert.equal(variant.complexity.short, getComplexityShortForm(snippet.complexity.time), snippet.id);
+    assert.equal(variant.complexity.full, `${snippet.complexity.qualifier} ${snippet.complexity.time}`, snippet.id);
+    assert.deepEqual(variant.badges.map((badge) => badge.type), [
+      ...(snippet.helpers.length ? ['helper'] : []),
+      ...(snippet.imports.length ? ['import'] : []),
+      ...(snippet.externalPackages.length ? ['external'] : [])
+    ], snippet.id);
+    variant.badges.forEach((badge) => assert.equal(badge.shortText.length, 1));
+  }
+  assert.match(html, /element\.textContent = split \? badge\.shortText : badge\.text/);
+  assert.match(html, /badgeCell\.classList\.toggle\('isSplit', split\)/);
+});
+
+function errorField(html) {
+  return html.match(/<div id="stderrField".*$/m)[0];
+}
+
+test('webview friendly mode shows Japanese errors and folds the original behind 原文を見る', () => {
+  for (const html of [getWebviewHtml(), getWebviewHtml({ errorDisplayMode: 'friendly' })]) {
+    const field = errorField(html);
+    assert.match(field, /id="stderrField"[^>]*data-error-display-mode="friendly"[^>]*hidden/);
+    assert.match(field, /エラーの説明<\/span><pre id="errorExplanation"/);
+    assert.match(field, /<details id="originalErrorDetails"[^>]*><summary>原文を見る<\/summary><pre id="stderr"/);
+    assert.doesNotMatch(field, /<details[^>]*open/);
+    assert.doesNotMatch(field, /originalErrorSection|errorExplanationDetails/);
+  }
+});
+
+test('webview both mode shows the Japanese explanation and the original side by side', () => {
+  const field = errorField(getWebviewHtml({ errorDisplayMode: 'both' }));
+  assert.match(field, /data-error-display-mode="both"/);
+  assert.ok(field.indexOf('id="errorExplanation"') < field.indexOf('id="stderr"'));
+  assert.match(field, /<div id="originalErrorSection"[^>]*>.*<pre id="stderr"/);
+  assert.doesNotMatch(field, /<details/);
+});
+
+test('webview original mode shows the original first and folds the explanation', () => {
+  const field = errorField(getWebviewHtml({ errorDisplayMode: 'original' }));
+  assert.match(field, /data-error-display-mode="original"/);
+  assert.ok(field.indexOf('id="stderr"') < field.indexOf('id="errorExplanation"'));
+  assert.match(field, /<details id="errorExplanationDetails"[^>]*><summary>日本語の説明を見る<\/summary><pre id="errorExplanation"/);
+  assert.doesNotMatch(field, /originalErrorDetails/);
+});
+
+test('webview falls back to friendly mode for unknown display modes', () => {
+  assert.match(getWebviewHtml({ errorDisplayMode: '<bad>' }), /data-error-display-mode="friendly"/);
+});
+
+test('webview always keeps the original stderr and applies the shared presentation rule', () => {
+  const html = getWebviewHtml();
   assert.match(html, /stderrField\.hidden = true/);
-  assert.match(html, /stderrField\.hidden = !errorExplanation\.textContent/);
   assert.match(html, /errorExplanation\.textContent = message\.errorExplanation/);
-  assert.doesNotMatch(html, /id="stderr"/);
-  assert.match(getWebviewHtml({ showOriginalErrors: true }), /<details id="originalErrorDetails">.*id="stderr"/);
+  assert.match(html, /stderr\.textContent = \[message\.errorMessage, message\.stderr\]\.filter\(Boolean\)\.join/);
+  assert.match(html, /function getErrorPresentation\(/);
+  assert.match(html, /stderrField\.hidden = !errorPresentation\.showField/);
+  assert.match(html, /originalErrorContainer\.hidden = !errorPresentation\.showOriginal/);
+  assert.match(html, /stdout\.textContent = message\.stdout \|\| ''/);
 });
 
 test('webview clears stale runtime details when a result has no runtime', () => {
@@ -499,9 +598,11 @@ test('local black theme has semantic yellow, orange and red accents', () => {
 });
 
 test('generated webview script remains valid JavaScript', () => {
-  const html = getWebviewHtml({ snippets: INPUT_SNIPPETS });
-  const script = html.match(/<script nonce="[^"]+">([\s\S]*?)<\/script>/)[1];
-  assert.doesNotThrow(() => new Script(script));
+  for (const errorDisplayMode of ['friendly', 'both', 'original']) {
+    const html = getWebviewHtml({ snippets: INPUT_SNIPPETS, errorDisplayMode });
+    const script = html.match(/<script nonce="[^"]+">([\s\S]*?)<\/script>/)[1];
+    assert.doesNotThrow(() => new Script(script));
+  }
 });
 
 test('editable tokens stay distinct from fixed code and longer identifiers in prose', () => {
@@ -529,4 +630,350 @@ test('variant switching carries annotated preview data for every alternative', (
   assert.match(html, /snippetPreviewParts: JSON\.stringify\(selectedVariant\.previewParts/);
   assert.match(html, /parameter\.className = 'snippetParameter'/);
   assert.doesNotMatch(html, /rowPreview\.textContent = source\.dataset\.snippetLabel/);
+});
+
+test('webview header has a gear button outside the tab list that opens settings', () => {
+  const html = getWebviewHtml();
+  const tablistEnd = html.indexOf('</nav>');
+  const gearIndex = html.indexOf('id="openSettingsButton"');
+
+  assert.ok(gearIndex > tablistEnd);
+  assert.ok(gearIndex < html.indexOf('id="runWorkspace"'));
+  assert.match(html, /id="openSettingsButton"[^>]*data-open-settings[^>]*aria-label="Piyoyoの設定を開く"/);
+  assert.doesNotMatch(html, /id="openSettingsButton"[^>]*(?:role="tab"|data-workspace)/);
+  assert.match(html, /querySelectorAll\('\[data-open-settings\]'\)/);
+  assert.match(html, /vscode\.postMessage\(\{ type: 'openSettings' \}\)/);
+});
+
+test('webview links the error display and launcher settings to the settings page', () => {
+  for (const mode of ['friendly', 'both', 'original']) {
+    const html = getWebviewHtml({ errorDisplayMode: mode });
+    const field = html.slice(html.indexOf('id="stderrField"'), html.indexOf('id="runDetails"'));
+    assert.match(field, /<button[^>]*data-open-settings[^>]*>エラーの表示方法を設定で変える<\/button>/, mode);
+  }
+  const html = getWebviewHtml();
+  const launcher = html.slice(html.indexOf('class="launcher runSection"'));
+  assert.match(launcher, /<button[^>]*data-open-settings[^>]*>「設定値」と制限時間を設定で変える<\/button>/);
+});
+
+function rowHtml(html, id) {
+  const start = html.indexOf(`data-snippet-row="${id}"`);
+  assert.ok(start > -1, id);
+  return html.slice(start, html.indexOf('</div>', start));
+}
+
+test('snippet rows show a left badge cell for helpers and imports, but not for built-ins', () => {
+  const html = getWebviewHtml({ snippets: INPUT_SNIPPETS });
+  const single = INPUT_SNIPPETS.filter((snippet) => !snippet.selectorGroup);
+
+  const helperSnippet = single.find((snippet) => snippet.helpers.length > 0 && snippet.imports.length === 0);
+  assert.ok(helperSnippet);
+  const helperRow = rowHtml(html, helperSnippet.id);
+  assert.match(helperRow, /<span class="snippetBadgeCell" data-snippet-badges><span class="snippetBadge snippetBadge-helper" role="img" aria-label="自作関数: [^"]+" title="自作関数: [^"]+">自作<\/span><\/span>/);
+  assert.doesNotMatch(helperRow, /snippetBadge-import/);
+
+  const importSnippet = single.find((snippet) => snippet.imports.length > 0 && snippet.helpers.length === 0);
+  assert.ok(importSnippet);
+  const importRow = rowHtml(html, importSnippet.id);
+  assert.match(importRow, /<span class="snippetBadge snippetBadge-import" role="img" aria-label="輸入（importが必要）: [^"]+"[^>]*>輸入<\/span>/);
+  assert.doesNotMatch(importRow, /snippetBadge-helper/);
+  assert.doesNotMatch(importRow, />import<\/span>/);
+
+  // Badge cell comes first, then summary and code; the empty cell keeps alignment.
+  const builtInSnippet = single.find((snippet) => snippet.imports.length === 0 && snippet.helpers.length === 0);
+  assert.ok(builtInSnippet);
+  const builtInRow = rowHtml(html, builtInSnippet.id);
+  assert.match(builtInRow, /<button[^>]*>\s*<span class="snippetBadgeCell" data-snippet-badges><\/span>\s*<span class="snippetRowSummary">[\s\S]*<\/span>\s*<code class="snippetRowPreview"/);
+
+  assert.doesNotMatch(html, /class="snippetBadge snippetBadge-external"/);
+  assert.doesNotMatch(html, /badgeList/);
+  assert.match(html, /badgeCell\.replaceChildren\(/);
+  const helperEntries = getWebviewHtml({ snippets: single });
+  assert.equal(
+    (helperEntries.match(/role="img" aria-label="自作関数/g) || []).length,
+    single.filter((snippet) => snippet.helpers.length > 0).length
+  );
+});
+
+test('a snippet with two badge types splits the cell into one kanji each', () => {
+  const html = getWebviewHtml({ snippets: [{
+    id: 'both-example', category: 'custom', categoryLabel: 'テスト', summary: '両方', label: 'f(A)', body: 'f(${1:A})',
+    imports: ['from math import gcd'], helpers: [{ name: 'f', code: 'def f(A):\n    return A' }]
+  }] });
+  const row = rowHtml(html, 'both-example');
+  assert.match(row, /<span class="snippetBadgeCell isSplit" data-snippet-badges><span class="snippetBadge snippetBadge-helper" role="img" aria-label="自作関数: [^"]+"[^>]*>自<\/span><span class="snippetBadge snippetBadge-import" role="img" aria-label="輸入（importが必要）: [^"]+"[^>]*>輸<\/span><\/span>/);
+});
+
+test('badge legend explains only the badge types in use and is not a snippet entry', () => {
+  const html = getWebviewHtml({ snippets: INPUT_SNIPPETS });
+  const legend = html.slice(html.indexOf('<details id="snippetBadgeLegend"'), html.indexOf('</details>', html.indexOf('id="snippetBadgeLegend"')));
+
+  assert.match(legend, /<summary>アイコンの見方<\/summary>/);
+  assert.match(legend, /snippetBadge-helper" aria-hidden="true">自作<\/span><\/span><span>自作関数: /);
+  assert.match(legend, /snippetBadge-import" aria-hidden="true">輸入<\/span><\/span><span>輸入（importが必要）: /);
+  assert.match(legend, /class="snippetBadgeCell isSplit" aria-hidden="true">[^]*?>自<\/span>[^]*?>輸<\/span><\/span><span>2種類に当てはまる項目は/);
+  assert.match(legend, /class="snippetBadgeLegendNote">[^<]*「詳細」/);
+  assert.doesNotMatch(legend, />import<\/span>/);
+  assert.doesNotMatch(legend, /snippetBadge-external/);
+  assert.doesNotMatch(legend, /data-snippet/);
+  assert.ok(html.indexOf('id="snippetBadgeLegend"') < html.indexOf('id="snippetBrowsePanel"'));
+
+  const withExternal = getWebviewHtml({ snippets: [{
+    id: 'external-example', category: 'custom', categoryLabel: 'テスト', summary: 'np配列', label: 'np.array(A)',
+    body: 'np.array(${1:A})', externalPackages: ['numpy']
+  }] });
+  assert.match(withExternal, /class="snippetBadge snippetBadge-external" role="img" aria-label="外部ライブラリが必要: [^"]+"[^>]*>外部<\/span>/);
+  assert.doesNotMatch(withExternal, /class="snippetBadgeCell isSplit"/);
+
+  assert.doesNotMatch(getWebviewHtml({ snippets: [] }), /id="snippetBadgeLegend"/);
+});
+
+test('badges differ by color, border style and text, are vertical, and survive forced colors', () => {
+  const html = getWebviewHtml({ snippets: INPUT_SNIPPETS });
+
+  assert.match(html, /\.snippetBadge\s*\{(?=[^}]*writing-mode:\s*vertical-rl)(?=[^}]*text-orientation:\s*upright)[^}]*\}/s);
+  assert.match(html, /\.snippetBadgeCell\s*\{(?=[^}]*grid-row:\s*1 \/ span 2)(?=[^}]*flex-direction:\s*column)[^}]*\}/s);
+  assert.match(html, /\.snippetBadge-helper\s*\{(?=[^}]*background:\s*var\(--vscode-charts-yellow\))[^}]*\}/s);
+  assert.match(html, /\.snippetBadge-import\s*\{(?=[^}]*border:\s*1px solid var\(--piyoyo-orange\))(?=[^}]*background:\s*transparent)(?=[^}]*color:\s*var\(--piyoyo-orange\))[^}]*\}/s);
+  assert.match(html, /\.snippetBadge-external\s*\{[^}]*border:\s*1px dashed var\(--vscode-errorForeground\)/s);
+  assert.match(html, /@media \(forced-colors: active\)[\s\S]*\.snippetBadge\s*\{[^}]*border-color:\s*CanvasText/);
+  assert.match(html, /@media \(forced-colors: active\)[\s\S]*\.snippetBadge-helper\s*\{[^}]*background:\s*CanvasText/);
+});
+
+test('snippet row is a two-line card with a fixed complexity column', () => {
+  const html = getWebviewHtml({ snippets: INPUT_SNIPPETS });
+
+  assert.match(html, /\.snippetChoice\s*\{[^}]*grid-template-columns:\s*var\(--snippet-badge-width\) minmax\(0, 1fr\) var\(--snippet-complexity-width\)/s);
+  assert.match(html, /\.snippetRowSummary\s*\{[^}]*grid-column:\s*2 \/ 4/s);
+  assert.match(html, /\.snippetRowPreview\s*\{(?=[^}]*grid-row:\s*2)(?=[^}]*text-align:\s*left)[^}]*\}/s);
+  assert.match(html, /\.snippetComplexity\s*\{(?=[^}]*position:\s*absolute)(?=[^}]*width:\s*var\(--snippet-complexity-width\))[^}]*\}/s);
+  assert.match(html, /\.snippetComplexityPopover\s*\{[^}]*width:\s*min\(260px, calc\(100vw - 16px\)\)/s);
+  assert.doesNotMatch(html, /snippetRowMeta/);
+});
+
+test('webview text is never smaller than 12px and scales with the VS Code font size', () => {
+  const html = getWebviewHtml({ snippets: INPUT_SNIPPETS });
+
+  assert.doesNotMatch(html, /font-size:\s*(?:[0-9]|1[01])(?:\.\d+)?px/);
+  assert.match(html, /--piyoyo-font-base:\s*max\(13px, var\(--vscode-font-size, 13px\)\)/);
+  assert.match(html, /--piyoyo-font-small:\s*max\(12px, calc\(var\(--piyoyo-font-base\) - 1px\)\)/);
+  assert.match(html, /\.snippetRowSummary\s*\{[^}]*font-size:\s*var\(--piyoyo-font-base\)/s);
+  assert.match(html, /\.snippetRowPreview\s*\{[^}]*font-size:\s*var\(--piyoyo-font-small\)/s);
+  assert.match(html, /\.snippetBadge\s*\{[^}]*font-size:\s*var\(--piyoyo-font-small\)/s);
+  assert.match(html, /\.snippetComplexityPopover\s*\{[^}]*font-size:\s*var\(--piyoyo-font-small\)/s);
+});
+
+const KEYBOARD_TEST_SNIPPETS = [
+  {
+    id: 'keyboard-a', category: 'custom', categoryLabel: 'テスト', summary: '先頭', label: 'A[0]', body: 'A[0]',
+    complexity: { time: 'O(1)', detail: '' }
+  },
+  { id: 'keyboard-b', category: 'custom', categoryLabel: 'テスト', summary: '末尾', label: 'A[-1]', body: 'A[-1]' }
+];
+
+test('run button shows the save-and-run shortcut for each platform', () => {
+  const html = getWebviewHtml();
+  assert.match(html, /id="runButton"[^>]*title="実行 \(Ctrl\+Enter で保存して実行\)"/);
+  assert.match(html, /id="runButton"[^>]*aria-keyshortcuts="Control\+Enter"/);
+  assert.match(html, /id="runButton"[^>]*>実行<span class="shortcutHint">\(Ctrl\+Enter\)<\/span><\/button>/);
+
+  const mac = getWebviewHtml({ runShortcutLabel: 'Cmd+Enter' });
+  assert.match(mac, /id="runButton"[^>]*aria-keyshortcuts="Meta\+Enter"/);
+  assert.match(mac, /class="shortcutHint">\(Cmd\+Enter\)</);
+  assert.match(mac, /id="snippetSearchInput"[^>]*aria-keyshortcuts="\/ Meta\+F"/);
+});
+
+test('webview runs with Ctrl+Enter anywhere and asks the extension to save first', () => {
+  const html = getWebviewHtml();
+  assert.match(html, /function isRunShortcut\(event\)/);
+  assert.match(html, /function startRun\(\{ saveFirst = false \} = \{\}\)/);
+  assert.match(html, /if \(runButton\.disabled\) \{\s*return;\s*\}/);
+  assert.match(html, /runButton\.addEventListener\('click', \(\) => startRun\(\)\)/);
+  assert.match(html, /if \(isRunShortcut\(event\)\) \{\s*event\.preventDefault\(\);\s*startRun\(\{ saveFirst: true \}\);/);
+  assert.match(html, /pythonPath: selectedPythonPath,\s*saveFirst\s*\}/);
+  assert.match(html, /message\.type === 'requestRun'\) \{\s*startRun\(\);/);
+  assert.match(html, /vscode\.postMessage\(\{ type: 'ready' \}\);\s*<\/script>/);
+});
+
+test('workspace tabs follow the tablist pattern with arrow keys', () => {
+  const html = getWebviewHtml();
+  assert.match(html, /id="runWorkspaceTab"[^>]*role="tab"[^>]*tabindex="0"/);
+  assert.match(html, /id="snippetWorkspaceTab"[^>]*role="tab"[^>]*tabindex="-1"/);
+  assert.match(html, /tab\.tabIndex = isSelected \? 0 : -1;/);
+  assert.match(html, /getNextIndex\(tabs\.indexOf\(tab\), tabs\.length, event\.key, 'horizontal'\)/);
+  assert.match(html, /setWorkspace\(tabs\[nextIndex\]\.dataset\.workspace\);\s*tabs\[nextIndex\]\.focus\(\);/);
+});
+
+test('workspace tabs advertise Shift+Left / Shift+Right with the digit aliases and platform labels', () => {
+  const html = getWebviewHtml();
+  assert.match(html, /id="runWorkspaceTab"[^>]*title="実行 \(Shift\+← \/ Alt\+1\)。文字の入力欄の中では、文字を選んでおらずカーソルが端にあるときに切り替わります"[^>]*aria-keyshortcuts="Shift\+ArrowLeft Alt\+1"/);
+  assert.match(html, /id="snippetWorkspaceTab"[^>]*title="コード挿入 \(Shift\+→ \/ Alt\+2\)。/);
+  assert.match(html, /id="snippetWorkspaceTab"[^>]*aria-keyshortcuts="Shift\+ArrowRight Alt\+2"/);
+  assert.doesNotMatch(html, /Alt\+Arrow|Alt\+←|isMacPlatform/);
+
+  const mac = getWebviewHtml({ platform: 'darwin' });
+  assert.match(mac, /id="runWorkspaceTab"[^>]*title="実行 \(Shift\+← \/ Option\+1\)。/);
+  assert.match(mac, /id="snippetWorkspaceTab"[^>]*title="コード挿入 \(Shift\+→ \/ Option\+2\)。/);
+});
+
+test('Shift+Left / Shift+Right switch workspaces outside text fields and Alt+1 / Alt+2 from anywhere', () => {
+  const html = getWebviewHtml();
+  assert.match(html, /function getWorkspaceShortcutTarget\(event, \{ allowArrows = true \} = \{\}\)/);
+  assert.match(html, /function isTextEntryTarget\(element\)/);
+  // Inside text fields Shift+Arrow only switches at the caret edge; otherwise it selects text.
+  assert.match(html, /function getTextFieldEdgeWorkspaceTarget\(event, field, currentWorkspace\)/);
+  assert.match(html, /const inTextField = isTextEntryTarget\(event\.target\);\s*const shortcutWorkspace = getWorkspaceShortcutTarget\(event, \{ allowArrows: !inTextField \}\)\s*\|\| \(inTextField \? getTextFieldEdgeWorkspaceTarget\(event, event\.target, viewState\.workspace\) : ''\);\s*if \(shortcutWorkspace\) \{[\s\S]*?event\.preventDefault\(\);[\s\S]*?setWorkspace\(shortcutWorkspace, \{ focusPanel: true, avoidTextEntry: event\.shiftKey \}\);/);
+  // Esc in stdin moves to the run tab without stopping the event for VS Code.
+  assert.match(html, /stdin\.addEventListener\('keydown', \(event\) => \{\s*if \(event\.key !== 'Escape' \|\| isImeComposing\(event\)[\s\S]*?event\.preventDefault\(\);\s*document\.getElementById\('runWorkspaceTab'\)\.focus\(\);\s*\}\);/);
+  assert.doesNotMatch(html, /stdin\.addEventListener\('keydown'[^}]*stopPropagation/);
+  // After a Shift+Arrow switch focus lands on the tab instead of a text field.
+  assert.match(html, /if \(avoidTextEntry && isTextEntryTarget\(target\)\) \{\s*return Array\.from\(workspaceTabs\)\.find\(\(tab\) => tab\.dataset\.workspace === workspace\) \|\| target;/);
+  // Tab buttons leave Shift+Arrow to the global handler.
+  assert.match(html, /if \(nextIndex < 0 \|\| event\.altKey \|\| event\.ctrlKey \|\| event\.metaKey \|\| event\.shiftKey\) \{/);
+  // Same as Alt+I: stopping the event would leave VS Code with a lone Alt press.
+  assert.doesNotMatch(html, /if \(shortcutWorkspace\) \{[^}]*stopPropagation/);
+  // Mouse clicks keep focus on the tab.
+  assert.match(html, /tab\.addEventListener\('click', \(\) => setWorkspace\(tab\.dataset\.workspace\)\);/);
+});
+
+test('shortcut hint bar sits above the tabs and follows the platform and input focus setting', () => {
+  const html = getWebviewHtml();
+  assert.match(html, /<main class="runner">\s*<div class="shortcutHintBar"[\s\S]*?<\/div>\s*<div class="workspaceHeader">/);
+  assert.match(html, /<kbd id="inputFocusHintKey">Alt\+I<\/kbd>: エディタ⇄パネル/);
+  assert.match(html, /<span class="shortcutHintItem" title="Shift\+←→でタブを切り替えます。文字の入力欄の中では[^"]*カーソルが左端ならShift\+←、右端ならShift\+→で切り替わります。[^"]*標準入力の欄ではEscでタブへ移動できます"><kbd>Shift\+←→<\/kbd>: タブ切替<\/span>/);
+  assert.match(html, /<kbd>Ctrl\+Enter<\/kbd>: 保存して実行/);
+  assert.match(html, /\.shortcutHintBar\s*\{(?=[^}]*flex-wrap:\s*wrap;)(?=[^}]*font-size:\s*var\(--piyoyo-font-small\);)[^}]*\}/s);
+  assert.match(html, /\.shortcutHintItem\s*\{[^}]*white-space:\s*nowrap;/s);
+
+  const mac = getWebviewHtml({
+    platform: 'darwin',
+    runShortcutLabel: 'Cmd+Enter',
+    inputFocusShortcut: { mode: 'both', label: 'Option+I / Shift 2回' }
+  });
+  assert.match(mac, /<kbd id="inputFocusHintKey">Option\+I \/ Shift 2回<\/kbd>/);
+  assert.match(mac, /<kbd>Shift\+←→<\/kbd>: タブ切替/);
+  assert.match(mac, /<kbd>Cmd\+Enter<\/kbd>: 保存して実行/);
+
+  const shift = getWebviewHtml({ inputFocusShortcut: { mode: 'shiftShift', label: 'Shift 2回' } });
+  assert.match(shift, /<kbd id="inputFocusHintKey">Shift 2回<\/kbd>/);
+  assert.match(html, /stdin\.title = getStdinTitle\(message\.label\);\s*inputFocusHintKey\.textContent = message\.label;/);
+});
+
+test('snippet detail area puts the insert button first and grows before scrolling', () => {
+  const html = getWebviewHtml();
+  assert.match(html, /<div class="snippetInsertFooter">\s*<div class="snippetInsertActions">\s*<button id="snippetInsertButton"[^>]*aria-label="コードを挿入 \(Enter\)"[^>]*><span>コードを挿入<\/span><kbd class="snippetInsertKey" aria-hidden="true">Enter<\/kbd><\/button>\s*<span id="snippetStatus"/);
+  assert.match(html, /\.snippetInsertKey\s*\{[^}]*font-size:\s*var\(--piyoyo-font-small\);/s);
+  assert.match(html, /\.snippetInsertFooter\s*\{[^}]*max-height:\s*min\(45vh, max\(30vh, 100vh - 300px\)\);/s);
+  assert.match(html, /\.snippetInsertActions\s*\{(?=[^}]*position:\s*sticky;)(?=[^}]*top:\s*0;)[^}]*\}/s);
+  assert.doesNotMatch(html, /min\(30vh, 170px\)/);
+});
+
+test('hiding a workspace that holds focus moves focus into the shown panel', () => {
+  const html = getWebviewHtml();
+  assert.match(html, /panel\.addEventListener\('focusin', \(event\) => \{\s*lastFocusedInWorkspace\[panel\.dataset\.workspacePanel\] = event\.target;/);
+  assert.match(html, /element\.isConnected && !element\.disabled\s*&& element\.getClientRects\(\)\.length > 0/);
+  assert.match(html, /return snippetPreferencesOpen \? snippetPreferencesSearchInput : snippetSearchInput;\s*\}\s*return stdin;/);
+  assert.match(html, /const target = canRestoreFocus\(remembered\) \? remembered : getDefaultWorkspaceFocusTarget\(workspace\);/);
+  // Focus is checked before the panel is hidden, and only while the webview itself has focus.
+  assert.match(html, /const focusWillBeHidden = document\.hasFocus\(\) && Array\.from\(workspacePanels\)\.some\(\s*\(panel\) => panel\.dataset\.workspacePanel !== workspace && panel\.contains\(activeElement\)\s*\);[\s\S]*?panel\.hidden = panel\.dataset\.workspacePanel !== workspace;[\s\S]*?if \(focusPanel \|\| focusWillBeHidden\) \{\s*getWorkspaceFocusTarget\(workspace, \{ avoidTextEntry \}\)\.focus\(\);/);
+});
+
+test('snippet list uses roving focus, Enter inserts, and chips are reached with arrows', () => {
+  const html = getWebviewHtml({ snippets: KEYBOARD_TEST_SNIPPETS });
+  assert.match(html, /function getNavigableSnippetEntries\(\)/);
+  assert.match(html, /function updateSnippetRovingTabStop\(preferredItem\)/);
+  assert.match(html, /entry\.tabIndex = isTabStop \? 0 : -1;/);
+  assert.match(html, /chip\.tabIndex = isTabStop \? 0 : -1;/);
+  assert.match(html, /class="snippetComplexity" tabindex="-1"/);
+  assert.match(html, /getNextIndex\(items\.indexOf\(fromItem\), items\.length, key, 'vertical'\)/);
+  assert.match(html, /event\.key === 'Enter'\) \{[^}]*event\.preventDefault\(\);\s*selectSnippet\(entry\);\s*confirmSnippet\(entry\);/);
+  assert.match(html, /event\.key === 'ArrowRight'\)[\s\S]*?chip\.focus\(\);/);
+  assert.match(html, /event\.key === 'ArrowLeft'\)[\s\S]*?entry\.focus\(\);/);
+  // Roving updates are wired to filtering, category toggles, selection and startup.
+  assert.ok((html.match(/updateSnippetRovingTabStop\(/g) || []).length >= 5);
+});
+
+test('snippet category headers join the arrow-key sequence and the single Tab stop', () => {
+  const html = getWebviewHtml({ snippets: KEYBOARD_TEST_SNIPPETS });
+  assert.match(html, /function getDisclosureArrowAction\(event, isOpen\)/);
+  // Headers of shown categories plus rows of open categories, in document order.
+  assert.match(html, /function getNavigableSnippetItems\(\) \{[\s\S]*?'\[data-snippet-category-panel\] > summary, \[data-snippet-entry\]'[\s\S]*?item\.matches\('summary'\) \? !item\.parentElement\.hidden : entries\.includes\(item\)/);
+  assert.match(html, /summary\.tabIndex = summary === tabStop \? 0 : -1;/);
+  assert.match(html, /summary\.addEventListener\('focus', \(\) => updateSnippetRovingTabStop\(summary\)\);/);
+  // Enter / Space keep the native toggle; Left / Right collapse / expand; Up / Down move.
+  assert.match(html, /if \(event\.key === 'Enter' \|\| event\.key === ' '\) \{\s*rememberSnippetCategoryScrollPosition\(\);\s*return;\s*\}/);
+  assert.match(html, /const disclosure = getDisclosureArrowAction\(event, panel\.open\);\s*if \(disclosure\) \{\s*event\.preventDefault\(\);\s*rememberSnippetCategoryScrollPosition\(\);\s*panel\.open = disclosure === 'open';/);
+  assert.match(html, /if \(moveSnippetFocus\(summary, event\.key\)\) \{\s*event\.preventDefault\(\);/);
+  // Moving onto a header does not change the selected snippet.
+  assert.match(html, /function focusSnippetItem\(item\) \{\s*if \(item\.matches\('summary'\)\) \{\s*updateSnippetRovingTabStop\(item\);\s*item\.focus\(\);/);
+});
+
+test('organize mode moves between category headers and visibility switches with arrows', () => {
+  const html = getWebviewHtml({ snippets: KEYBOARD_TEST_SNIPPETS });
+  assert.match(html, /function getNavigablePreferenceItems\(\) \{[\s\S]*?'\[data-snippet-preference-category-panel\] > summary, \[data-snippet-preference-visible\]'/);
+  assert.match(html, /getNextIndex\(items\.indexOf\(fromItem\), items\.length, event\.key, 'vertical'\)/);
+  assert.match(html, /checkbox\.addEventListener\('keydown', \(event\) => movePreferenceFocus\(checkbox, event\)\);/);
+  assert.match(html, /movePreferenceFocus\(summary, event\);/);
+});
+
+test('snippet search is reachable with / or Ctrl+F and Escape stays consistent', () => {
+  const html = getWebviewHtml({ snippets: KEYBOARD_TEST_SNIPPETS });
+  assert.match(html, /function isSearchShortcut\(event, targetIsEditable\)/);
+  assert.match(html, /isSearchShortcut\(event, isEditableTarget\(event\.target\)\)/);
+  assert.match(html, /function focusSnippetSearch\(\) \{\s*setWorkspace\('snippets'\);/);
+  assert.match(html, /id="snippetSearchInput"[^>]*aria-keyshortcuts="\/ Control\+F"/);
+  // ArrowDown or Enter in the search box jumps to the first match without inserting.
+  assert.match(html, /event\.key === 'ArrowDown' \|\| event\.key === 'Enter'\)\) \{[\s\S]*?const firstItem = getNavigableSnippetEntries\(\)\[0\] \|\| getNavigableSnippetItems\(\)\[0\];[\s\S]*?focusSnippetItem\(firstItem\);/);
+  assert.match(html, /event\.key === 'Escape' && snippetSearchInput\.value\) \{\s*event\.preventDefault\(\);\s*clearSnippetSearch\(\);\s*snippetSearchInput\.focus\(\);/);
+  // The popover handler still runs first, in the capture phase.
+  assert.match(html, /event\.key === 'Escape' && openComplexityChip[\s\S]*?\}, true\);/);
+  assert.match(html, /一覧から使いたいコードを選んでください（↑↓ で移動、Enter で挿入）。/);
+});
+
+test('webview Enter handlers ignore IME composition', () => {
+  const html = getWebviewHtml({ snippets: KEYBOARD_TEST_SNIPPETS });
+  assert.match(html, /function isImeComposing\(event\)/);
+  assert.ok((html.match(/if \(isImeComposing\(event\)/g) || []).length >= 3);
+});
+
+test('snippet rows and category headers keep a visible focus ring inside the scroll area', () => {
+  const html = getWebviewHtml({ snippets: KEYBOARD_TEST_SNIPPETS });
+  assert.match(html, /\.snippetCategoryDropdown > summary:focus-visible,\s*\.snippetChoice:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--vscode-focusBorder\);[^}]*outline-offset:\s*-2px;/s);
+  assert.match(html, /button:focus-visible,\s*summary:focus-visible,\s*select:focus-visible,\s*input:focus-visible,\s*textarea:focus-visible\s*\{/);
+});
+
+test('stdin hints at the input focus shortcut and follows setting updates', () => {
+  const html = getWebviewHtml();
+  assert.match(html, /id="stdin"[^>]*placeholder="ここに複数行の入力を貼り付け（Alt\+I でエディタと行き来）"/);
+  assert.match(html, /id="stdin"[^>]*title="Alt\+I でPythonのエディタと行き来できます"/);
+  assert.match(html, /let inputFocusMode = "altI";/);
+
+  const shift = getWebviewHtml({ inputFocusShortcut: { mode: 'shiftShift', label: 'Shift 2回' } });
+  assert.match(shift, /placeholder="ここに複数行の入力を貼り付け（Shift 2回 でエディタと行き来）"/);
+  assert.match(shift, /let inputFocusMode = "shiftShift";/);
+
+  const unknown = getWebviewHtml({ inputFocusShortcut: { mode: 'bogus', label: 'Alt+I' } });
+  assert.match(unknown, /let inputFocusMode = "altI";/);
+
+  assert.match(html, /message\.type === 'inputFocusShortcut'\) \{\s*inputFocusMode = message\.mode;\s*stdin\.placeholder = getStdinPlaceholder\(message\.label\);/);
+});
+
+test('webview restores the last open tab on request and returns to the editor with Alt+I or Shift twice', () => {
+  const html = getWebviewHtml();
+  assert.match(html, /function isInputFocusShortcut\(event\)/);
+  assert.match(html, /function createShiftDoubleTapDetector\(intervalMs\)/);
+  assert.match(html, /const shiftDoubleTap = createShiftDoubleTapDetector\(400\);/);
+  assert.match(html, /function focusLastWorkspace\(\) \{\s*if \(viewState\.workspace === 'snippets'\) \{\s*setWorkspace\('snippets', \{ focusPanel: true \}\);\s*return;\s*\}\s*setWorkspace\('run'\);\s*stdin\.focus\(\);/);
+  assert.match(html, /message\.type === 'focusStdin'\) \{\s*focusLastWorkspace\(\);/);
+  // Save-and-run still switches to the run tab.
+  assert.match(html, /function startRun\(\{ saveFirst = false \} = \{\}\) \{[\s\S]*?setWorkspace\('run'\);/);
+  assert.match(html, /allowsAltI\(\) && isInputFocusShortcut\(event\)\) \{[\s\S]*?event\.preventDefault\(\);\s*vscode\.postMessage\(\{ type: 'focusEditor' \}\);/);
+  // The key must reach VS Code so Alt is not seen as a lone press (menu bar focus).
+  assert.doesNotMatch(html, /isInputFocusShortcut\(event\)\) \{[^}]*stopPropagation/);
+  assert.match(html, /shiftDoubleTap\.handleKeyDown\(event\);\s*\}, true\);/);
+  assert.match(html, /shiftDoubleTap\.handleKeyUp\(event, event\.timeStamp\) && allowsShiftShift\(\)\) \{\s*vscode\.postMessage\(\{ type: 'focusEditor' \}\);\s*\}\s*\}, true\);/);
+  assert.match(html, /return inputFocusMode !== 'shiftShift';/);
+  assert.match(html, /return inputFocusMode !== 'altI';/);
+  assert.match(html, /window\.addEventListener\('focus', postFocusState\);\s*window\.addEventListener\('blur', postFocusState\);/);
+  assert.match(html, /vscode\.postMessage\(\{ type: 'focusState', focused: document\.hasFocus\(\) \}\);/);
 });

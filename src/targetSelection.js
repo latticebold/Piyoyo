@@ -32,6 +32,16 @@ function getRunnablePythonFileFromDocument(document) {
   };
 }
 
+// Untitled documents are never saved here: save() would open a dialog, and the
+// runner already reports that the file must be saved first.
+async function saveDocumentBeforeRun(document) {
+  if (!document || !getRunnablePythonFileFromDocument(document).filePath || !document.isDirty) {
+    return false;
+  }
+  return Boolean(await document.save());
+}
+
 module.exports = {
-  getRunnablePythonFileFromDocument
+  getRunnablePythonFileFromDocument,
+  saveDocumentBeforeRun
 };

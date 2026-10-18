@@ -312,3 +312,106 @@ test('reports when VS Code refuses or throws during insertion', async () => {
   assert.equal(thrown.ok, false);
   assert.match(thrown.message, /editor closed/);
 });
+
+function createRuffVscodeApi({ extension = { isActive: true }, provideActions }) {
+  const { api, commands } = createVscodeApi();
+  const order = [];
+  const appliedEdits = [];
+  api.Range = class FakeRange {
+    constructor(startLine, startCharacter, endLine, endCharacter) {
+      Object.assign(this, { startLine, startCharacter, endLine, endCharacter });
+    }
+  };
+  api.extensions = { getExtension: () => extension };
+  api.workspace = {
+    async applyEdit(edit) {
+      order.push('ruff-edit');
+      appliedEdits.push(edit);
+      return true;
+    }
+  };
+  api.commands.executeCommand = async (command, ...args) => {
+    commands.push(command);
+    if (command === 'vscode.executeCodeActionProvider') {
+      return provideActions(...args);
+    }
+    return undefined;
+  };
+  return { api, commands, order, appliedEdits };
+}
+
+function createDocumentEditor(text) {
+  const created = createEditor({ text });
+  created.editor.document.uri = { path: '/work/main.py' };
+  created.editor.document.lineCount = 2;
+  return created;
+}
+
+test('lets Ruff organize imports after adding them and before the snippet', async () => {
+  const { api, order, appliedEdits } = createRuffVscodeApi({
+    provideActions: () => [{ kind: { value: 'source.organizeImports.ruff' }, edit: { id: 1 } }]
+  });
+  const { editor } = createDocumentEditor('print(1)\n');
+  const insertSnippet = editor.insertSnippet;
+  editor.insertSnippet = async (...args) => {
+    order.push('snippet');
+    return insertSnippet(...args);
+  };
+
+  const result = await insertInputSnippet({
+    vscodeApi: api,
+    editor,
+    snippet: { body: 'gcd(${1:a}, ${2:b})', imports: ['from math import gcd'] }
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(appliedEdits, [{ id: 1 }]);
+  assert.deepEqual(order, ['ruff-edit', 'snippet']);
+});
+
+test('keeps inserting normally when Ruff fails', async () => {
+  const { api, commands, appliedEdits } = createRuffVscodeApi({
+    provideActions: () => {
+      throw new Error('ruff server is down');
+    }
+  });
+  const { editor, calls, editCalls } = createDocumentEditor('print(1)\n');
+
+  const result = await insertInputSnippet({
+    vscodeApi: api,
+    editor,
+    snippet: { body: 'gcd(${1:a}, ${2:b})', imports: ['from math import gcd'] }
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.addedImports, ['from math import gcd']);
+  assert.equal(editCalls.length, 1);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(appliedEdits, []);
+  assert.equal(commands.at(-1), 'workbench.action.focusActiveEditorGroup');
+});
+
+test('does not call Ruff when the Ruff extension is missing or no import was added', async () => {
+  const missing = createRuffVscodeApi({
+    extension: null,
+    provideActions: () => assert.fail('should not ask Ruff')
+  });
+  const first = await insertInputSnippet({
+    vscodeApi: missing.api,
+    editor: createDocumentEditor('print(1)\n').editor,
+    snippet: { body: 'gcd(a, b)', imports: ['from math import gcd'] }
+  });
+  assert.equal(first.ok, true);
+  assert.ok(!missing.commands.includes('vscode.executeCodeActionProvider'));
+
+  const noImports = createRuffVscodeApi({
+    provideActions: () => assert.fail('should not ask Ruff')
+  });
+  const second = await insertInputSnippet({
+    vscodeApi: noImports.api,
+    editor: createDocumentEditor('').editor,
+    snippet: { body: 'input()' }
+  });
+  assert.equal(second.ok, true);
+  assert.ok(!noImports.commands.includes('vscode.executeCodeActionProvider'));
+});
