@@ -12,6 +12,7 @@ const SNIPPET_CATEGORY_ORDER = Object.freeze([
   'prefix-sum',
   'brute-force',
   'binary-search',
+  'string-algorithm',
   'queue',
   'tuple',
   'debug'
@@ -29,6 +30,7 @@ const CATEGORY_LABELS = Object.freeze({
   'prefix-sum': '累積和',
   'brute-force': '全探索',
   'binary-search': '二分探索',
+  'string-algorithm': '文字列アルゴリズム',
   queue: 'キュー・deque',
   tuple: 'タプル・座標',
   debug: 'デバッグ・型確認'
@@ -115,6 +117,10 @@ const COMPLEXITY_BY_ID = Object.freeze({
   'string-islower': ['O(n)', '最悪', 'n=文字列 s の長さ'],
   'string-isupper': ['O(n)', '最悪', 'n=文字列 s の長さ'],
   'string-isspace': ['O(n)', '最悪', 'n=文字列 s の長さ'],
+  'string-hamming-distance': ['O(n)', '最悪', 'n=文字列 s、t の長さ'],
+  'string-levenshtein-distance': ['O(n × m)', '最悪', 'n=文字列 s、m=文字列 t の長さ'],
+  'string-find-all': ['O(n × m)', '最悪', 'CPython。n=文字列 s、m=探す文字列 t の長さ。重なる一致が多いと最悪になる'],
+  'string-z-algorithm': ['O(n)', '最悪', 'n=文字列 s の長さ'],
   'aggregation-counter': ['O(n)', '平均', 'n=入力 a の要素数。ハッシュ衝突が集中すると最悪 O(n²)'],
   'aggregation-defaultdict-int': ['O(1)', '最悪', '空の辞書を作成。キーの検索は含まない'],
   'aggregation-defaultdict-list': ['O(1)', '最悪', '空の辞書を作成。キーの検索は含まない'],
@@ -1037,6 +1043,90 @@ function createAdditionalSnippets() {
       returns: '空白文字だけで空でなければTrueを返します。',
       label: 's.isspace()',
       body: '${1:s}.isspace()'
+    }),
+    createSnippet({
+      id: 'string-hamming-distance',
+      category: 'string-algorithm',
+      summary: '同じ長さの文字列sとtのハミング距離',
+      description: '同じ長さの文字列sとtで、同じ位置の文字が異なる箇所の数を数える関数を定義します。',
+      input: '関数hamming_distanceは、同じ長さの文字列sとtを受け取ります。',
+      returns: '文字が異なる位置の数を返します。sとtが両方とも空文字列なら0です。',
+      precondition: 'sとtの長さが違うとValueErrorが発生します。関数を使う場所より上に挿入してください。',
+      label: 'def hamming_distance(s, t)',
+      body: [
+        'def hamming_distance(s, t):',
+        '    if len(s) != len(t):',
+        '        raise ValueError("sとtの長さが違います")',
+        '    return sum(a != b for a, b in zip(s, t))'
+      ].join('\n')
+    }),
+    createSnippet({
+      id: 'string-levenshtein-distance',
+      category: 'string-algorithm',
+      summary: '文字列sとtの編集距離（レーベンシュタイン距離）',
+      description: '1文字の挿入・削除・置換を何回行えばsをtに変えられるか、その最小回数を求める関数を定義します。',
+      input: '関数levenshtein_distanceは、文字列sとtを受け取ります。長さは違っても構いません。',
+      returns: '最小の操作回数を返します。片方が空文字列なら、もう片方の長さです。',
+      precondition: '動的計画法（DP）で、直前の行だけを残して計算します。関数を使う場所より上に挿入してください。',
+      label: 'def levenshtein_distance(s, t)',
+      body: [
+        'def levenshtein_distance(s, t):',
+        '    prev = list(range(len(t) + 1))',
+        '    for i, a in enumerate(s, 1):',
+        '        cur = [i] + [0] * len(t)',
+        '        for j, b in enumerate(t, 1):',
+        '            cur[j] = min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a != b))',
+        '        prev = cur',
+        '    return prev[-1]'
+      ].join('\n')
+    }),
+    createSnippet({
+      id: 'string-find-all',
+      category: 'string-algorithm',
+      summary: '文字列sで文字列tが現れる位置をすべて探す',
+      description: '文字列sで文字列tが現れる添字を、重なる一致も含めてすべて集める関数を定義します。',
+      input: '関数find_allは、文字列sと探す文字列tを受け取ります。',
+      returns: '一致が始まる添字iを小さい順に並べたリストを返します。添字iは先頭からi+1番目の位置です。見つからなければ空リストです。',
+      precondition: 'tが空文字列だとValueErrorが発生します。"aaa"から"aa"を探すと[0, 1]のように重なる一致も数えます。関数を使う場所より上に挿入してください。',
+      label: 'def find_all(s, t)',
+      body: [
+        'def find_all(s, t):',
+        '    if t == "":',
+        '        raise ValueError("tが空文字列です")',
+        '    result = []',
+        '    i = s.find(t)',
+        '    while i != -1:',
+        '        result.append(i)',
+        '        i = s.find(t, i + 1)',
+        '    return result'
+      ].join('\n')
+    }),
+    createSnippet({
+      id: 'string-z-algorithm',
+      category: 'string-algorithm',
+      summary: '文字列sの各位置から先頭と一致する長さ（Z algorithm）',
+      description: '各添字iについて、sとs[i:]の先頭が何文字一致するかをまとめて求める関数を定義します。',
+      input: '関数z_algorithmは、文字列sを受け取ります。',
+      returns: '長さlen(s)のリストzを返します。z[i]はsとs[i:]の共通する先頭部分の長さで、z[0]はlen(s)です。sが空文字列なら空リストです。',
+      precondition: 't + "#" + sのように区切り文字でつなぐと、z[i]がlen(t)になる位置iでsの中のtが見つかります。sでの添字はi - len(t) - 1です。区切り文字はsとtに含まれない文字にします。関数を使う場所より上に挿入してください。',
+      label: 'def z_algorithm(s)',
+      body: [
+        'def z_algorithm(s):',
+        '    n = len(s)',
+        '    z = [0] * n',
+        '    if n == 0:',
+        '        return z',
+        '    z[0] = n',
+        '    left = right = 0',
+        '    for i in range(1, n):',
+        '        if i < right:',
+        '            z[i] = min(right - i, z[i - left])',
+        '        while i + z[i] < n and s[z[i]] == s[i + z[i]]:',
+        '            z[i] += 1',
+        '        if i + z[i] > right:',
+        '            left, right = i, i + z[i]',
+        '    return z'
+      ].join('\n')
     }),
     createSnippet({
       id: 'aggregation-counter-value',

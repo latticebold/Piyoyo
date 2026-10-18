@@ -21,6 +21,7 @@ const EXPECTED_CATEGORY_COUNTS = {
   'prefix-sum': 2,
   'brute-force': 2,
   'binary-search': 3,
+  'string-algorithm': 4,
   queue: 7,
   tuple: 3,
   debug: 3
@@ -81,12 +82,12 @@ const ADDED_SNIPPET_IDS = [
   'set-add', 'set-contains', 'dict-lookup', 'dict-contains'
 ];
 
-test('97 snippets have complete frozen metadata in the 14-category usage order', () => {
+test('101 snippets have complete frozen metadata in the 15-category usage order', () => {
   const ids = INPUT_SNIPPETS.map((snippet) => snippet.id);
   const categories = [...new Set(INPUT_SNIPPETS.map((snippet) => snippet.category))];
 
-  assert.equal(INPUT_SNIPPETS.length, 97);
-  assert.equal(new Set(ids).size, 97);
+  assert.equal(INPUT_SNIPPETS.length, 101);
+  assert.equal(new Set(ids).size, 101);
   assert.deepEqual(SNIPPET_CATEGORY_ORDER, Object.keys(EXPECTED_CATEGORY_COUNTS));
   assert.deepEqual(categories, SNIPPET_CATEGORY_ORDER);
   assert.deepEqual(

@@ -161,11 +161,11 @@ test('webview renders every snippet row in the intended category order', () => {
   const categoryIds = [
     'input', 'output', 'number-conversion', 'list-comprehension', 'index-slice', 'string',
     'condition-check', 'aggregation', 'prefix-sum', 'brute-force',
-    'binary-search', 'queue', 'tuple', 'debug'
+    'binary-search', 'string-algorithm', 'queue', 'tuple', 'debug'
   ];
   const categoryLabels = [
     '入力', '出力', '数値・型変換', 'リスト・内包表記', '添字・スライス', '文字列',
-    '条件分岐・文字判定', '集計・辞書', '累積和', '全探索', '二分探索',
+    '条件分岐・文字判定', '集計・辞書', '累積和', '全探索', '二分探索', '文字列アルゴリズム',
     'キュー・deque', 'タプル・座標', 'デバッグ・型確認'
   ];
   let previousIndex = html.indexOf('class="snippetCategoryList"');
