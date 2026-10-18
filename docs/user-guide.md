@@ -118,6 +118,8 @@ Piyoyo上部の「コード挿入」タブでは、入力、文字列、リス�
 Piyoyoは`from collections import deque`を`snippets.py`の先頭へ追加し、カーソル位置には`deque([start])`を挿入します。
 `start`はVS Code上で編集できます。
 同じimportがある場合は重複して追加しません。
+VS Codeに[Ruff拡張機能](https://marketplace.visualstudio.com/items?itemName=charliermarsh.ruff)が入っていて有効な場合は、importを追加したあとにRuffの「importの整理」でimportの順番を並べ替えます。
+Ruffが入っていない場合や、Ruffの整理に失敗した場合は、並べ替えをせずにそのまま挿入します。
 
 挿入時にPythonファイルが開かれていない場合や、必要なimportを追加できない場合は、Piyoyoがエラーを表示して挿入を止めます。
 スニペットを選んだだけでは、コードは挿入されません。
