@@ -125,7 +125,7 @@ test('manifest offers three error display modes with Japanese labels', () => {
 test('manifest contributes the input focus toggle with Alt+I and Shift double-tap bindings', () => {
   const command = manifest.contributes.commands.find((item) => item.command === 'piyoyo.toggleInputFocus');
   assert.ok(command);
-  assert.equal(command.title, 'Piyoyo: 入力欄とエディタを切り替え');
+  assert.equal(command.title, 'Piyoyo: パネルとエディタを切り替え');
   assert.ok(manifest.activationEvents.includes('onCommand:piyoyo.toggleInputFocus'));
 
   const bindings = manifest.contributes.keybindings.filter((item) => item.command === 'piyoyo.toggleInputFocus');

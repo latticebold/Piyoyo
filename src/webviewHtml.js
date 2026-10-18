@@ -1633,6 +1633,10 @@ function getWebviewHtml({
     }
 
     .snippetInsertButton {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
       width: 100%;
       min-height: 30px;
       padding: 6px 10px;
@@ -1640,6 +1644,17 @@ function getWebviewHtml({
       font-weight: 600;
       color: var(--vscode-button-foreground, #ffffff);
       background: var(--vscode-button-background, #0e639c);
+    }
+
+    .snippetInsertKey {
+      padding: 0 5px;
+      border: 1px solid currentColor;
+      border-radius: 3px;
+      font: inherit;
+      font-size: var(--piyoyo-font-small);
+      font-weight: 600;
+      line-height: 1.4;
+      opacity: 0.85;
     }
 
     .primaryRun:hover {
@@ -1837,7 +1852,7 @@ function getWebviewHtml({
 <body>
   <main class="runner">
     <div class="shortcutHintBar" aria-label="主なショートカット">
-      <span class="shortcutHintItem"><kbd id="inputFocusHintKey">${escapeHtml(inputFocusLabel)}</kbd>: エディタ⇄入力</span>
+      <span class="shortcutHintItem"><kbd id="inputFocusHintKey">${escapeHtml(inputFocusLabel)}</kbd>: エディタ⇄パネル</span>
       <span class="shortcutHintItem"><kbd>${tabSwitchLabel}</kbd>: タブ切替</span>
       <span class="shortcutHintItem"><kbd>${escapedRunShortcutLabel}</kbd>: 保存して実行</span>
     </div>
@@ -1938,7 +1953,7 @@ function getWebviewHtml({
         </div>
         <div class="snippetInsertFooter">
           <div class="snippetInsertActions">
-            <button id="snippetInsertButton" class="snippetInsertButton" type="button" disabled>コードを挿入</button>
+            <button id="snippetInsertButton" class="snippetInsertButton" type="button" aria-label="コードを挿入 (Enter)" disabled><span>コードを挿入</span><kbd class="snippetInsertKey" aria-hidden="true">Enter</kbd></button>
             <span id="snippetStatus" class="snippetStatus" aria-live="polite"></span>
           </div>
           <div id="snippetInsertSelection" class="snippetInsertSelection" aria-live="polite">
@@ -2943,7 +2958,12 @@ function getWebviewHtml({
     function allowsShiftShift() {
       return inputFocusMode !== 'altI';
     }
-    function focusStdin() {
+    // Returns to the tab that was last open; the run tab always lands on stdin.
+    function focusLastWorkspace() {
+      if (viewState.workspace === 'snippets') {
+        setWorkspace('snippets', { focusPanel: true });
+        return;
+      }
       setWorkspace('run');
       stdin.focus();
     }
@@ -3024,7 +3044,7 @@ function getWebviewHtml({
       }
 
       if (message.type === 'focusStdin') {
-        focusStdin();
+        focusLastWorkspace();
         return;
       }
 

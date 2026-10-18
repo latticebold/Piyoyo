@@ -831,7 +831,7 @@ test('Alt+Left / Alt+Right and Alt+1 / Alt+2 switch workspaces from anywhere and
 test('shortcut hint bar sits above the tabs and follows the platform and input focus setting', () => {
   const html = getWebviewHtml();
   assert.match(html, /<main class="runner">\s*<div class="shortcutHintBar"[\s\S]*?<\/div>\s*<div class="workspaceHeader">/);
-  assert.match(html, /<kbd id="inputFocusHintKey">Alt\+I<\/kbd>: エディタ⇄入力/);
+  assert.match(html, /<kbd id="inputFocusHintKey">Alt\+I<\/kbd>: エディタ⇄パネル/);
   assert.match(html, /<kbd>Alt\+←→<\/kbd>: タブ切替/);
   assert.match(html, /<kbd>Ctrl\+Enter<\/kbd>: 保存して実行/);
   assert.match(html, /\.shortcutHintBar\s*\{(?=[^}]*flex-wrap:\s*wrap;)(?=[^}]*font-size:\s*var\(--piyoyo-font-small\);)[^}]*\}/s);
@@ -853,7 +853,8 @@ test('shortcut hint bar sits above the tabs and follows the platform and input f
 
 test('snippet detail area puts the insert button first and grows before scrolling', () => {
   const html = getWebviewHtml();
-  assert.match(html, /<div class="snippetInsertFooter">\s*<div class="snippetInsertActions">\s*<button id="snippetInsertButton"[^>]*>コードを挿入<\/button>\s*<span id="snippetStatus"/);
+  assert.match(html, /<div class="snippetInsertFooter">\s*<div class="snippetInsertActions">\s*<button id="snippetInsertButton"[^>]*aria-label="コードを挿入 \(Enter\)"[^>]*><span>コードを挿入<\/span><kbd class="snippetInsertKey" aria-hidden="true">Enter<\/kbd><\/button>\s*<span id="snippetStatus"/);
+  assert.match(html, /\.snippetInsertKey\s*\{[^}]*font-size:\s*var\(--piyoyo-font-small\);/s);
   assert.match(html, /\.snippetInsertFooter\s*\{[^}]*max-height:\s*min\(45vh, max\(30vh, 100vh - 300px\)\);/s);
   assert.match(html, /\.snippetInsertActions\s*\{(?=[^}]*position:\s*sticky;)(?=[^}]*top:\s*0;)[^}]*\}/s);
   assert.doesNotMatch(html, /min\(30vh, 170px\)/);
@@ -925,13 +926,15 @@ test('stdin hints at the input focus shortcut and follows setting updates', () =
   assert.match(html, /message\.type === 'inputFocusShortcut'\) \{\s*inputFocusMode = message\.mode;\s*stdin\.placeholder = getStdinPlaceholder\(message\.label\);/);
 });
 
-test('webview focuses stdin on request and returns to the editor with Alt+I or Shift twice', () => {
+test('webview restores the last open tab on request and returns to the editor with Alt+I or Shift twice', () => {
   const html = getWebviewHtml();
   assert.match(html, /function isInputFocusShortcut\(event\)/);
   assert.match(html, /function createShiftDoubleTapDetector\(intervalMs\)/);
   assert.match(html, /const shiftDoubleTap = createShiftDoubleTapDetector\(400\);/);
-  assert.match(html, /function focusStdin\(\) \{\s*setWorkspace\('run'\);\s*stdin\.focus\(\);/);
-  assert.match(html, /message\.type === 'focusStdin'\) \{\s*focusStdin\(\);/);
+  assert.match(html, /function focusLastWorkspace\(\) \{\s*if \(viewState\.workspace === 'snippets'\) \{\s*setWorkspace\('snippets', \{ focusPanel: true \}\);\s*return;\s*\}\s*setWorkspace\('run'\);\s*stdin\.focus\(\);/);
+  assert.match(html, /message\.type === 'focusStdin'\) \{\s*focusLastWorkspace\(\);/);
+  // Save-and-run still switches to the run tab.
+  assert.match(html, /function startRun\(\{ saveFirst = false \} = \{\}\) \{[\s\S]*?setWorkspace\('run'\);/);
   assert.match(html, /allowsAltI\(\) && isInputFocusShortcut\(event\)\) \{[\s\S]*?event\.preventDefault\(\);\s*vscode\.postMessage\(\{ type: 'focusEditor' \}\);/);
   // The key must reach VS Code so Alt is not seen as a lone press (menu bar focus).
   assert.doesNotMatch(html, /isInputFocusShortcut\(event\)\) \{[^}]*stopPropagation/);

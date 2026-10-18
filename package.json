@@ -56,7 +56,7 @@
       },
       {
         "command": "piyoyo.toggleInputFocus",
-        "title": "Piyoyo: 入力欄とエディタを切り替え"
+        "title": "Piyoyo: パネルとエディタを切り替え"
       },
       {
         "command": "piyoyo.workspaceShortcut",
@@ -216,12 +216,12 @@
             "両方"
           ],
           "enumDescriptions": [
-            "Alt+I（macOSはOption+I）で、Pythonのエディタと「標準入力」の欄を行き来します。",
-            "Shiftキーを素早く2回押して、Pythonのエディタと「標準入力」の欄を行き来します。日本語入力（IME）がShiftで入力モードを切り替える場合は、その動作も起きることがあります。",
+            "Alt+I（macOSはOption+I）で、PythonのエディタとPiyoyoパネルを行き来します。",
+            "Shiftキーを素早く2回押して、PythonのエディタとPiyoyoパネルを行き来します。日本語入力（IME）がShiftで入力モードを切り替える場合は、その動作も起きることがあります。",
             "Alt+I と Shiftを2回の両方を使えます。"
           ],
           "default": "altI",
-          "description": "Pythonのエディタと、Piyoyoの「標準入力」の欄を行き来するキーを選びます。キーボードショートカットの画面で別のキーにすることもできます。"
+          "description": "Pythonのエディタと、Piyoyoパネル（最後に開いていたタブ）を行き来するキーを選びます。キーボードショートカットの画面で別のキーにすることもできます。"
         },
         "piyoyo.advanced.showOriginalErrors": {
           "type": "boolean",
