@@ -7,10 +7,10 @@ const { spawnSync } = require('node:child_process');
 const { INPUT_SNIPPETS, getInputSnippet, getSnippetPlaceholders } = require('../src/snippetLibrary');
 
 const STRING_ALGORITHM_IDS = [
-  'string-hamming-distance',
-  'string-levenshtein-distance',
   'string-find-all',
-  'string-z-algorithm'
+  'string-z-algorithm',
+  'string-hamming-distance',
+  'string-levenshtein-distance'
 ];
 
 const pythonResult = spawnSync('uv', [
@@ -34,12 +34,13 @@ function runWithSnippet(id, checks) {
 
 test('string algorithm snippets insert a call and declare their def as a helper', () => {
   assert.deepEqual(
-    INPUT_SNIPPETS.filter((snippet) => snippet.category === 'string-algorithm').map((snippet) => snippet.id),
+    INPUT_SNIPPETS.filter((snippet) => snippet.helpers.length > 0).map((snippet) => snippet.id),
     STRING_ALGORITHM_IDS
   );
   for (const id of STRING_ALGORITHM_IDS) {
     const snippet = getInputSnippet(id);
-    assert.equal(snippet.categoryLabel, '文字列アルゴリズム');
+    assert.equal(snippet.category, 'string');
+    assert.equal(snippet.categoryLabel, '文字列');
     assert.match(snippet.label, /^[a-z_]+\([a-z, ]+\)$/, id);
     assert.doesNotMatch(snippet.label, /def/, id);
     assert.doesNotMatch(snippet.body, /\n|def /, id);

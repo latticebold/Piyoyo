@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const {
   INPUT_SNIPPETS,
   SNIPPET_CATEGORY_ORDER,
+  SNIPPET_DISPLAY_ORDER,
   SNIPPET_ID_ALIASES,
   getInputSnippet,
   getSnippetPlaceholders,
@@ -12,20 +13,30 @@ const {
 
 const EXPECTED_CATEGORY_COUNTS = {
   input: 15,
-  output: 4,
   'number-conversion': 12,
-  'list-comprehension': 16,
-  'index-slice': 3,
-  string: 9,
-  'condition-check': 6,
-  aggregation: 8,
-  'prefix-sum': 2,
-  'brute-force': 2,
-  'binary-search': 3,
-  'string-algorithm': 4,
-  queue: 7,
+  string: 18,
+  list: 20,
   tuple: 3,
-  debug: 3
+  aggregation: 8,
+  queue: 7,
+  'brute-force': 2,
+  'prefix-sum': 2,
+  'binary-search': 3,
+  output: 7
+};
+
+const EXPECTED_CATEGORY_LABELS = {
+  input: '入力',
+  'number-conversion': '数値・型変換',
+  string: '文字列',
+  list: 'リスト',
+  tuple: 'タプル・座標',
+  aggregation: '集合・辞書・数え上げ',
+  queue: 'キュー・deque',
+  'brute-force': '全探索',
+  'prefix-sum': '累積和',
+  'binary-search': '二分探索',
+  output: '出力・デバッグ'
 };
 
 const EXISTING_SNIPPET_BODIES_AND_IMPORTS = {
@@ -83,7 +94,7 @@ const ADDED_SNIPPET_IDS = [
   'set-add', 'set-contains', 'dict-lookup'
 ];
 
-test('97 snippets have complete frozen metadata in the 15-category usage order', () => {
+test('97 snippets have complete frozen metadata in the 11-category usage order', () => {
   const ids = INPUT_SNIPPETS.map((snippet) => snippet.id);
   const categories = [...new Set(INPUT_SNIPPETS.map((snippet) => snippet.category))];
 
@@ -110,7 +121,7 @@ test('97 snippets have complete frozen metadata in the 15-category usage order',
     ]) {
       assert.ok(Object.hasOwn(snippet, field), `${snippet.id} is missing ${field}`);
     }
-    assert.ok(snippet.categoryLabel);
+    assert.equal(snippet.categoryLabel, EXPECTED_CATEGORY_LABELS[snippet.category], snippet.id);
     assert.ok(snippet.summary);
     assert.ok(snippet.description);
     assert.ok(snippet.input);
@@ -148,6 +159,50 @@ test('queue snippets are ordered by common use', () => {
     ]
   );
   assert.equal(INPUT_SNIPPETS.some((snippet) => ['bfs-graph', 'heap'].includes(snippet.category)), false);
+});
+
+test('rows follow the display order, with each selector group kept together', () => {
+  assert.equal(new Set(SNIPPET_DISPLAY_ORDER).size, SNIPPET_DISPLAY_ORDER.length);
+  assert.deepEqual(INPUT_SNIPPETS.map((snippet) => snippet.id), SNIPPET_DISPLAY_ORDER);
+
+  for (const category of SNIPPET_CATEGORY_ORDER) {
+    const rows = INPUT_SNIPPETS.filter((snippet) => snippet.category === category);
+    // Queue rows alternate add/remove by usage; their groups render at the first member.
+    const groups = category === 'queue' ? [] : rows.map((snippet) => snippet.selectorGroup).filter(Boolean);
+    for (const group of new Set(groups)) {
+      const positions = rows
+        .map((snippet, index) => (snippet.selectorGroup === group ? index : -1))
+        .filter((index) => index >= 0);
+      assert.equal(positions.at(-1) - positions[0] + 1, positions.length, `${group} is split`);
+    }
+    const firstHelper = rows.findIndex((snippet) => snippet.helpers.length > 0);
+    if (firstHelper >= 0) {
+      assert.ok(rows.slice(firstHelper).every((snippet) => snippet.helpers.length > 0), `${category} helpers last`);
+    }
+  }
+});
+
+test('related snippets share one category instead of split ones', () => {
+  const categoryOf = (id) => getInputSnippet(id).category;
+  for (const id of [
+    'string-find', 'string-isdigit', 'string-isspace',
+    'string-find-all', 'string-z-algorithm', 'string-hamming-distance', 'string-levenshtein-distance'
+  ]) {
+    assert.equal(categoryOf(id), 'string', id);
+  }
+  for (const id of ['sequence-length', 'list-access', 'list-slice', 'list-max', 'comprehension-zero-matrix']) {
+    assert.equal(categoryOf(id), 'list', id);
+  }
+  for (const id of ['output-value', 'debug-type', 'debug-isinstance-str']) {
+    assert.equal(categoryOf(id), 'output', id);
+  }
+  for (const removed of ['index-slice', 'condition-check', 'string-algorithm', 'list-comprehension', 'debug']) {
+    assert.equal(SNIPPET_CATEGORY_ORDER.includes(removed), false, removed);
+  }
+  assert.deepEqual(
+    INPUT_SNIPPETS.filter((snippet) => snippet.category === 'string').slice(-4).map((snippet) => snippet.id),
+    ['string-find-all', 'string-z-algorithm', 'string-hamming-distance', 'string-levenshtein-distance']
+  );
 });
 
 test('similar alternatives expose stable selector groups for the compact UI', () => {
@@ -392,7 +447,7 @@ test('index and slice examples explain selected positions and returned values', 
   };
   for (const [id, body] of Object.entries(examples)) {
     const snippet = getInputSnippet(id);
-    assert.equal(snippet.category, 'index-slice');
+    assert.equal(snippet.category, 'list');
     assert.equal(snippet.body, body);
   }
   assert.equal(getInputSnippet('list-access').summary, 'リストAの先頭からi+1番目の要素を見る');

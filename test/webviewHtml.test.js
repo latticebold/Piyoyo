@@ -159,14 +159,12 @@ test('webview renders every snippet row in the intended category order', () => {
 
   assert.match(html, /class="snippetCategoryList" aria-label="入力コードのジャンル"/);
   const categoryIds = [
-    'input', 'output', 'number-conversion', 'list-comprehension', 'index-slice', 'string',
-    'condition-check', 'aggregation', 'prefix-sum', 'brute-force',
-    'binary-search', 'string-algorithm', 'queue', 'tuple', 'debug'
+    'input', 'number-conversion', 'string', 'list', 'tuple', 'aggregation',
+    'queue', 'brute-force', 'prefix-sum', 'binary-search', 'output'
   ];
   const categoryLabels = [
-    '入力', '出力', '数値・型変換', 'リスト・内包表記', '添字・スライス', '文字列',
-    '条件分岐・文字判定', '集計・辞書', '累積和', '全探索', '二分探索', '文字列アルゴリズム',
-    'キュー・deque', 'タプル・座標', 'デバッグ・型確認'
+    '入力', '数値・型変換', '文字列', 'リスト', 'タプル・座標', '集合・辞書・数え上げ',
+    'キュー・deque', '全探索', '累積和', '二分探索', '出力・デバッグ'
   ];
   let previousIndex = html.indexOf('class="snippetCategoryList"');
   categoryIds.forEach((categoryId, index) => {
@@ -198,7 +196,7 @@ test('webview renders every snippet row in the intended category order', () => {
   assert.match(html, /data-snippet-group="input-multiline-list-type"/);
   assert.match(html, /&quot;id&quot;:&quot;multiline-ints&quot;[^>]*&quot;choiceLabel&quot;:&quot;整数&quot;/);
   assert.match(html, /data-snippet-entry="basic-chars"[^>]*data-snippet-label="list\(input\(\)\)"/);
-  assert.match(html, /data-snippet-group="list-comprehension-list-min-max"/);
+  assert.match(html, /data-snippet-group="list-list-min-max"/);
   assert.match(html, /&quot;id&quot;:&quot;list-max&quot;[^>]*&quot;choiceLabel&quot;:&quot;最大値&quot;/);
   assert.match(html, /&quot;id&quot;:&quot;list-min&quot;[^>]*&quot;choiceLabel&quot;:&quot;最小値&quot;/);
   assert.match(html, /data-snippet-entry="binary-count-closed-interval"[^>]*data-snippet-label="bisect_right\(a, A\) - bisect_left\(a, B\)"/);

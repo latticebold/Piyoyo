@@ -69,6 +69,28 @@ test('real merged snippet ids from older versions keep working', () => {
   assert.equal(applySnippetPreferences(INPUT_SNIPPETS, normalized).length, INPUT_SNIPPETS.length);
 });
 
+test('an order saved before categories were merged groups moved snippets under their new category', () => {
+  const { INPUT_SNIPPETS, SNIPPET_CATEGORY_ORDER } = require('../src/snippetLibrary');
+  // Old layout: input, output, ..., index-slice, string, condition-check, ..., string-algorithm, ..., debug.
+  const oldOrder = [
+    'output-value', 'list-max', 'list-access', 'string-count', 'string-isdigit',
+    'aggregation-counter', 'string-z-algorithm', 'queue-pop', 'debug-type'
+  ];
+  const visible = applySnippetPreferences(INPUT_SNIPPETS, {
+    hiddenSnippetIds: ['string-isdigit'],
+    order: oldOrder
+  });
+  const categories = visible.map((snippet) => snippet.category);
+
+  assert.equal(visible.length, INPUT_SNIPPETS.length - 1);
+  assert.deepEqual([...new Set(categories)], SNIPPET_CATEGORY_ORDER);
+  const ids = visible.map((snippet) => snippet.id);
+  const stringIds = visible.filter((snippet) => snippet.category === 'string').map((snippet) => snippet.id);
+  assert.deepEqual(stringIds.slice(0, 2), ['string-count', 'string-z-algorithm']);
+  assert.ok(ids.indexOf('debug-type') > ids.indexOf('binary-bisect-left'));
+  assert.equal(ids.indexOf('output-value') + 1, ids.indexOf('debug-type'));
+});
+
 test('applies visibility and custom order only within the fixed category order', () => {
   const visible = applySnippetPreferences(SNIPPETS, {
     hiddenSnippetIds: ['heap-a'],
