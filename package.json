@@ -1,0 +1,100 @@
+{
+  "name": "piyoyo",
+  "displayName": "Piyoyo",
+  "description": "A friendly Python stdin runner and input snippet helper for competitive programming in VS Code.",
+  "version": "0.2.0",
+  "publisher": "local",
+  "license": "GPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/latticebold/Piyoyo.git"
+  },
+  "homepage": "https://github.com/latticebold/Piyoyo#readme",
+  "bugs": {
+    "url": "https://github.com/latticebold/Piyoyo/issues"
+  },
+  "icon": "resources/piyoyo-128.png",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "stdin",
+    "stdout",
+    "competitive-programming",
+    "python",
+    "runner"
+  ],
+  "activationEvents": [
+    "onCommand:piyoyo.open",
+    "onCommand:ioSprint.open",
+    "onView:piyoyo.runnerView"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "piyoyo.open",
+        "title": "Piyoyo: Open",
+        "icon": {
+          "light": "resources/piyoyo.png",
+          "dark": "resources/piyoyo.png"
+        }
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "piyoyo.open",
+          "when": "resourceLangId == python",
+          "group": "navigation@1"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "piyoyo",
+          "title": "Piyoyo",
+          "icon": "resources/piyoyo.png"
+        }
+      ]
+    },
+    "views": {
+      "piyoyo": [
+        {
+          "id": "piyoyo.runnerView",
+          "name": "Piyoyo Runner",
+          "type": "webview"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Piyoyo",
+      "properties": {
+        "piyoyo.pythonPath": {
+          "type": "string",
+          "default": "",
+          "description": "Python executable path. When empty, Piyoyo uses python.defaultInterpreterPath, then python on Windows or python3 elsewhere."
+        },
+        "piyoyo.timeoutMs": {
+          "type": "number",
+          "default": 5000,
+          "minimum": 100,
+          "description": "Maximum execution time in milliseconds."
+        },
+        "piyoyo.advanced.showOriginalErrors": {
+          "type": "boolean",
+          "default": false,
+          "description": "日本語のエラー説明に加え、元のエラーとトレースバックを表示します。"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "check": "node --check extension.js && node --check src/webviewHtml.js && node --check src/snippetLibrary.js && node --check src/snippetPreferences.js && node --check src/snippetInsertion.js && node --check src/pythonImportInsertion.js && node --check src/pythonStatements.js && node --check src/runners/pythonRunner.js && node --check src/runners/pythonErrorExplainer.js && node --check src/runners/boundedOutput.js && node --check src/runners/processTermination.js && node --check src/targetSelection.js && node --check src/pythonPathSelection.js && node --check src/pythonPathPreference.js && node --check src/pythonLauncherAvailability.js && node --check src/pythonLauncherAvailabilityCache.js"
+  }
+}

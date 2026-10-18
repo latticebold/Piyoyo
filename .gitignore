@@ -1,0 +1,8 @@
+node_modules/
+.uv-cache/
+*.vsix
+npm-debug.log*
+.DS_Store
+Thumbs.db
+.doc-work/
+dist/

@@ -1,0 +1,250 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1254 1254" role="img" aria-labelledby="title desc">
+  <title id="title">Piyoyo logo</title>
+  <desc id="desc">A cute yellow chick hatching from an eggshell, with a greater-than sign eye, an underscore-like orange beak, and the text Py! in a Coiny-style outlined vector form.</desc>
+
+  <defs>
+    <radialGradient id="body" cx="54%" cy="40%" r="72%" fx="55%" fy="39%">
+      <stop offset="0" stop-color="#FFE956"/>
+      <stop offset=".35" stop-color="#FDDD3E"/>
+      <stop offset=".64" stop-color="#FCD437"/>
+      <stop offset=".82" stop-color="#FCCA31"/>
+      <stop offset="1" stop-color="#F7AE27"/>
+    </radialGradient>
+
+    <radialGradient id="wing" cx="36%" cy="26%" r="82%">
+      <stop offset="0" stop-color="#FFEB58"/>
+      <stop offset=".58" stop-color="#FDDD3E"/>
+      <stop offset="1" stop-color="#F7B52B"/>
+    </radialGradient>
+
+    <radialGradient id="shell" cx="48%" cy="22%" r="84%">
+      <stop offset="0" stop-color="#FFFEFD"/>
+      <stop offset=".6" stop-color="#FAF4EF"/>
+      <stop offset="1" stop-color="#EBD9CF"/>
+    </radialGradient>
+
+    <linearGradient id="orange" x1="0" y1="0" x2=".65" y2="1">
+      <stop offset="0" stop-color="#FF971B"/>
+      <stop offset="1" stop-color="#FF7416"/>
+    </linearGradient>
+
+    <linearGradient id="beak" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FF5C0D"/>
+      <stop offset="1" stop-color="#FF7817"/>
+    </linearGradient>
+
+    <linearGradient id="outline" x1="0" y1="0" x2=".8" y2="1">
+      <stop offset="0" stop-color="#1A2D40"/>
+      <stop offset=".5" stop-color="#142437"/>
+      <stop offset="1" stop-color="#0D1C2D"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Chick body -->
+  <path
+    d="M236 689
+       C197 559 212 431 278 334
+       C347 232 450 196 550 241
+       C525 222 480 193 497 157
+       C515 127 569 158 611 225
+       C640 166 689 95 746 76
+       C778 67 796 88 790 116
+       C783 151 756 188 714 228
+       C832 236 919 304 958 406
+       C999 515 987 632 939 720
+       C898 829 799 886 681 900
+       C520 919 369 866 285 770
+       C262 743 246 716 236 689 Z"
+    fill="url(#body)"
+    stroke="url(#outline)"
+    stroke-width="40"
+    stroke-linejoin="round"
+  />
+
+  <!-- Lower body shading -->
+  <path
+    d="M232 540
+       C224 685 337 780 535 792
+       C711 802 856 750 955 653
+       C929 798 788 887 603 900
+       C405 909 256 814 232 650 Z"
+    fill="#F7AD27"
+    opacity=".62"
+  />
+
+  <!-- Body highlight -->
+  <path
+    d="M326 330
+       C374 284 442 248 507 254
+       C543 258 565 271 551 292
+       C525 332 458 354 398 391
+       C356 417 328 437 318 426
+       C306 413 307 380 326 330 Z"
+    fill="#FFF9D2"
+    opacity=".62"
+  />
+
+  <!-- Wing -->
+  <path
+    d="M849 706
+       C903 656 965 617 1023 598
+       C1072 582 1103 603 1103 639
+       C1102 674 1075 714 1030 747
+       C1008 763 982 771 950 774
+       C983 780 1007 794 1009 811
+       C1011 829 993 842 961 848
+       C983 854 995 867 989 879
+       C977 899 927 901 882 884
+       C842 869 816 838 801 802
+       C796 768 814 735 849 706 Z"
+    fill="url(#wing)"
+    stroke="url(#outline)"
+    stroke-width="40"
+    stroke-linejoin="round"
+  />
+
+  <!-- Wing highlight -->
+  <path
+    d="M900 684
+       C948 648 1011 623 1061 620
+       C1008 636 958 664 916 700
+       C895 718 877 732 863 741
+       C871 718 883 699 900 684 Z"
+    fill="#FFF7C8"
+    opacity=".45"
+  />
+
+  <!-- Eye: terminal-like > -->
+  <path
+    d="M423 477 L536 540 L423 600"
+    fill="none"
+    stroke="url(#outline)"
+    stroke-width="43"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  <!-- Beak: underscore-like orange bar -->
+  <rect
+    x="584"
+    y="572"
+    width="196"
+    height="60"
+    rx="30"
+    fill="url(#beak)"
+  />
+
+  <!-- Eggshell -->
+  <path
+    d="M203 687
+       L319 794
+       L423 739
+       L591 894
+       L768 790
+       L881 871
+       C944 872 1007 851 1057 803
+       C1063 933 975 1049 838 1110
+       C694 1175 504 1177 356 1125
+       C229 1080 163 970 163 830
+       C163 766 171 718 203 687 Z"
+    fill="url(#shell)"
+    stroke="url(#outline)"
+    stroke-width="40"
+    stroke-linejoin="round"
+  />
+
+  <!-- Eggshell highlight -->
+  <path
+    d="M198 714
+       C165 848 231 1008 392 1092
+       C524 1161 707 1142 847 1014
+       C807 1095 712 1143 600 1155
+       C433 1172 288 1114 218 1012
+       C158 923 157 810 198 714 Z"
+    fill="#FFFFFF"
+    opacity=".18"
+  />
+
+  <ellipse cx="211" cy="805" rx="24" ry="62" fill="#FFFFFF" opacity=".5"/>
+
+  <!-- Py! text (Coiny-based vector outlines, no external font dependency) -->
+  <g transform="translate(885 308) rotate(10)">
+    <g
+      transform="scale(.22,-.22)"
+      fill="url(#orange)"
+      stroke="#152435"
+      stroke-width="5"
+      vector-effect="non-scaling-stroke"
+      stroke-linejoin="round"
+      fill-rule="evenodd"
+    >
+      <!-- P -->
+      <path d="
+        M303.406 150.304
+        C303.406 38.8662 260.802 0 180.798 0
+        C102.175 0 61 32.2012 61 142.657
+        L61 564.863
+        C61 651.67 115 685 180.798 685
+        L358.673 685
+        C532.583 685 660 590.576 660 433.901
+        C660 287.668 525.238 206 359.757 206
+        L303.364 206
+        L303.406 150.304 Z
+
+        M429.085 448.5
+        C429.085 546.201 389.285 556.704 303.1 556.704
+        L303.266 337.069
+        C373.325 337.448 429.085 359.689 429.085 448.5 Z
+      "/>
+
+      <!-- y -->
+      <path
+        transform="translate(495 -85) scale(1.15 1)"
+        d="
+          M563.598 282.396
+          C563.598 180.132 563.181 107.653 554.398 43.1953
+          C533.167 -112.621 468 -210.279 287.783 -210.279
+          C136.593 -210.279 61.2715 -113.995 61.2715 -73.7686
+          C61.2715 -54.7216 73.626 -30.9609 100 -30.9609
+          C139.089 -30.9609 183.231 -83.1455 245.165 -83.1455
+          C320.815 -83.1455 344 -41.6233 344 21
+          C298.913 2.33285 259.318 -4.29816 225 -4.29816
+          C101.863 -4.29816 45 107.628 45 214.885
+          C45 432.944 63.5186 477.203 146.189 477.203
+          C231.68 477.203 259.712 447.764 259.712 388.231
+          L260.918 227.063
+          C260.918 176.645 260.92 149.175 304.157 149.175
+          C346.392 149.175 348.83 174.328 348.83 226.144
+          L350.036 388.231
+          C350.036 447.764 378.068 477.203 463.558 477.203
+          C553.869 477.203 563.598 411.948 563.598 282.396 Z
+        "
+      />
+
+      <!-- ! -->
+      <path
+        transform="translate(1105 -184) scale(1.32 .87)"
+        d="
+          M293 602
+          C293 501 253 362 253 264
+          C253 209 229 185 172 185
+          C114 185 96 212 96 267
+          C96 363 56 495 56 591
+          C56 652 78 691 169 691
+          C260 691 293 664 293 602 Z
+        "
+      />
+
+      <path
+        transform="translate(1068 -255) scale(.85 1.25)"
+        d="
+          M63 69
+          C63 127 118 145 173 145
+          C239 145 292 130 292 69
+          C292 18 245 -7 173 -7
+          C102 -7 63 26 63 69 Z
+        "
+      />
+    </g>
+  </g>
+</svg>
