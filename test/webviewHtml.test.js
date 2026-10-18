@@ -806,7 +806,7 @@ test('workspace tabs follow the tablist pattern with arrow keys', () => {
 
 test('workspace tabs advertise Shift+Left / Shift+Right with the digit aliases and platform labels', () => {
   const html = getWebviewHtml();
-  assert.match(html, /id="runWorkspaceTab"[^>]*title="実行 \(Shift\+← \/ Alt\+1\)。Shift\+←→は文字の入力欄の外で使えます"[^>]*aria-keyshortcuts="Shift\+ArrowLeft Alt\+1"/);
+  assert.match(html, /id="runWorkspaceTab"[^>]*title="実行 \(Shift\+← \/ Alt\+1\)。文字の入力欄の中では、文字を選んでおらずカーソルが端にあるときに切り替わります"[^>]*aria-keyshortcuts="Shift\+ArrowLeft Alt\+1"/);
   assert.match(html, /id="snippetWorkspaceTab"[^>]*title="コード挿入 \(Shift\+→ \/ Alt\+2\)。/);
   assert.match(html, /id="snippetWorkspaceTab"[^>]*aria-keyshortcuts="Shift\+ArrowRight Alt\+2"/);
   assert.doesNotMatch(html, /Alt\+Arrow|Alt\+←|isMacPlatform/);
@@ -820,8 +820,12 @@ test('Shift+Left / Shift+Right switch workspaces outside text fields and Alt+1 /
   const html = getWebviewHtml();
   assert.match(html, /function getWorkspaceShortcutTarget\(event, \{ allowArrows = true \} = \{\}\)/);
   assert.match(html, /function isTextEntryTarget\(element\)/);
-  // Shift+Arrow keeps selecting text inside text fields.
-  assert.match(html, /const shortcutWorkspace = getWorkspaceShortcutTarget\(event, \{\s*allowArrows: !isTextEntryTarget\(event\.target\)\s*\}\);\s*if \(shortcutWorkspace\) \{[\s\S]*?event\.preventDefault\(\);[\s\S]*?setWorkspace\(shortcutWorkspace, \{ focusPanel: true, avoidTextEntry: event\.shiftKey \}\);/);
+  // Inside text fields Shift+Arrow only switches at the caret edge; otherwise it selects text.
+  assert.match(html, /function getTextFieldEdgeWorkspaceTarget\(event, field, currentWorkspace\)/);
+  assert.match(html, /const inTextField = isTextEntryTarget\(event\.target\);\s*const shortcutWorkspace = getWorkspaceShortcutTarget\(event, \{ allowArrows: !inTextField \}\)\s*\|\| \(inTextField \? getTextFieldEdgeWorkspaceTarget\(event, event\.target, viewState\.workspace\) : ''\);\s*if \(shortcutWorkspace\) \{[\s\S]*?event\.preventDefault\(\);[\s\S]*?setWorkspace\(shortcutWorkspace, \{ focusPanel: true, avoidTextEntry: event\.shiftKey \}\);/);
+  // Esc in stdin moves to the run tab without stopping the event for VS Code.
+  assert.match(html, /stdin\.addEventListener\('keydown', \(event\) => \{\s*if \(event\.key !== 'Escape' \|\| isImeComposing\(event\)[\s\S]*?event\.preventDefault\(\);\s*document\.getElementById\('runWorkspaceTab'\)\.focus\(\);\s*\}\);/);
+  assert.doesNotMatch(html, /stdin\.addEventListener\('keydown'[^}]*stopPropagation/);
   // After a Shift+Arrow switch focus lands on the tab instead of a text field.
   assert.match(html, /if \(avoidTextEntry && isTextEntryTarget\(target\)\) \{\s*return Array\.from\(workspaceTabs\)\.find\(\(tab\) => tab\.dataset\.workspace === workspace\) \|\| target;/);
   // Tab buttons leave Shift+Arrow to the global handler.
@@ -836,7 +840,7 @@ test('shortcut hint bar sits above the tabs and follows the platform and input f
   const html = getWebviewHtml();
   assert.match(html, /<main class="runner">\s*<div class="shortcutHintBar"[\s\S]*?<\/div>\s*<div class="workspaceHeader">/);
   assert.match(html, /<kbd id="inputFocusHintKey">Alt\+I<\/kbd>: エディタ⇄パネル/);
-  assert.match(html, /<kbd>Shift\+←→<\/kbd>: タブ切替（入力欄の外）/);
+  assert.match(html, /<span class="shortcutHintItem" title="Shift\+←→でタブを切り替えます。文字の入力欄の中では[^"]*カーソルが左端ならShift\+←、右端ならShift\+→で切り替わります。[^"]*標準入力の欄ではEscでタブへ移動できます"><kbd>Shift\+←→<\/kbd>: タブ切替<\/span>/);
   assert.match(html, /<kbd>Ctrl\+Enter<\/kbd>: 保存して実行/);
   assert.match(html, /\.shortcutHintBar\s*\{(?=[^}]*flex-wrap:\s*wrap;)(?=[^}]*font-size:\s*var\(--piyoyo-font-small\);)[^}]*\}/s);
   assert.match(html, /\.shortcutHintItem\s*\{[^}]*white-space:\s*nowrap;/s);
@@ -877,16 +881,39 @@ test('hiding a workspace that holds focus moves focus into the shown panel', () 
 test('snippet list uses roving focus, Enter inserts, and chips are reached with arrows', () => {
   const html = getWebviewHtml({ snippets: KEYBOARD_TEST_SNIPPETS });
   assert.match(html, /function getNavigableSnippetEntries\(\)/);
-  assert.match(html, /function updateSnippetRovingTabStop\(preferredEntry\)/);
+  assert.match(html, /function updateSnippetRovingTabStop\(preferredItem\)/);
   assert.match(html, /entry\.tabIndex = isTabStop \? 0 : -1;/);
   assert.match(html, /chip\.tabIndex = isTabStop \? 0 : -1;/);
   assert.match(html, /class="snippetComplexity" tabindex="-1"/);
-  assert.match(html, /getNextIndex\(entries\.indexOf\(fromEntry\), entries\.length, key, 'vertical'\)/);
+  assert.match(html, /getNextIndex\(items\.indexOf\(fromItem\), items\.length, key, 'vertical'\)/);
   assert.match(html, /event\.key === 'Enter'\) \{[^}]*event\.preventDefault\(\);\s*selectSnippet\(entry\);\s*confirmSnippet\(entry\);/);
   assert.match(html, /event\.key === 'ArrowRight'\)[\s\S]*?chip\.focus\(\);/);
   assert.match(html, /event\.key === 'ArrowLeft'\)[\s\S]*?entry\.focus\(\);/);
   // Roving updates are wired to filtering, category toggles, selection and startup.
   assert.ok((html.match(/updateSnippetRovingTabStop\(/g) || []).length >= 5);
+});
+
+test('snippet category headers join the arrow-key sequence and the single Tab stop', () => {
+  const html = getWebviewHtml({ snippets: KEYBOARD_TEST_SNIPPETS });
+  assert.match(html, /function getDisclosureArrowAction\(event, isOpen\)/);
+  // Headers of shown categories plus rows of open categories, in document order.
+  assert.match(html, /function getNavigableSnippetItems\(\) \{[\s\S]*?'\[data-snippet-category-panel\] > summary, \[data-snippet-entry\]'[\s\S]*?item\.matches\('summary'\) \? !item\.parentElement\.hidden : entries\.includes\(item\)/);
+  assert.match(html, /summary\.tabIndex = summary === tabStop \? 0 : -1;/);
+  assert.match(html, /summary\.addEventListener\('focus', \(\) => updateSnippetRovingTabStop\(summary\)\);/);
+  // Enter / Space keep the native toggle; Left / Right collapse / expand; Up / Down move.
+  assert.match(html, /if \(event\.key === 'Enter' \|\| event\.key === ' '\) \{\s*rememberSnippetCategoryScrollPosition\(\);\s*return;\s*\}/);
+  assert.match(html, /const disclosure = getDisclosureArrowAction\(event, panel\.open\);\s*if \(disclosure\) \{\s*event\.preventDefault\(\);\s*rememberSnippetCategoryScrollPosition\(\);\s*panel\.open = disclosure === 'open';/);
+  assert.match(html, /if \(moveSnippetFocus\(summary, event\.key\)\) \{\s*event\.preventDefault\(\);/);
+  // Moving onto a header does not change the selected snippet.
+  assert.match(html, /function focusSnippetItem\(item\) \{\s*if \(item\.matches\('summary'\)\) \{\s*updateSnippetRovingTabStop\(item\);\s*item\.focus\(\);/);
+});
+
+test('organize mode moves between category headers and visibility switches with arrows', () => {
+  const html = getWebviewHtml({ snippets: KEYBOARD_TEST_SNIPPETS });
+  assert.match(html, /function getNavigablePreferenceItems\(\) \{[\s\S]*?'\[data-snippet-preference-category-panel\] > summary, \[data-snippet-preference-visible\]'/);
+  assert.match(html, /getNextIndex\(items\.indexOf\(fromItem\), items\.length, event\.key, 'vertical'\)/);
+  assert.match(html, /checkbox\.addEventListener\('keydown', \(event\) => movePreferenceFocus\(checkbox, event\)\);/);
+  assert.match(html, /movePreferenceFocus\(summary, event\);/);
 });
 
 test('snippet search is reachable with / or Ctrl+F and Escape stays consistent', () => {
@@ -896,7 +923,7 @@ test('snippet search is reachable with / or Ctrl+F and Escape stays consistent',
   assert.match(html, /function focusSnippetSearch\(\) \{\s*setWorkspace\('snippets'\);/);
   assert.match(html, /id="snippetSearchInput"[^>]*aria-keyshortcuts="\/ Control\+F"/);
   // ArrowDown or Enter in the search box jumps to the first match without inserting.
-  assert.match(html, /event\.key === 'ArrowDown' \|\| event\.key === 'Enter'\)\) \{[\s\S]*?focusSnippetEntry\(firstEntry\);/);
+  assert.match(html, /event\.key === 'ArrowDown' \|\| event\.key === 'Enter'\)\) \{[\s\S]*?const firstItem = getNavigableSnippetEntries\(\)\[0\] \|\| getNavigableSnippetItems\(\)\[0\];[\s\S]*?focusSnippetItem\(firstItem\);/);
   assert.match(html, /event\.key === 'Escape' && snippetSearchInput\.value\) \{\s*event\.preventDefault\(\);\s*clearSnippetSearch\(\);\s*snippetSearchInput\.focus\(\);/);
   // The popover handler still runs first, in the capture phase.
   assert.match(html, /event\.key === 'Escape' && openComplexityChip[\s\S]*?\}, true\);/);

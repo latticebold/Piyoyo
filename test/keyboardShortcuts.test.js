@@ -3,8 +3,10 @@ const assert = require('node:assert/strict');
 
 const {
   WORKSPACE_SHORTCUT_COMMAND,
+  getDisclosureArrowAction,
   getNextIndex,
   getRunShortcutLabel,
+  getTextFieldEdgeWorkspaceTarget,
   getWorkspaceShortcutLabels,
   getWorkspaceShortcutTarget,
   isEditableTarget,
@@ -244,4 +246,61 @@ test('input focus shortcut setting falls back to Alt+I and labels each option', 
   assert.equal(getInputFocusShortcutLabel('altI', 'darwin'), 'Option+I');
   assert.equal(getInputFocusShortcutLabel('shiftShift', 'win32'), 'Shift 2回');
   assert.equal(getInputFocusShortcutLabel('both', 'linux'), 'Alt+I / Shift 2回');
+});
+
+const SHIFT_LEFT = { shiftKey: true, code: 'ArrowLeft', key: 'ArrowLeft' };
+const SHIFT_RIGHT = { shiftKey: true, code: 'ArrowRight', key: 'ArrowRight' };
+const caret = (value, start, end = start) => ({ value, selectionStart: start, selectionEnd: end });
+
+test('getTextFieldEdgeWorkspaceTarget switches right only from the end with nothing selected', () => {
+  assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_RIGHT, caret('1 2\n3', 5), 'run'), 'snippets');
+  assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_RIGHT, caret('1 2\n3', 2), 'run'), '');
+  assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_RIGHT, caret('1 2\n3', 0), 'run'), '');
+  // A selection that already reaches the end keeps normal selection behavior.
+  assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_RIGHT, caret('1 2\n3', 2, 5), 'run'), '');
+  // No tab to the right of the snippet tab.
+  assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_RIGHT, caret('abc', 3), 'snippets'), '');
+});
+
+test('getTextFieldEdgeWorkspaceTarget switches left only from the start with nothing selected', () => {
+  assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_LEFT, caret('abc', 0), 'snippets'), 'run');
+  assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_LEFT, caret('abc', 1), 'snippets'), '');
+  assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_LEFT, caret('abc', 0, 2), 'snippets'), '');
+  // No tab to the left of the run tab.
+  assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_LEFT, caret('abc', 0), 'run'), '');
+});
+
+test('getTextFieldEdgeWorkspaceTarget treats an empty field as both edges', () => {
+  assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_RIGHT, caret('', 0), 'run'), 'snippets');
+  assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_LEFT, caret('', 0), 'run'), '');
+  assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_LEFT, caret('', 0), 'snippets'), 'run');
+  assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_RIGHT, caret('', 0), 'snippets'), '');
+});
+
+test('getTextFieldEdgeWorkspaceTarget ignores other keys, modifiers, IME and fields without a caret', () => {
+  const end = caret('abc', 3);
+  assert.equal(getTextFieldEdgeWorkspaceTarget({ code: 'ArrowRight', key: 'ArrowRight' }, end, 'run'), '');
+  assert.equal(getTextFieldEdgeWorkspaceTarget({ ...SHIFT_RIGHT, altKey: true }, end, 'run'), '');
+  assert.equal(getTextFieldEdgeWorkspaceTarget({ ...SHIFT_RIGHT, ctrlKey: true }, end, 'run'), '');
+  assert.equal(getTextFieldEdgeWorkspaceTarget({ ...SHIFT_RIGHT, metaKey: true }, end, 'run'), '');
+  assert.equal(getTextFieldEdgeWorkspaceTarget({ ...SHIFT_RIGHT, isComposing: true }, end, 'run'), '');
+  assert.equal(getTextFieldEdgeWorkspaceTarget({ ...SHIFT_RIGHT, keyCode: 229 }, end, 'run'), '');
+  assert.equal(getTextFieldEdgeWorkspaceTarget({ shiftKey: true, code: 'ArrowUp', key: 'ArrowUp' }, end, 'run'), '');
+  // Inputs such as type=number report a null selection; contenteditable has no value.
+  assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_RIGHT, { value: '12', selectionStart: null, selectionEnd: null }, 'run'), '');
+  assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_RIGHT, { selectionStart: 0, selectionEnd: 0 }, 'run'), '');
+  assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_RIGHT, null, 'run'), '');
+  assert.equal(getTextFieldEdgeWorkspaceTarget(undefined, end, 'run'), '');
+});
+
+test('getDisclosureArrowAction collapses with Left and expands with Right', () => {
+  assert.equal(getDisclosureArrowAction({ key: 'ArrowLeft' }, true), 'close');
+  assert.equal(getDisclosureArrowAction({ key: 'ArrowLeft' }, false), '');
+  assert.equal(getDisclosureArrowAction({ key: 'ArrowRight' }, false), 'open');
+  assert.equal(getDisclosureArrowAction({ key: 'ArrowRight' }, true), '');
+  assert.equal(getDisclosureArrowAction({ key: 'ArrowDown' }, true), '');
+  assert.equal(getDisclosureArrowAction({ key: 'ArrowRight', shiftKey: true }, false), '');
+  assert.equal(getDisclosureArrowAction({ key: 'ArrowRight', altKey: true }, false), '');
+  assert.equal(getDisclosureArrowAction({ key: 'ArrowRight', isComposing: true }, false), '');
+  assert.equal(getDisclosureArrowAction(undefined, false), '');
 });

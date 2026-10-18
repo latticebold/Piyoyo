@@ -14,7 +14,9 @@ const {
   DEFAULT_INPUT_FOCUS_SHORTCUT,
   SHIFT_DOUBLE_TAP_INTERVAL_MS,
   createShiftDoubleTapDetector,
+  getDisclosureArrowAction,
   getNextIndex,
+  getTextFieldEdgeWorkspaceTarget,
   getWorkspaceShortcutLabels,
   getWorkspaceShortcutTarget,
   isEditableTarget,
@@ -508,8 +510,11 @@ function getWebviewHtml({
   const runTabShortcut = escapeHtml(`${workspaceShortcutLabels.run} / ${workspaceShortcutLabels.runAlias}`);
   const snippetTabShortcut = escapeHtml(`${workspaceShortcutLabels.snippets} / ${workspaceShortcutLabels.snippetsAlias}`);
   const tabSwitchLabel = escapeHtml(workspaceShortcutLabels.switch);
-  // Shift+Arrow keeps selecting text inside text fields, so only the digit aliases work there.
-  const tabTitleSuffix = '。Shift+←→は文字の入力欄の外で使えます';
+  // Inside text fields Shift+Arrow only switches at the caret edge (getTextFieldEdgeWorkspaceTarget).
+  const tabTitleSuffix = '。文字の入力欄の中では、文字を選んでおらずカーソルが端にあるときに切り替わります';
+  const tabSwitchHelp = 'Shift+←→でタブを切り替えます。文字の入力欄の中では、文字を選んでいないときに、'
+    + 'カーソルが左端ならShift+←、右端ならShift+→で切り替わります。それ以外は文字の選択になります。'
+    + '標準入力の欄ではEscでタブへ移動できます';
   const inputFocusMode = normalizeInputFocusShortcut(inputFocusShortcut && inputFocusShortcut.mode);
   const inputFocusLabel = String((inputFocusShortcut && inputFocusShortcut.label) || 'Alt+I');
   const escapedRunShortcutLabel = escapeHtml(runShortcutLabel);
@@ -1852,7 +1857,7 @@ function getWebviewHtml({
   <main class="runner">
     <div class="shortcutHintBar" aria-label="主なショートカット">
       <span class="shortcutHintItem"><kbd id="inputFocusHintKey">${escapeHtml(inputFocusLabel)}</kbd>: エディタ⇄パネル</span>
-      <span class="shortcutHintItem"><kbd>${tabSwitchLabel}</kbd>: タブ切替（入力欄の外）</span>
+      <span class="shortcutHintItem" title="${tabSwitchHelp}"><kbd>${tabSwitchLabel}</kbd>: タブ切替</span>
       <span class="shortcutHintItem"><kbd>${escapedRunShortcutLabel}</kbd>: 保存して実行</span>
     </div>
     <div class="workspaceHeader">
@@ -2020,8 +2025,10 @@ function getWebviewHtml({
     ${isSearchShortcut.toString()}
     ${isEditableTarget.toString()}
     ${getNextIndex.toString()}
+    ${getDisclosureArrowAction.toString()}
     ${isInputFocusShortcut.toString()}
     ${getWorkspaceShortcutTarget.toString()}
+    ${getTextFieldEdgeWorkspaceTarget.toString()}
     ${isTextEntryTarget.toString()}
     ${createShiftDoubleTapDetector.toString()}
     ${getStdinPlaceholder.toString()}
@@ -2513,11 +2520,23 @@ function getWebviewHtml({
       });
     }
 
-    // Roving tabindex: the list is a single Tab stop and arrow keys move inside it.
-    function updateSnippetRovingTabStop(preferredEntry) {
+    // Category headers plus the rows of open categories, in display order.
+    function getNavigableSnippetItems() {
       const entries = getNavigableSnippetEntries();
-      const tabStop = [preferredEntry, document.activeElement, selectedSnippetControl]
-        .find((entry) => entry && entries.includes(entry)) || entries[0] || null;
+      return Array.from(snippetCategoryList.querySelectorAll(
+        '[data-snippet-category-panel] > summary, [data-snippet-entry]'
+      )).filter((item) => (item.matches('summary') ? !item.parentElement.hidden : entries.includes(item)));
+    }
+
+    // Roving tabindex: the list is a single Tab stop and arrow keys move inside it.
+    function updateSnippetRovingTabStop(preferredItem) {
+      const items = getNavigableSnippetItems();
+      const tabStop = [preferredItem, document.activeElement, selectedSnippetControl]
+        .find((item) => item && items.includes(item))
+        || items.find((item) => item.matches('[data-snippet-entry]')) || items[0] || null;
+      snippetCategorySummaries.forEach((summary) => {
+        summary.tabIndex = summary === tabStop ? 0 : -1;
+      });
       snippetEntries.forEach((entry) => {
         const isTabStop = entry === tabStop;
         entry.tabIndex = isTabStop ? 0 : -1;
@@ -2538,14 +2557,25 @@ function getWebviewHtml({
       selectSnippet(entry);
     }
 
-    function moveSnippetFocus(fromEntry, key) {
-      const entries = getNavigableSnippetEntries();
-      const nextIndex = getNextIndex(entries.indexOf(fromEntry), entries.length, key, 'vertical');
+    // Headers only take focus; rows are also selected, as before.
+    function focusSnippetItem(item) {
+      if (item.matches('summary')) {
+        updateSnippetRovingTabStop(item);
+        item.focus();
+        item.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        return;
+      }
+      focusSnippetEntry(item);
+    }
+
+    function moveSnippetFocus(fromItem, key) {
+      const items = getNavigableSnippetItems();
+      const nextIndex = getNextIndex(items.indexOf(fromItem), items.length, key, 'vertical');
       if (nextIndex < 0) {
         return false;
       }
       closeComplexityPopover();
-      focusSnippetEntry(entries[nextIndex]);
+      focusSnippetItem(items[nextIndex]);
       return true;
     }
 
@@ -2748,10 +2778,32 @@ function getWebviewHtml({
       button.addEventListener('click', () => vscode.postMessage({ type: 'openSettings' }));
     });
     snippetCategorySummaries.forEach((summary) => {
+      const panel = summary.parentElement;
       summary.addEventListener('click', rememberSnippetCategoryScrollPosition);
+      summary.addEventListener('focus', () => updateSnippetRovingTabStop(summary));
       summary.addEventListener('keydown', (event) => {
         if (event.key === 'Enter' || event.key === ' ') {
           rememberSnippetCategoryScrollPosition();
+          return;
+        }
+        if (isImeComposing(event) || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+          return;
+        }
+        const disclosure = getDisclosureArrowAction(event, panel.open);
+        if (disclosure) {
+          event.preventDefault();
+          rememberSnippetCategoryScrollPosition();
+          panel.open = disclosure === 'open';
+          return;
+        }
+        if (event.key === 'Escape' && snippetSearchInput.value) {
+          event.preventDefault();
+          clearSnippetSearch();
+          snippetSearchInput.focus();
+          return;
+        }
+        if (moveSnippetFocus(summary, event.key)) {
+          event.preventDefault();
         }
       });
     });
@@ -2873,10 +2925,11 @@ function getWebviewHtml({
       }
       const isPlainKey = !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey;
       if (isPlainKey && (event.key === 'ArrowDown' || event.key === 'Enter')) {
-        const firstEntry = getNavigableSnippetEntries()[0];
-        if (firstEntry) {
+        // Skip headers so a filtered search lands on the first match.
+        const firstItem = getNavigableSnippetEntries()[0] || getNavigableSnippetItems()[0];
+        if (firstItem) {
           event.preventDefault();
-          focusSnippetEntry(firstEntry);
+          focusSnippetItem(firstItem);
         }
       }
     });
@@ -2921,6 +2974,46 @@ function getWebviewHtml({
         });
       });
     });
+    // Up/Down walk headers and visibility switches; Tab still reaches the move buttons.
+    function getNavigablePreferenceItems() {
+      return Array.from(snippetPreferencesList.querySelectorAll(
+        '[data-snippet-preference-category-panel] > summary, [data-snippet-preference-visible]'
+      )).filter((item) => {
+        const panel = item.closest('[data-snippet-preference-category-panel]');
+        if (!panel || panel.hidden) {
+          return false;
+        }
+        return item.matches('summary') || (panel.open && !item.closest('[data-snippet-preference-row]').hidden);
+      });
+    }
+    function movePreferenceFocus(fromItem, event) {
+      if (isImeComposing(event) || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+        return;
+      }
+      const items = getNavigablePreferenceItems();
+      const nextIndex = getNextIndex(items.indexOf(fromItem), items.length, event.key, 'vertical');
+      if (nextIndex >= 0) {
+        event.preventDefault();
+        items[nextIndex].focus();
+        items[nextIndex].scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      }
+    }
+    snippetPreferenceCategoryPanels.forEach((panel) => {
+      const summary = panel.querySelector(':scope > summary');
+      summary.addEventListener('keydown', (event) => {
+        const disclosure = getDisclosureArrowAction(event, panel.open);
+        if (disclosure) {
+          event.preventDefault();
+          panel.open = disclosure === 'open';
+          return;
+        }
+        movePreferenceFocus(summary, event);
+      });
+    });
+    snippetPreferenceRows.forEach((row) => {
+      const checkbox = row.querySelector('[data-snippet-preference-visible]');
+      checkbox.addEventListener('keydown', (event) => movePreferenceFocus(checkbox, event));
+    });
     snippetPreferencesResetButton.addEventListener('click', resetSnippetPreferencesToDefault);
     snippetPreferencesSaveButton.addEventListener('click', saveSnippetPreferenceDraft);
     restoreSnippetPreferenceDraft();
@@ -2955,6 +3048,15 @@ function getWebviewHtml({
     }
 
     runButton.addEventListener('click', () => startRun());
+    // Esc leaves the stdin box for the run tab, where Shift+Right switches tabs again.
+    stdin.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape' || isImeComposing(event)
+        || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+        return;
+      }
+      event.preventDefault();
+      document.getElementById('runWorkspaceTab').focus();
+    });
 
     function allowsAltI() {
       return inputFocusMode !== 'shiftShift';
@@ -2993,9 +3095,9 @@ function getWebviewHtml({
         vscode.postMessage({ type: 'focusEditor' });
         return;
       }
-      const shortcutWorkspace = getWorkspaceShortcutTarget(event, {
-        allowArrows: !isTextEntryTarget(event.target)
-      });
+      const inTextField = isTextEntryTarget(event.target);
+      const shortcutWorkspace = getWorkspaceShortcutTarget(event, { allowArrows: !inTextField })
+        || (inTextField ? getTextFieldEdgeWorkspaceTarget(event, event.target, viewState.workspace) : '');
       if (shortcutWorkspace) {
         // Let it bubble: VS Code must still see the Alt key combo (see Alt+I).
         event.preventDefault();

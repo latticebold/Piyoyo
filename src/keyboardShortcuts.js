@@ -29,7 +29,8 @@ function isInputFocusShortcut(event) {
 }
 
 // Returns 'run', 'snippets', or '' for Shift+Left / Shift+Right and the Alt+1 / Alt+2 aliases
-// (macOS Option). allowArrows is false in text fields, where Shift+Arrow selects text.
+// (macOS Option). allowArrows is false in text fields, where Shift+Arrow selects text
+// (see getTextFieldEdgeWorkspaceTarget).
 // Repeats are allowed: each key always picks the same tab, so holding it is harmless.
 function getWorkspaceShortcutTarget(event, { allowArrows = true } = {}) {
   if (!event || event.ctrlKey || event.metaKey) {
@@ -55,6 +56,30 @@ function getWorkspaceShortcutTarget(event, { allowArrows = true } = {}) {
     return 'run';
   }
   return event.code === 'Digit2' ? 'snippets' : '';
+}
+
+// Shift+Left / Shift+Right inside a text field: switches only when nothing is selected and the
+// caret is at the edge the arrow points to, so selecting text is never interrupted.
+// field is { value, selectionStart, selectionEnd }; returns 'run', 'snippets', or ''.
+function getTextFieldEdgeWorkspaceTarget(event, field, currentWorkspace) {
+  if (!event || !event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) {
+    return '';
+  }
+  if (event.isComposing || event.keyCode === 229 || !field) {
+    return '';
+  }
+  const { value, selectionStart, selectionEnd } = field;
+  if (typeof value !== 'string' || !Number.isInteger(selectionStart)
+    || selectionStart !== selectionEnd) {
+    return '';
+  }
+  if (event.code === 'ArrowLeft') {
+    return currentWorkspace === 'snippets' && selectionStart === 0 ? 'run' : '';
+  }
+  if (event.code === 'ArrowRight') {
+    return currentWorkspace === 'run' && selectionEnd === value.length ? 'snippets' : '';
+  }
+  return '';
 }
 
 function isTextEntryTarget(element) {
@@ -169,6 +194,23 @@ function getNextIndex(currentIndex, length, key, orientation) {
   return -1;
 }
 
+// Plain Left / Right on a collapsible category header: 'close', 'open', or '' (nothing to do).
+function getDisclosureArrowAction(event, isOpen) {
+  if (!event || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+    return '';
+  }
+  if (event.isComposing || event.keyCode === 229) {
+    return '';
+  }
+  if (event.key === 'ArrowLeft') {
+    return isOpen ? 'close' : '';
+  }
+  if (event.key === 'ArrowRight') {
+    return isOpen ? '' : 'open';
+  }
+  return '';
+}
+
 function getRunShortcutLabel(platform) {
   return platform === 'darwin' ? 'Cmd+Enter' : 'Ctrl+Enter';
 }
@@ -214,9 +256,11 @@ module.exports = {
   SHIFT_DOUBLE_TAP_INTERVAL_MS,
   WORKSPACE_SHORTCUT_COMMAND,
   createShiftDoubleTapDetector,
+  getDisclosureArrowAction,
   getInputFocusShortcutLabel,
   getNextIndex,
   getRunShortcutLabel,
+  getTextFieldEdgeWorkspaceTarget,
   getWorkspaceShortcutLabels,
   getWorkspaceShortcutTarget,
   isEditableTarget,
