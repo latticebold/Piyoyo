@@ -108,6 +108,7 @@ const COMPLEXITY_BY_ID = Object.freeze({
   'string-lower': ['O(n)', '最悪', 'n=文字列 s の長さ'],
   'string-upper': ['O(n)', '最悪', 'n=文字列 s の長さ'],
   'string-replace': ['入力長に依存', '最悪', '検索対象・置換前後の文字列の長さと置換回数に依存'],
+  'string-set-char': ['O(n)', '最悪', 'n=文字列 s の長さ。新しい文字列を作る'],
   'string-isdigit': ['O(n)', '最悪', 'n=文字列 s の長さ'],
   'string-isalpha': ['O(n)', '最悪', 'n=文字列 s の長さ'],
   'string-isalnum': ['O(n)', '最悪', 'n=文字列 s の長さ'],
@@ -821,6 +822,17 @@ function createAdditionalSnippets() {
       precondition: '元のs自体は変更されません。',
       label: 's.replace("a", "b")',
       body: '${1:s}.replace("${2:a}", "${3:b}")'
+    }),
+    createSnippet({
+      id: 'string-set-char',
+      category: 'string',
+      summary: '文字列sの添字iの文字（i+1番目）を1文字置き換える',
+      description: '文字列（str）は一部だけを書き換えられない（immutable）ため、s[i] = "a"とは書けません。添字iの前後をつないで新しい文字列を作ります。',
+      input: '文字列s、添字i、置き換える1文字を受け取ります。',
+      returns: '先頭からi+1番目だけを置き換えた新しい文字列を返します。元のs自体は変更されません。',
+      precondition: '0 <= i < len(s)である必要があります。負の添字や範囲外の添字では正しく置き換わりません。置き換える文字は1文字にします。何度も書き換えるなら、t = list(s)でリストにしてt[i] = "a"で更新し、最後に"".join(t)で文字列に戻す方が速いです。',
+      label: 's[:i] + "a" + s[i + 1:]',
+      body: '${1:s}[:${2:i}] + "${3:a}" + ${1:s}[${2:i} + 1:]'
     }),
     createSnippet({
       id: 'list-max',
