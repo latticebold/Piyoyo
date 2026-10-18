@@ -2,7 +2,7 @@
   "name": "piyoyo",
   "displayName": "Piyoyo",
   "description": "A friendly Python stdin runner and input snippet helper for competitive programming in VS Code.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "local",
   "license": "GPL-3.0-only",
   "repository": {
