@@ -91,8 +91,8 @@ test('manifest uses PNG icons for VSIX packaging and installation', () => {
   assert.equal(commandIconPath, activityIconPath);
 });
 
-test('manifest identifies the Piyoyo release as version 0.3.0', () => {
-  assert.equal(manifest.version, '0.3.0');
+test('manifest identifies the Piyoyo release as version 0.3.1', () => {
+  assert.equal(manifest.version, '0.3.1');
 });
 
 test('manifest keeps code visibility preferences inside Piyoyo instead of VS Code settings', () => {
