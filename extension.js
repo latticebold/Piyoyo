@@ -20,7 +20,8 @@ const {
   orderSnippetsByPreferences,
   saveSnippetPreferences
 } = require('./src/snippetPreferences');
-const { getRunnablePythonFileFromDocument } = require('./src/targetSelection');
+const { getRunShortcutLabel } = require('./src/keyboardShortcuts');
+const { getRunnablePythonFileFromDocument, saveDocumentBeforeRun } = require('./src/targetSelection');
 const { getWebviewHtml } = require('./src/webviewHtml');
 
 const VIEW_CONTAINER_ID = 'piyoyo';
@@ -28,6 +29,7 @@ const VIEW_TYPE = 'piyoyo.runnerView';
 const BRAND_NAME = 'Piyoyo';
 const OPEN_COMMAND = 'piyoyo.open';
 const LEGACY_OPEN_COMMAND = 'ioSprint.open';
+const SAVE_AND_RUN_COMMAND = 'piyoyo.saveAndRun';
 
 function activate(context) {
   const provider = new RunnerViewProvider(context.extensionUri, context.globalState);
@@ -50,6 +52,10 @@ function activate(context) {
   context.subscriptions.push(vscode.commands.registerCommand(OPEN_COMMAND, openRunner));
   // Keep old keybindings working after the namespace rename without exposing the old label.
   context.subscriptions.push(vscode.commands.registerCommand(LEGACY_OPEN_COMMAND, openRunner));
+  context.subscriptions.push(vscode.commands.registerCommand(
+    SAVE_AND_RUN_COMMAND,
+    () => provider.saveAndRun(openRunner)
+  ));
   context.subscriptions.push(vscode.commands.registerCommand(
     OPEN_SETTINGS_COMMAND,
     () => openPiyoyoSettings(vscode.commands, context.extension && context.extension.id)
@@ -84,12 +90,21 @@ class RunnerViewProvider {
     this.extensionUri = extensionUri;
     this.globalState = globalState;
     this.view = undefined;
+    this.webviewReady = false;
+    this.pendingRunRequest = false;
     this.activeFile = getRunnablePythonFileFromDocument(undefined);
     this.launcherAvailabilityCache = createLauncherAvailabilityCache();
   }
 
   resolveWebviewView(webviewView) {
     this.view = webviewView;
+    this.webviewReady = false;
+    webviewView.onDidDispose(() => {
+      if (this.view === webviewView) {
+        this.view = undefined;
+        this.webviewReady = false;
+      }
+    });
     this.refreshActiveFile(vscode.window.activeTextEditor);
 
     webviewView.webview.options = {
@@ -101,6 +116,12 @@ class RunnerViewProvider {
 
     webviewView.webview.onDidReceiveMessage(async (message) => {
       if (!message || typeof message.type !== 'string') {
+        return;
+      }
+
+      if (message.type === 'ready') {
+        this.webviewReady = true;
+        this.flushPendingRunRequest();
         return;
       }
 
@@ -149,6 +170,9 @@ class RunnerViewProvider {
       if (message.type === 'run') {
         const selectedPythonPath = String(message.pythonPath || '');
         await this.saveSelectedPythonPath(selectedPythonPath);
+        if (message.saveFirst) {
+          await this.saveActivePythonDocument();
+        }
         const result = await this.runSelectedPythonFile(
           String(message.input || ''),
           selectedPythonPath
@@ -172,8 +196,10 @@ class RunnerViewProvider {
       return;
     }
     const snippetPreferences = getSnippetPreferences(this.globalState, INPUT_SNIPPETS);
+    this.webviewReady = false;
     this.view.webview.html = getWebviewHtml({
       brandName: BRAND_NAME,
+      runShortcutLabel: getRunShortcutLabel(process.platform),
       savedPythonPath: getSavedPythonPathPreference(this.globalState),
       snippets: applySnippetPreferences(INPUT_SNIPPETS, snippetPreferences),
       preferenceSnippets: orderSnippetsByPreferences(INPUT_SNIPPETS, snippetPreferences),
@@ -181,6 +207,44 @@ class RunnerViewProvider {
       defaultSnippetOrder: INPUT_SNIPPETS.map((snippet) => snippet.id),
       errorDisplayMode: getConfiguredErrorDisplayMode()
     });
+  }
+
+  async saveAndRun(openRunner) {
+    const editor = vscode.window.activeTextEditor;
+    await this.saveActivePythonDocument();
+    this.pendingRunRequest = true;
+
+    if (this.view) {
+      if (!this.view.visible) {
+        this.view.show(true);
+      }
+      this.flushPendingRunRequest();
+      return;
+    }
+
+    await openRunner();
+    if (editor) {
+      // Opening the view moves focus into it; return to the editor so typing can continue.
+      await vscode.window.showTextDocument(editor.document, editor.viewColumn);
+    }
+    this.flushPendingRunRequest();
+  }
+
+  flushPendingRunRequest() {
+    if (!this.pendingRunRequest || !this.view || !this.webviewReady) {
+      return;
+    }
+    this.pendingRunRequest = false;
+    this.postMessage({ type: 'requestRun' });
+  }
+
+  async saveActivePythonDocument() {
+    const editor = vscode.window.activeTextEditor;
+    try {
+      await saveDocumentBeforeRun(editor && editor.document);
+    } catch (error) {
+      vscode.window.showWarningMessage(`ファイルを保存できませんでした: ${error.message}`);
+    }
   }
 
   refreshActiveFile(editor) {

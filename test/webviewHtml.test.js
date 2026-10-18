@@ -226,7 +226,7 @@ test('webview uses compact clickable rows, search, and bottom variant choice', (
   assert.match(html, /\.snippetCategoryList\s*\{[^}]*align-content:\s*start;/s);
   assert.match(html, /\.snippetCategoryList\s*\{[^}]*overflow-y:\s*auto;/s);
   assert.match(html, /\.snippetComplexity\s*\{[^}]*font-size:\s*var\(--piyoyo-font-small\)/s);
-  assert.match(html, /id="snippetSearchInput"[^>]*placeholder="操作を検索"/);
+  assert.match(html, /id="snippetSearchInput"[^>]*placeholder="操作を検索 \(\/\)"/);
   assert.match(html, /id="snippetVariantField"[^>]*hidden/);
   assert.match(html, /button\.className = 'snippetVariantButton'/);
   assert.match(html, /id="snippetImportHint"[^>]*hidden/);
@@ -761,4 +761,86 @@ test('webview text is never smaller than 12px and scales with the VS Code font s
   assert.match(html, /\.snippetRowPreview\s*\{[^}]*font-size:\s*var\(--piyoyo-font-small\)/s);
   assert.match(html, /\.snippetBadge\s*\{[^}]*font-size:\s*var\(--piyoyo-font-small\)/s);
   assert.match(html, /\.snippetComplexityPopover\s*\{[^}]*font-size:\s*var\(--piyoyo-font-small\)/s);
+});
+
+const KEYBOARD_TEST_SNIPPETS = [
+  {
+    id: 'keyboard-a', category: 'custom', categoryLabel: 'テスト', summary: '先頭', label: 'A[0]', body: 'A[0]',
+    complexity: { time: 'O(1)', detail: '' }
+  },
+  { id: 'keyboard-b', category: 'custom', categoryLabel: 'テスト', summary: '末尾', label: 'A[-1]', body: 'A[-1]' }
+];
+
+test('run button shows the save-and-run shortcut for each platform', () => {
+  const html = getWebviewHtml();
+  assert.match(html, /id="runButton"[^>]*title="実行 \(Ctrl\+Enter で保存して実行\)"/);
+  assert.match(html, /id="runButton"[^>]*aria-keyshortcuts="Control\+Enter"/);
+  assert.match(html, /id="runButton"[^>]*>実行<span class="shortcutHint">\(Ctrl\+Enter\)<\/span><\/button>/);
+
+  const mac = getWebviewHtml({ runShortcutLabel: 'Cmd+Enter' });
+  assert.match(mac, /id="runButton"[^>]*aria-keyshortcuts="Meta\+Enter"/);
+  assert.match(mac, /class="shortcutHint">\(Cmd\+Enter\)</);
+  assert.match(mac, /id="snippetSearchInput"[^>]*aria-keyshortcuts="\/ Meta\+F"/);
+});
+
+test('webview runs with Ctrl+Enter anywhere and asks the extension to save first', () => {
+  const html = getWebviewHtml();
+  assert.match(html, /function isRunShortcut\(event\)/);
+  assert.match(html, /function startRun\(\{ saveFirst = false \} = \{\}\)/);
+  assert.match(html, /if \(runButton\.disabled\) \{\s*return;\s*\}/);
+  assert.match(html, /runButton\.addEventListener\('click', \(\) => startRun\(\)\)/);
+  assert.match(html, /if \(isRunShortcut\(event\)\) \{\s*event\.preventDefault\(\);\s*startRun\(\{ saveFirst: true \}\);/);
+  assert.match(html, /pythonPath: selectedPythonPath,\s*saveFirst\s*\}/);
+  assert.match(html, /message\.type === 'requestRun'\) \{\s*startRun\(\);/);
+  assert.match(html, /vscode\.postMessage\(\{ type: 'ready' \}\);\s*<\/script>/);
+});
+
+test('workspace tabs follow the tablist pattern with arrow keys', () => {
+  const html = getWebviewHtml();
+  assert.match(html, /id="runWorkspaceTab"[^>]*role="tab"[^>]*tabindex="0"/);
+  assert.match(html, /id="snippetWorkspaceTab"[^>]*role="tab"[^>]*tabindex="-1"/);
+  assert.match(html, /tab\.tabIndex = isSelected \? 0 : -1;/);
+  assert.match(html, /getNextIndex\(tabs\.indexOf\(tab\), tabs\.length, event\.key, 'horizontal'\)/);
+  assert.match(html, /setWorkspace\(tabs\[nextIndex\]\.dataset\.workspace\);\s*tabs\[nextIndex\]\.focus\(\);/);
+});
+
+test('snippet list uses roving focus, Enter inserts, and chips are reached with arrows', () => {
+  const html = getWebviewHtml({ snippets: KEYBOARD_TEST_SNIPPETS });
+  assert.match(html, /function getNavigableSnippetEntries\(\)/);
+  assert.match(html, /function updateSnippetRovingTabStop\(preferredEntry\)/);
+  assert.match(html, /entry\.tabIndex = isTabStop \? 0 : -1;/);
+  assert.match(html, /chip\.tabIndex = isTabStop \? 0 : -1;/);
+  assert.match(html, /class="snippetComplexity" tabindex="-1"/);
+  assert.match(html, /getNextIndex\(entries\.indexOf\(fromEntry\), entries\.length, key, 'vertical'\)/);
+  assert.match(html, /event\.key === 'Enter'\) \{[^}]*event\.preventDefault\(\);\s*selectSnippet\(entry\);\s*confirmSnippet\(entry\);/);
+  assert.match(html, /event\.key === 'ArrowRight'\)[\s\S]*?chip\.focus\(\);/);
+  assert.match(html, /event\.key === 'ArrowLeft'\)[\s\S]*?entry\.focus\(\);/);
+  // Roving updates are wired to filtering, category toggles, selection and startup.
+  assert.ok((html.match(/updateSnippetRovingTabStop\(/g) || []).length >= 5);
+});
+
+test('snippet search is reachable with / or Ctrl+F and Escape stays consistent', () => {
+  const html = getWebviewHtml({ snippets: KEYBOARD_TEST_SNIPPETS });
+  assert.match(html, /function isSearchShortcut\(event, targetIsEditable\)/);
+  assert.match(html, /isSearchShortcut\(event, isEditableTarget\(event\.target\)\)/);
+  assert.match(html, /function focusSnippetSearch\(\) \{\s*setWorkspace\('snippets'\);/);
+  assert.match(html, /id="snippetSearchInput"[^>]*aria-keyshortcuts="\/ Control\+F"/);
+  // ArrowDown or Enter in the search box jumps to the first match without inserting.
+  assert.match(html, /event\.key === 'ArrowDown' \|\| event\.key === 'Enter'\)\) \{[\s\S]*?focusSnippetEntry\(firstEntry\);/);
+  assert.match(html, /event\.key === 'Escape' && snippetSearchInput\.value\) \{\s*event\.preventDefault\(\);\s*clearSnippetSearch\(\);\s*snippetSearchInput\.focus\(\);/);
+  // The popover handler still runs first, in the capture phase.
+  assert.match(html, /event\.key === 'Escape' && openComplexityChip[\s\S]*?\}, true\);/);
+  assert.match(html, /一覧から使いたいコードを選んでください（↑↓ で移動、Enter で挿入）。/);
+});
+
+test('webview Enter handlers ignore IME composition', () => {
+  const html = getWebviewHtml({ snippets: KEYBOARD_TEST_SNIPPETS });
+  assert.match(html, /function isImeComposing\(event\)/);
+  assert.ok((html.match(/if \(isImeComposing\(event\)/g) || []).length >= 3);
+});
+
+test('snippet rows and category headers keep a visible focus ring inside the scroll area', () => {
+  const html = getWebviewHtml({ snippets: KEYBOARD_TEST_SNIPPETS });
+  assert.match(html, /\.snippetCategoryDropdown > summary:focus-visible,\s*\.snippetChoice:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--vscode-focusBorder\);[^}]*outline-offset:\s*-2px;/s);
+  assert.match(html, /button:focus-visible,\s*summary:focus-visible,\s*select:focus-visible,\s*input:focus-visible,\s*textarea:focus-visible\s*\{/);
 });
