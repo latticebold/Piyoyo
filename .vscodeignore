@@ -15,4 +15,6 @@ docs/snippet-catalog-proposal.md
 docs/images/04-snippet-edit.png
 docs/images/05-snippet-inserted.png
 .gitignore
+AGENTS.md
+CLAUDE.md
 dist/**

@@ -41,10 +41,13 @@ Node.jsとnpmを導入済みの環境で実行します。
 初回のツール取得にはネットワーク接続が必要です。
 
 ```powershell
-npx --yes @vscode/vsce@3.9.2 package
+npx --yes @vscode/vsce@3.9.2 package --baseImagesUrl https://github.com/latticebold/Piyoyo/raw/v<バージョン> --baseContentUrl https://github.com/latticebold/Piyoyo/blob/v<バージョン> --out dist/piyoyo-<バージョン>.vsix
 ```
 
-`package.json`のバージョンに対応する`piyoyo-<バージョン>.vsix`が生成されます。
+`dist/piyoyo-<バージョン>.vsix`が生成されます。
+`--baseImagesUrl`と`--baseContentUrl`で、READMEの画像とリンクをその版のタグに固定します。
+固定しないと最新の`main`を参照するため、後から画像を変えたときに古い版の詳細ページで画像が表示されなくなります。
+タグは先にGitHubへpushしておきます。
 既存の検証用VSIXと混同しないよう、Releaseにはこのファイルだけを添付します。
 VSIXはGitの追跡対象外です。
 
