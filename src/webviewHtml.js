@@ -42,6 +42,62 @@ function scriptJsonData(value) {
     .replace(/\u2029/g, '\\u2029');
 }
 
+// Order is display order. Each type differs in text and shape, not only color.
+const SNIPPET_BADGE_TYPES = Object.freeze([
+  Object.freeze({
+    type: 'helper',
+    text: '自作',
+    label: '自作関数: Pythonの組み込み関数ではありません。挿入すると、Piyoyoが関数の定義（def）をファイルの上の方に1回だけ追加します。',
+    applies: (snippet) => Array.isArray(snippet.helpers) && snippet.helpers.length > 0
+  }),
+  Object.freeze({
+    type: 'import',
+    text: 'import',
+    label: 'importが必要: Pythonに付属する標準ライブラリを使います。足りないimportは、挿入するときにファイルの先頭へ自動で追加します。',
+    applies: (snippet) => Array.isArray(snippet.imports) && snippet.imports.length > 0
+  }),
+  Object.freeze({
+    type: 'external',
+    text: '外部',
+    label: '外部ライブラリが必要: Pythonに付属しないパッケージを使います。別にインストールしないと動きません。',
+    applies: (snippet) => Array.isArray(snippet.externalPackages) && snippet.externalPackages.length > 0
+  })
+]);
+
+function getSnippetBadges(snippet) {
+  return SNIPPET_BADGE_TYPES
+    .filter((badge) => badge.applies(snippet))
+    .map(({ type, text, label }) => ({ type, text, label }));
+}
+
+function renderSnippetBadge(badge, { decorative = false } = {}) {
+  const className = `snippetBadge snippetBadge-${escapeHtml(badge.type)}`;
+  if (decorative) {
+    return `<span class="${className}" aria-hidden="true">${escapeHtml(badge.text)}</span>`;
+  }
+  return `<span class="${className}" role="img" aria-label="${escapeHtml(badge.label)}" title="${escapeHtml(badge.label)}">${escapeHtml(badge.text)}</span>`;
+}
+
+function renderSnippetBadges(snippet) {
+  return getSnippetBadges(snippet).map(renderSnippetBadge).join('');
+}
+
+function renderSnippetBadgeLegend(snippets) {
+  const usedBadges = SNIPPET_BADGE_TYPES
+    .filter((badge) => snippets.some((snippet) => badge.applies(snippet)));
+  if (usedBadges.length === 0) {
+    return '';
+  }
+  const items = usedBadges.map((badge) => `
+          <li class="snippetBadgeLegendItem">${renderSnippetBadge(badge, { decorative: true })}<span>${escapeHtml(badge.label)}</span></li>`).join('');
+  return `
+      <details id="snippetBadgeLegend" class="snippetBadgeLegend">
+        <summary>アイコンの見方</summary>
+        <ul class="snippetBadgeLegendList">${items}
+        </ul>
+      </details>`;
+}
+
 function getSnippetCategories(snippets) {
   const categories = new Map();
 
@@ -187,8 +243,14 @@ function getSnippetVariantData(snippet) {
     previewParts: presentation.previewParts,
     precondition: snippet.precondition || '',
     imports: snippet.imports || [],
+    helpers: getHelperNames(snippet),
+    badges: getSnippetBadges(snippet),
     complexity: snippet.complexity || null
   };
+}
+
+function getHelperNames(snippet) {
+  return Array.isArray(snippet.helpers) ? snippet.helpers.map((helper) => helper.name) : [];
 }
 
 function getSnippetSearchText(snippets, groupLabel = '') {
@@ -226,10 +288,10 @@ function renderSnippetRow(row, category) {
 
     return `
           <div class="snippetRow snippetVariantRow" data-snippet-row="${escapeHtml(groupId)}" data-snippet-search="${escapeHtml(searchText)}">
-            <button type="button" class="snippetChoice" aria-pressed="false" data-snippet-entry="${escapeHtml(firstSnippet.id)}" data-snippet-group="${escapeHtml(groupId)}" data-snippet-variants="${escapeHtml(variants)}" data-snippet-id="${escapeHtml(firstSnippet.id)}" data-snippet-label="${escapeHtml(firstSnippet.label)}" data-snippet-description="${escapeHtml(firstSnippet.description || firstPresentation.summary)}" data-snippet-tooltip="${escapeHtml(tooltip)}" data-snippet-placeholders="${escapeHtml(firstPresentation.placeholders)}" data-snippet-imports="${escapeHtml(JSON.stringify(firstSnippet.imports || []))}" title="${escapeHtml(tooltip)}">
+            <button type="button" class="snippetChoice" aria-pressed="false" data-snippet-entry="${escapeHtml(firstSnippet.id)}" data-snippet-group="${escapeHtml(groupId)}" data-snippet-variants="${escapeHtml(variants)}" data-snippet-id="${escapeHtml(firstSnippet.id)}" data-snippet-label="${escapeHtml(firstSnippet.label)}" data-snippet-description="${escapeHtml(firstSnippet.description || firstPresentation.summary)}" data-snippet-tooltip="${escapeHtml(tooltip)}" data-snippet-placeholders="${escapeHtml(firstPresentation.placeholders)}" data-snippet-imports="${escapeHtml(JSON.stringify(firstSnippet.imports || []))}" data-snippet-helpers="${escapeHtml(JSON.stringify(getHelperNames(firstSnippet)))}" title="${escapeHtml(tooltip)}">
               <span class="snippetRowSummary">${renderAnnotatedParts(getAnnotatedTextParts(groupLabel, getSnippetPlaceholders(firstSnippet.body)))}</span>
               <code class="snippetRowPreview" data-snippet-row-preview>${renderAnnotatedParts(firstPresentation.previewParts)}</code>
-              <span class="snippetComplexity" data-snippet-complexity title="${escapeHtml(complexity?.detail || '')}">${escapeHtml(complexityLabel)}</span>
+              <span class="snippetRowMeta"><span class="snippetBadges" data-snippet-badges>${renderSnippetBadges(firstSnippet)}</span><span class="snippetComplexity" data-snippet-complexity title="${escapeHtml(complexity?.detail || '')}">${escapeHtml(complexityLabel)}</span></span>
             </button>
           </div>`;
   }
@@ -241,10 +303,10 @@ function renderSnippetRow(row, category) {
   const complexityLabel = complexity ? `${complexity.qualifier} ${complexity.time}` : '';
   return `
           <div class="snippetRow" data-snippet-row="${escapeHtml(snippet.id)}" data-snippet-search="${escapeHtml(searchText)}">
-            <button type="button" class="snippetChoice" aria-pressed="false" data-snippet-entry="${escapeHtml(snippet.id)}" data-snippet-id="${escapeHtml(snippet.id)}" data-snippet-label="${escapeHtml(snippet.label)}" data-snippet-description="${escapeHtml(snippet.description || presentation.summary)}" data-snippet-tooltip="${escapeHtml(presentation.tooltip)}" data-snippet-placeholders="${escapeHtml(presentation.placeholders)}" data-snippet-code-parts="${escapeHtml(presentation.codeParts)}" data-snippet-preview-parts="${escapeHtml(JSON.stringify(presentation.previewParts))}" data-snippet-precondition="${escapeHtml(snippet.precondition || '')}" data-snippet-imports="${escapeHtml(JSON.stringify(snippet.imports || []))}" title="${escapeHtml(presentation.tooltip)}">
+            <button type="button" class="snippetChoice" aria-pressed="false" data-snippet-entry="${escapeHtml(snippet.id)}" data-snippet-id="${escapeHtml(snippet.id)}" data-snippet-label="${escapeHtml(snippet.label)}" data-snippet-description="${escapeHtml(snippet.description || presentation.summary)}" data-snippet-tooltip="${escapeHtml(presentation.tooltip)}" data-snippet-placeholders="${escapeHtml(presentation.placeholders)}" data-snippet-code-parts="${escapeHtml(presentation.codeParts)}" data-snippet-preview-parts="${escapeHtml(JSON.stringify(presentation.previewParts))}" data-snippet-precondition="${escapeHtml(snippet.precondition || '')}" data-snippet-imports="${escapeHtml(JSON.stringify(snippet.imports || []))}" data-snippet-helpers="${escapeHtml(JSON.stringify(getHelperNames(snippet)))}" title="${escapeHtml(presentation.tooltip)}">
               <span class="snippetRowSummary">${renderAnnotatedParts(getAnnotatedTextParts(presentation.summary, getSnippetPlaceholders(snippet.body)))}</span>
               <code class="snippetRowPreview" data-snippet-row-preview>${renderAnnotatedParts(presentation.previewParts)}</code>
-              <span class="snippetComplexity" data-snippet-complexity title="${escapeHtml(complexity?.detail || '')}">${escapeHtml(complexityLabel)}</span>
+              <span class="snippetRowMeta"><span class="snippetBadges" data-snippet-badges>${renderSnippetBadges(snippet)}</span><span class="snippetComplexity" data-snippet-complexity title="${escapeHtml(complexity?.detail || '')}">${escapeHtml(complexityLabel)}</span></span>
             </button>
           </div>`;
 }
@@ -271,7 +333,7 @@ function renderSnippetLibrary(snippets) {
       </details>`)
     .join('');
 
-  return { panels, categoryCount: categories.length };
+  return { panels, categoryCount: categories.length, legend: renderSnippetBadgeLegend(snippets) };
 }
 
 function renderSnippetPreferences(snippets, preferences, defaultSnippetOrder) {
@@ -424,7 +486,9 @@ function getWebviewHtml({
       color: var(--vscode-foreground);
       background: var(--vscode-editor-background);
       font-family: var(--vscode-font-family, "Segoe UI", "Yu Gothic UI", sans-serif);
-      font-size: 12px;
+      --piyoyo-font-base: max(13px, var(--vscode-font-size, 13px));
+      --piyoyo-font-small: max(12px, calc(var(--piyoyo-font-base) - 1px));
+      font-size: var(--piyoyo-font-base);
       line-height: 1.5;
       --vscode-editor-font-family: "Cascadia Code", Consolas, monospace;
       --vscode-editor-font-size: 13px;
@@ -480,7 +544,7 @@ function getWebviewHtml({
       border: 0;
       color: var(--piyoyo-orange);
       background: transparent;
-      font-size: 11px;
+      font-size: var(--piyoyo-font-small);
       text-decoration: underline;
     }
 
@@ -536,7 +600,7 @@ function getWebviewHtml({
 
     .fileLabel {
       color: var(--vscode-descriptionForeground);
-      font-size: 11px;
+      font-size: var(--piyoyo-font-small);
       letter-spacing: 0;
     }
 
@@ -562,9 +626,9 @@ function getWebviewHtml({
       font-size: 15px;
     }
 
-    .sectionIntro span {
+    .sectionIntroCopy > span {
       color: var(--vscode-descriptionForeground);
-      font-size: 11px;
+      font-size: var(--piyoyo-font-small);
       text-align: left;
     }
 
@@ -574,7 +638,7 @@ function getWebviewHtml({
       border-color: var(--vscode-panel-border);
       color: var(--vscode-foreground);
       background: var(--vscode-toolbar-hoverBackground);
-      font-size: 11px;
+      font-size: var(--piyoyo-font-small);
       white-space: nowrap;
     }
 
@@ -760,7 +824,7 @@ function getWebviewHtml({
     #snippetSearchInput {
       min-height: 30px;
       padding-left: 32px;
-      font-size: 12px;
+      font-size: var(--piyoyo-font-base);
     }
 
     .snippetCategoryList {
@@ -791,7 +855,7 @@ function getWebviewHtml({
       min-height: 30px;
       padding: 6px 8px;
       color: var(--vscode-foreground);
-      font-size: 12px;
+      font-size: var(--piyoyo-font-base);
       font-weight: 600;
       cursor: pointer;
       list-style: none;
@@ -831,7 +895,7 @@ function getWebviewHtml({
     .snippetCategoryCount {
       margin-left: auto;
       color: var(--vscode-descriptionForeground);
-      font-size: 11px;
+      font-size: var(--piyoyo-font-small);
       font-weight: 400;
     }
 
@@ -888,7 +952,7 @@ function getWebviewHtml({
       min-width: 0;
       overflow: hidden;
       color: var(--piyoyo-text);
-      font-size: 11px;
+      font-size: var(--piyoyo-font-base);
       font-weight: 500;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -900,7 +964,7 @@ function getWebviewHtml({
       overflow: hidden;
       color: var(--piyoyo-text);
       font-family: var(--vscode-editor-font-family);
-      font-size: 11px;
+      font-size: var(--piyoyo-font-small);
       font-weight: 400;
       text-align: right;
       text-overflow: ellipsis;
@@ -915,7 +979,7 @@ function getWebviewHtml({
       border-radius: 3px;
       color: var(--piyoyo-text);
       font-family: var(--vscode-editor-font-family);
-      font-size: 10px;
+      font-size: var(--piyoyo-font-small);
       line-height: 1.3;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -925,10 +989,100 @@ function getWebviewHtml({
       display: none;
     }
 
+    .snippetRowMeta {
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .snippetBadges {
+      display: inline-flex;
+      gap: 3px;
+    }
+
+    .snippetBadges:empty {
+      display: none;
+    }
+
+    .snippetBadge {
+      display: inline-grid;
+      place-items: center;
+      box-sizing: border-box;
+      min-width: 1.9em;
+      height: 1.6em;
+      padding: 0 4px;
+      border: 1px solid transparent;
+      font-family: var(--vscode-editor-font-family);
+      font-size: var(--piyoyo-font-small);
+      font-weight: 700;
+      line-height: 1;
+      white-space: nowrap;
+      cursor: help;
+    }
+
+    /* Filled square: code that Piyoyo adds itself. */
+    .snippetBadge-helper {
+      border-color: var(--vscode-charts-yellow);
+      border-radius: 2px;
+      color: var(--vscode-editor-background);
+      background: var(--vscode-charts-yellow);
+    }
+
+    /* Outlined pill: standard-library import. */
+    .snippetBadge-import {
+      border-color: var(--vscode-charts-blue);
+      border-radius: 999px;
+      color: var(--vscode-charts-blue);
+      background: transparent;
+    }
+
+    /* Dashed box: third-party package. */
+    .snippetBadge-external {
+      border: 1px dashed var(--vscode-errorForeground);
+      border-radius: 2px;
+      color: var(--vscode-errorForeground);
+      background: transparent;
+    }
+
+    .snippetBadgeLegend {
+      grid-column: 1 / -1;
+      color: var(--vscode-descriptionForeground);
+      font-size: var(--piyoyo-font-small);
+    }
+
+    .snippetBadgeLegend > summary {
+      width: max-content;
+      cursor: pointer;
+    }
+
+    .snippetBadgeLegendList {
+      display: grid;
+      gap: 6px;
+      margin: 6px 0 2px;
+      padding: 0;
+      list-style: none;
+    }
+
+    .snippetBadgeLegendItem {
+      display: grid;
+      grid-template-columns: 5em minmax(0, 1fr);
+      align-items: start;
+      gap: 6px;
+      color: var(--vscode-foreground);
+      line-height: 1.5;
+    }
+
+    .snippetBadgeLegendItem .snippetBadge {
+      justify-self: start;
+      cursor: default;
+    }
+
     .snippetNoResults {
       padding: 18px 8px;
       color: var(--vscode-descriptionForeground);
-      font-size: 11px;
+      font-size: var(--piyoyo-font-small);
       text-align: center;
     }
 
@@ -936,7 +1090,7 @@ function getWebviewHtml({
       display: grid;
       gap: 3px;
       color: var(--vscode-foreground);
-      font-size: 12px;
+      font-size: var(--piyoyo-font-base);
       line-height: 1.6;
     }
 
@@ -964,7 +1118,7 @@ function getWebviewHtml({
       min-height: 34px;
       padding: 6px 8px;
       color: var(--vscode-foreground);
-      font-size: 12px;
+      font-size: var(--piyoyo-font-base);
       font-weight: 650;
       cursor: pointer;
       list-style: none;
@@ -990,7 +1144,7 @@ function getWebviewHtml({
     .snippetPreferenceCategoryCount {
       margin-left: auto;
       color: var(--vscode-descriptionForeground);
-      font-size: 11px;
+      font-size: var(--piyoyo-font-small);
       font-weight: 400;
     }
 
@@ -1018,7 +1172,7 @@ function getWebviewHtml({
       display: grid;
       justify-items: center;
       gap: 2px;
-      min-width: 38px;
+      min-width: 46px;
       cursor: pointer;
     }
 
@@ -1069,7 +1223,7 @@ function getWebviewHtml({
 
     .snippetPreferenceToggleText {
       color: var(--vscode-descriptionForeground);
-      font-size: 9px;
+      font-size: var(--piyoyo-font-small);
     }
 
     .snippetPreferenceCopy {
@@ -1088,14 +1242,14 @@ function getWebviewHtml({
 
     .snippetPreferenceSummary {
       color: var(--vscode-foreground);
-      font-size: 12px;
+      font-size: var(--piyoyo-font-base);
       font-weight: 550;
     }
 
     .snippetPreferencePreview {
       color: var(--piyoyo-orange);
       font-family: var(--vscode-editor-font-family);
-      font-size: 10px;
+      font-size: var(--piyoyo-font-small);
     }
 
     .snippetPreferenceMoves {
@@ -1129,14 +1283,14 @@ function getWebviewHtml({
       border-color: var(--vscode-panel-border);
       color: var(--vscode-foreground);
       background: var(--piyoyo-raised);
-      font-size: 11px;
+      font-size: var(--piyoyo-font-small);
     }
 
     .snippetPreferencesSave {
       min-height: 36px;
       color: var(--vscode-button-foreground, #ffffff);
       background: var(--vscode-button-background, #0e639c);
-      font-size: 12px;
+      font-size: var(--piyoyo-font-base);
       font-weight: 650;
     }
 
@@ -1148,7 +1302,7 @@ function getWebviewHtml({
       grid-column: 1 / -1;
       min-height: 1.4em;
       color: var(--vscode-descriptionForeground);
-      font-size: 10px;
+      font-size: var(--piyoyo-font-small);
     }
 
     .snippetPreferencesHint.error {
@@ -1182,7 +1336,7 @@ function getWebviewHtml({
       min-width: 0;
       overflow: hidden;
       color: var(--vscode-foreground);
-      font-size: 12px;
+      font-size: var(--piyoyo-font-base);
       font-weight: 600;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -1230,7 +1384,7 @@ function getWebviewHtml({
 
     .snippetSelectedHelp {
       color: var(--piyoyo-text);
-      font-size: 11px;
+      font-size: var(--piyoyo-font-small);
       line-height: 1.4;
     }
 
@@ -1274,7 +1428,7 @@ function getWebviewHtml({
       width: 100%;
       min-height: 30px;
       padding: 6px 10px;
-      font-size: 11px;
+      font-size: var(--piyoyo-font-base);
       font-weight: 600;
       color: var(--vscode-button-foreground, #ffffff);
       background: var(--vscode-button-background, #0e639c);
@@ -1294,14 +1448,17 @@ function getWebviewHtml({
         gap: 1px 5px;
       }
 
-      .snippetRowPreview {
+      .snippetRowSummary {
         grid-column: 1 / -1;
+      }
+
+      .snippetRowPreview {
+        grid-column: 1;
         text-align: left;
       }
 
-      .snippetComplexity {
+      .snippetRowMeta {
         grid-column: 2;
-        grid-row: 1;
       }
 
       .snippetPreferenceRow {
@@ -1323,7 +1480,7 @@ function getWebviewHtml({
 
     .snippetStatus {
       color: var(--vscode-descriptionForeground);
-      font-size: 11px;
+      font-size: var(--piyoyo-font-small);
       overflow-wrap: anywhere;
     }
 
@@ -1360,7 +1517,7 @@ function getWebviewHtml({
       display: grid;
       gap: 6px;
       color: var(--vscode-descriptionForeground);
-      font-size: 11px;
+      font-size: var(--piyoyo-font-small);
       font-weight: 600;
       letter-spacing: 0;
     }
@@ -1445,7 +1602,7 @@ function getWebviewHtml({
 
     .errorDetails > summary {
       color: var(--vscode-descriptionForeground);
-      font-size: 11px;
+      font-size: var(--piyoyo-font-small);
       cursor: pointer;
     }
 
@@ -1466,6 +1623,13 @@ function getWebviewHtml({
       .snippetVariantButton[aria-pressed="true"] {
         outline: 2px solid Highlight;
         outline-offset: -2px;
+      }
+
+      .snippetBadge {
+        border-color: CanvasText;
+        color: CanvasText;
+        background: Canvas;
+        forced-color-adjust: none;
       }
     }
 
@@ -1557,7 +1721,7 @@ function getWebviewHtml({
         <div class="sectionIntroCopy">
           <strong>操作を探す</strong>
         </div>
-        <button id="snippetPreferencesButton" class="snippetPreferencesButton" type="button" aria-pressed="false" title="コードごとの表示と順番を整理する">コード整理</button>
+        <button id="snippetPreferencesButton" class="snippetPreferencesButton" type="button" aria-pressed="false" title="コードごとの表示と順番を整理する">コード整理</button>${snippetLibrary.legend}
       </div>
       <div id="snippetBrowsePanel" class="snippetBrowsePanel">
         <label class="snippetSearch">
@@ -1880,6 +2044,8 @@ function getWebviewHtml({
             snippetPreviewParts: JSON.stringify(selectedVariant.previewParts || []),
             snippetPrecondition: selectedVariant.precondition,
             snippetImports: JSON.stringify(selectedVariant.imports || []),
+            snippetHelpers: JSON.stringify(selectedVariant.helpers || []),
+            snippetBadges: selectedVariant.badges || [],
             snippetChoiceLabel: selectedVariant.choiceLabel,
             snippetComplexity: selectedVariant.complexity
           }
@@ -1948,9 +2114,11 @@ function getWebviewHtml({
         ? '注意: ' + source.dataset.snippetPrecondition
         : '';
       const imports = JSON.parse(source.dataset.snippetImports || '[]');
-      snippetImportHint.hidden = imports.length === 0;
-      snippetImportHint.textContent = imports.length > 0
-        ? '自動追加: ' + imports.join(' / ')
+      const helpers = JSON.parse(source.dataset.snippetHelpers || '[]');
+      const autoAdded = imports.concat(helpers.map((name) => 'def ' + name + '(...)'));
+      snippetImportHint.hidden = autoAdded.length === 0;
+      snippetImportHint.textContent = autoAdded.length > 0
+        ? '自動追加: ' + autoAdded.join(' / ')
         : '';
       snippetDetails.hidden = !source.dataset.snippetTooltip;
       snippetDetails.open = false;
@@ -1975,6 +2143,18 @@ function getWebviewHtml({
         const complexity = source.dataset.snippetComplexity;
         complexityBadge.textContent = complexity.qualifier + ' ' + complexity.time;
         complexityBadge.title = complexity.detail || '';
+      }
+      const badgeList = row.querySelector('[data-snippet-badges]');
+      if (badgeList && Array.isArray(source.dataset.snippetBadges)) {
+        badgeList.replaceChildren(...source.dataset.snippetBadges.map((badge) => {
+          const element = document.createElement('span');
+          element.className = 'snippetBadge snippetBadge-' + badge.type;
+          element.setAttribute('role', 'img');
+          element.setAttribute('aria-label', badge.label);
+          element.title = badge.label;
+          element.textContent = badge.text;
+          return element;
+        }));
       }
       snippetInsertButton.disabled = snippetInsertionPending;
     }

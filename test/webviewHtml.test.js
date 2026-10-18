@@ -227,13 +227,13 @@ test('webview uses compact clickable rows, search, and bottom variant choice', (
   assert.match(html, /\.snippetCategoryList\s*\{[^}]*grid-auto-rows:\s*max-content;/s);
   assert.match(html, /\.snippetCategoryList\s*\{[^}]*align-content:\s*start;/s);
   assert.match(html, /\.snippetCategoryList\s*\{[^}]*overflow-y:\s*auto;/s);
-  assert.match(html, /\.snippetComplexity\s*\{[^}]*font-size:\s*10px/s);
+  assert.match(html, /\.snippetComplexity\s*\{[^}]*font-size:\s*var\(--piyoyo-font-small\)/s);
   assert.match(html, /id="snippetSearchInput"[^>]*placeholder="操作を検索"/);
   assert.match(html, /id="snippetVariantField"[^>]*hidden/);
   assert.match(html, /button\.className = 'snippetVariantButton'/);
   assert.match(html, /id="snippetImportHint"[^>]*hidden/);
   assert.match(html, /id="snippetDetails"[^>]*hidden/);
-  assert.match(html, /自動追加: ' \+ imports\.join/);
+  assert.match(html, /自動追加: ' \+ autoAdded\.join/);
   assert.match(html, /snippetDetailsText\.textContent = source\.dataset\.snippetTooltip/);
   assert.match(html, /\.snippetInsertFooter\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\);/s);
   assert.match(html, /\.snippetInsertButton\s*\{[^}]*width:\s*100%;/s);
@@ -590,4 +590,78 @@ test('webview links the error display and launcher settings to the settings page
   const html = getWebviewHtml();
   const launcher = html.slice(html.indexOf('class="launcher runSection"'));
   assert.match(launcher, /<button[^>]*data-open-settings[^>]*>「設定値」と制限時間を設定で変える<\/button>/);
+});
+
+function rowHtml(html, id) {
+  const start = html.indexOf(`data-snippet-row="${id}"`);
+  assert.ok(start > -1, id);
+  return html.slice(start, html.indexOf('</div>', start));
+}
+
+test('snippet rows show badges for helpers and imports, but not for built-ins', () => {
+  const html = getWebviewHtml({ snippets: INPUT_SNIPPETS });
+
+  const helperRow = rowHtml(html, 'string-hamming-distance');
+  assert.match(helperRow, /<span class="snippetBadge snippetBadge-helper" role="img" aria-label="自作関数: [^"]+" title="自作関数: [^"]+">自作<\/span>/);
+  assert.doesNotMatch(helperRow, /snippetBadge-import/);
+  assert.match(helperRow, /data-snippet-helpers="\[&quot;hamming_distance&quot;\]"/);
+  assert.match(helperRow, /data-snippet-label="hamming_distance\(s, t\)"/);
+
+  const importRow = rowHtml(html, 'math-gcd');
+  assert.match(importRow, /<span class="snippetBadge snippetBadge-import" role="img" aria-label="importが必要: [^"]+"[^>]*>import<\/span>/);
+  assert.doesNotMatch(importRow, /snippetBadge-helper/);
+
+  const builtInRow = rowHtml(html, 'output-value');
+  assert.match(builtInRow, /<span class="snippetBadges" data-snippet-badges><\/span>/);
+
+  const groupedRow = rowHtml(html, 'binary-search-bisect-bound');
+  assert.match(groupedRow, /snippetBadge-import/);
+  assert.match(groupedRow, /&quot;badges&quot;:\[\{&quot;type&quot;:&quot;import&quot;/);
+  assert.match(html, /badgeList\.replaceChildren\(/);
+
+  assert.doesNotMatch(html, /class="snippetBadge snippetBadge-external"/);
+  assert.equal(
+    (html.match(/role="img" aria-label="自作関数/g) || []).length,
+    INPUT_SNIPPETS.filter((snippet) => snippet.helpers.length > 0).length
+  );
+});
+
+test('badge legend explains only the badge types in use and is not a snippet entry', () => {
+  const html = getWebviewHtml({ snippets: INPUT_SNIPPETS });
+  const legend = html.slice(html.indexOf('<details id="snippetBadgeLegend"'), html.indexOf('</details>', html.indexOf('id="snippetBadgeLegend"')));
+
+  assert.match(legend, /<summary>アイコンの見方<\/summary>/);
+  assert.match(legend, /snippetBadge-helper" aria-hidden="true">自作<\/span><span>自作関数: /);
+  assert.match(legend, /snippetBadge-import" aria-hidden="true">import<\/span><span>importが必要: /);
+  assert.doesNotMatch(legend, /snippetBadge-external/);
+  assert.doesNotMatch(legend, /data-snippet/);
+  assert.ok(html.indexOf('id="snippetBadgeLegend"') < html.indexOf('id="snippetBrowsePanel"'));
+
+  const withExternal = getWebviewHtml({ snippets: [{
+    id: 'external-example', category: 'custom', categoryLabel: 'テスト', summary: 'np配列', label: 'np.array(A)',
+    body: 'np.array(${1:A})', imports: ['import numpy as np'], externalPackages: ['numpy']
+  }] });
+  assert.match(withExternal, /class="snippetBadge snippetBadge-external" role="img" aria-label="外部ライブラリが必要: [^"]+"[^>]*>外部<\/span>/);
+
+  assert.doesNotMatch(getWebviewHtml({ snippets: [] }), /id="snippetBadgeLegend"/);
+});
+
+test('badges differ by shape and text, use theme variables, and survive forced colors', () => {
+  const html = getWebviewHtml({ snippets: INPUT_SNIPPETS });
+
+  assert.match(html, /\.snippetBadge-helper\s*\{(?=[^}]*border-radius:\s*2px)(?=[^}]*background:\s*var\(--vscode-charts-yellow\))[^}]*\}/s);
+  assert.match(html, /\.snippetBadge-import\s*\{(?=[^}]*border-radius:\s*999px)(?=[^}]*background:\s*transparent)(?=[^}]*color:\s*var\(--vscode-charts-blue\))[^}]*\}/s);
+  assert.match(html, /\.snippetBadge-external\s*\{[^}]*border:\s*1px dashed var\(--vscode-errorForeground\)/s);
+  assert.match(html, /@media \(forced-colors: active\)[\s\S]*\.snippetBadge\s*\{[^}]*border-color:\s*CanvasText/);
+});
+
+test('webview text is never smaller than 12px and scales with the VS Code font size', () => {
+  const html = getWebviewHtml({ snippets: INPUT_SNIPPETS });
+
+  assert.doesNotMatch(html, /font-size:\s*(?:[0-9]|1[01])(?:\.\d+)?px/);
+  assert.match(html, /--piyoyo-font-base:\s*max\(13px, var\(--vscode-font-size, 13px\)\)/);
+  assert.match(html, /--piyoyo-font-small:\s*max\(12px, calc\(var\(--piyoyo-font-base\) - 1px\)\)/);
+  assert.match(html, /\.snippetRowSummary\s*\{[^}]*font-size:\s*var\(--piyoyo-font-base\)/s);
+  assert.match(html, /\.snippetRowPreview\s*\{[^}]*font-size:\s*var\(--piyoyo-font-small\)/s);
+  assert.match(html, /@media \(max-width: 420px\)[\s\S]*?\.snippetRowSummary\s*\{\s*grid-column:\s*1 \/ -1;/);
 });
