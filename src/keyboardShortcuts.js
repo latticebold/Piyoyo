@@ -28,6 +28,24 @@ function isInputFocusShortcut(event) {
   return event.code === 'KeyI';
 }
 
+// Returns 'run', 'snippets', or '' for Alt+1 / Alt+2 (macOS Option+1 / Option+2).
+function getWorkspaceShortcutTarget(event) {
+  if (!event || !event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+    return '';
+  }
+  if (event.isComposing || event.keyCode === 229) {
+    return '';
+  }
+  // event.code keeps the physical digit on macOS and AZERTY; numpad stays free for Alt codes.
+  if (event.code === 'Digit1') {
+    return 'run';
+  }
+  if (event.code === 'Digit2') {
+    return 'snippets';
+  }
+  return '';
+}
+
 // Detects two clean Shift taps (no other key in between) within intervalMs.
 function createShiftDoubleTapDetector(intervalMs) {
   let shiftDown = false;
@@ -146,14 +164,26 @@ function getInputFocusShortcutLabel(mode, platform) {
   return altLabel;
 }
 
+// The webview handles Alt+1 / Alt+2 itself; this command only keeps the forwarded key
+// away from VS Code's openEditorAtIndex binding.
+const WORKSPACE_SHORTCUT_COMMAND = 'piyoyo.workspaceShortcut';
+
+function getWorkspaceShortcutLabels(platform) {
+  const modifier = platform === 'darwin' ? 'Option' : 'Alt';
+  return { run: `${modifier}+1`, snippets: `${modifier}+2` };
+}
+
 module.exports = {
   DEFAULT_INPUT_FOCUS_SHORTCUT,
   INPUT_FOCUS_SHORTCUTS,
   SHIFT_DOUBLE_TAP_INTERVAL_MS,
+  WORKSPACE_SHORTCUT_COMMAND,
   createShiftDoubleTapDetector,
   getInputFocusShortcutLabel,
   getNextIndex,
   getRunShortcutLabel,
+  getWorkspaceShortcutLabels,
+  getWorkspaceShortcutTarget,
   isEditableTarget,
   isImeComposing,
   isInputFocusShortcut,

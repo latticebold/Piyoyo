@@ -2,13 +2,46 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
+  WORKSPACE_SHORTCUT_COMMAND,
   getNextIndex,
   getRunShortcutLabel,
+  getWorkspaceShortcutLabels,
+  getWorkspaceShortcutTarget,
   isEditableTarget,
   isImeComposing,
   isRunShortcut,
   isSearchShortcut
 } = require('../src/keyboardShortcuts');
+
+test('getWorkspaceShortcutTarget maps Alt+1 / Alt+2 by physical key', () => {
+  assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'Digit1', key: '1' }), 'run');
+  assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'Digit2', key: '2' }), 'snippets');
+  // macOS Option+1 types a symbol and AZERTY puts & on the digit key.
+  assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'Digit1', key: '¡' }), 'run');
+  assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'Digit2', key: 'é' }), 'snippets');
+  assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'Digit1', key: '1', repeat: true }), 'run');
+});
+
+test('getWorkspaceShortcutTarget ignores other keys, modifiers, numpad and IME', () => {
+  assert.equal(getWorkspaceShortcutTarget({ code: 'Digit1', key: '1' }), '');
+  assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'Digit3', key: '3' }), '');
+  assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'Numpad1', key: '1' }), '');
+  // AltGr reports Ctrl+Alt on Windows.
+  assert.equal(getWorkspaceShortcutTarget({ altKey: true, ctrlKey: true, code: 'Digit2', key: '@' }), '');
+  assert.equal(getWorkspaceShortcutTarget({ altKey: true, shiftKey: true, code: 'Digit1', key: '!' }), '');
+  assert.equal(getWorkspaceShortcutTarget({ altKey: true, metaKey: true, code: 'Digit1', key: '1' }), '');
+  assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'Digit1', key: '1', isComposing: true }), '');
+  assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'Digit1', key: 'Process', keyCode: 229 }), '');
+  assert.equal(getWorkspaceShortcutTarget(undefined), '');
+});
+
+test('workspace shortcut labels follow the platform', () => {
+  assert.deepEqual(getWorkspaceShortcutLabels('win32'), { run: 'Alt+1', snippets: 'Alt+2' });
+  assert.deepEqual(getWorkspaceShortcutLabels('linux'), { run: 'Alt+1', snippets: 'Alt+2' });
+  assert.deepEqual(getWorkspaceShortcutLabels('darwin'), { run: 'Option+1', snippets: 'Option+2' });
+  assert.deepEqual(getWorkspaceShortcutLabels(), { run: 'Alt+1', snippets: 'Alt+2' });
+  assert.equal(WORKSPACE_SHORTCUT_COMMAND, 'piyoyo.workspaceShortcut');
+});
 
 test('isRunShortcut accepts Ctrl+Enter and Cmd+Enter only', () => {
   assert.equal(isRunShortcut({ key: 'Enter', ctrlKey: true }), true);

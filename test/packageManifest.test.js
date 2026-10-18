@@ -151,6 +151,22 @@ test('manifest contributes the input focus toggle with Alt+I and Shift double-ta
   assert.equal(RUNNER_FOCUSED_CONTEXT, 'piyoyo.runnerFocused');
 });
 
+test('manifest keeps Alt+1 / Alt+2 inside the Piyoyo panel away from openEditorAtIndex', () => {
+  const { WORKSPACE_SHORTCUT_COMMAND } = require('../src/keyboardShortcuts');
+  const command = manifest.contributes.commands.find((item) => item.command === WORKSPACE_SHORTCUT_COMMAND);
+  assert.ok(command);
+  assert.deepEqual(manifest.contributes.menus.commandPalette, [
+    { command: WORKSPACE_SHORTCUT_COMMAND, when: 'false' }
+  ]);
+  const bindings = manifest.contributes.keybindings
+    .filter((item) => item.command === WORKSPACE_SHORTCUT_COMMAND)
+    .map((item) => ({ key: item.key, mac: item.mac, args: item.args, when: item.when }));
+  assert.deepEqual(bindings, [
+    { key: 'alt+1', mac: 'alt+1', args: undefined, when: 'piyoyo.runnerFocused && !editorTextFocus' },
+    { key: 'alt+2', mac: 'alt+2', args: undefined, when: 'piyoyo.runnerFocused && !editorTextFocus' }
+  ]);
+});
+
 test('manifest offers the input focus shortcut setting with Japanese choices', () => {
   const { INPUT_FOCUS_SHORTCUTS, DEFAULT_INPUT_FOCUS_SHORTCUT } = require('../src/keyboardShortcuts');
   const setting = manifest.contributes.configuration.properties['piyoyo.inputFocusShortcut'];

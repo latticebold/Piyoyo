@@ -28,8 +28,10 @@ const {
   resolveFocusTarget
 } = require('./src/inputFocus');
 const {
+  WORKSPACE_SHORTCUT_COMMAND,
   getInputFocusShortcutLabel,
   getRunShortcutLabel,
+  getWorkspaceShortcutLabels,
   normalizeInputFocusShortcut
 } = require('./src/keyboardShortcuts');
 const { getRunnablePythonFileFromDocument, saveDocumentBeforeRun } = require('./src/targetSelection');
@@ -71,6 +73,7 @@ function activate(context) {
     TOGGLE_INPUT_FOCUS_COMMAND,
     (args) => provider.toggleInputFocus(openRunner, args)
   ));
+  context.subscriptions.push(vscode.commands.registerCommand(WORKSPACE_SHORTCUT_COMMAND, () => {}));
   context.subscriptions.push(vscode.commands.registerCommand(
     OPEN_SETTINGS_COMMAND,
     () => openPiyoyoSettings(vscode.commands, context.extension && context.extension.id)
@@ -256,7 +259,8 @@ class RunnerViewProvider {
       snippetPreferences,
       defaultSnippetOrder: INPUT_SNIPPETS.map((snippet) => snippet.id),
       errorDisplayMode: getConfiguredErrorDisplayMode(),
-      inputFocusShortcut: getConfiguredInputFocusShortcut()
+      inputFocusShortcut: getConfiguredInputFocusShortcut(),
+      workspaceShortcutLabels: getWorkspaceShortcutLabels(process.platform)
     });
   }
 

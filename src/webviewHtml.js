@@ -15,6 +15,8 @@ const {
   SHIFT_DOUBLE_TAP_INTERVAL_MS,
   createShiftDoubleTapDetector,
   getNextIndex,
+  getWorkspaceShortcutLabels,
+  getWorkspaceShortcutTarget,
   isEditableTarget,
   isImeComposing,
   isInputFocusShortcut,
@@ -497,9 +499,12 @@ function getWebviewHtml({
   defaultSnippetOrder = preferenceSnippets.map((snippet) => snippet.id),
   errorDisplayMode = DEFAULT_ERROR_DISPLAY_MODE,
   runShortcutLabel = 'Ctrl+Enter',
-  inputFocusShortcut = { mode: DEFAULT_INPUT_FOCUS_SHORTCUT, label: 'Alt+I' }
+  inputFocusShortcut = { mode: DEFAULT_INPUT_FOCUS_SHORTCUT, label: 'Alt+I' },
+  workspaceShortcutLabels = getWorkspaceShortcutLabels()
 } = {}) {
   const nonce = getNonce();
+  const runTabShortcut = escapeHtml(workspaceShortcutLabels.run);
+  const snippetTabShortcut = escapeHtml(workspaceShortcutLabels.snippets);
   const inputFocusMode = normalizeInputFocusShortcut(inputFocusShortcut && inputFocusShortcut.mode);
   const inputFocusLabel = String((inputFocusShortcut && inputFocusShortcut.label) || 'Alt+I');
   const escapedRunShortcutLabel = escapeHtml(runShortcutLabel);
@@ -1796,8 +1801,8 @@ function getWebviewHtml({
   <main class="runner">
     <div class="workspaceHeader">
       <nav class="workspaceTabs" role="tablist" aria-label="Piyoyoの機能">
-        <button id="runWorkspaceTab" class="workspaceTab" type="button" role="tab" aria-selected="true" aria-controls="runWorkspace" tabindex="0" data-workspace="run">実行</button>
-        <button id="snippetWorkspaceTab" class="workspaceTab" type="button" role="tab" aria-selected="false" aria-controls="snippetWorkspace" tabindex="-1" data-workspace="snippets">コード挿入</button>
+        <button id="runWorkspaceTab" class="workspaceTab" type="button" role="tab" aria-selected="true" aria-controls="runWorkspace" tabindex="0" data-workspace="run" title="実行 (${runTabShortcut})" aria-keyshortcuts="Alt+1">実行</button>
+        <button id="snippetWorkspaceTab" class="workspaceTab" type="button" role="tab" aria-selected="false" aria-controls="snippetWorkspace" tabindex="-1" data-workspace="snippets" title="コード挿入 (${snippetTabShortcut})" aria-keyshortcuts="Alt+2">コード挿入</button>
       </nav>
       <button id="openSettingsButton" class="settingsButton" type="button" data-open-settings aria-label="Piyoyoの設定を開く" title="Piyoyoの設定を開く"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="8" cy="8" r="4.6" fill="none" stroke="currentColor" stroke-width="1.4"/></svg></button>
     </div>
@@ -1958,6 +1963,7 @@ function getWebviewHtml({
     ${isEditableTarget.toString()}
     ${getNextIndex.toString()}
     ${isInputFocusShortcut.toString()}
+    ${getWorkspaceShortcutTarget.toString()}
     ${createShiftDoubleTapDetector.toString()}
     ${getStdinPlaceholder.toString()}
     ${getStdinTitle.toString()}
@@ -2017,8 +2023,38 @@ function getWebviewHtml({
       vscode.setState(viewState);
     }
 
-    function setWorkspace(workspace) {
+    const lastFocusedInWorkspace = {};
+    workspacePanels.forEach((panel) => {
+      panel.addEventListener('focusin', (event) => {
+        lastFocusedInWorkspace[panel.dataset.workspacePanel] = event.target;
+      });
+    });
+
+    function canRestoreFocus(element) {
+      return Boolean(element && element.isConnected && !element.disabled
+        && element.getClientRects().length > 0);
+    }
+
+    function getWorkspaceFocusTarget(workspace) {
+      const remembered = lastFocusedInWorkspace[workspace];
+      if (canRestoreFocus(remembered)) {
+        return remembered;
+      }
+      if (workspace === 'snippets') {
+        return snippetPreferencesOpen ? snippetPreferencesSearchInput : snippetSearchInput;
+      }
+      return stdin;
+    }
+
+    // focusPanel moves focus into the shown panel. Otherwise focus only moves when it
+    // would be lost inside the panel being hidden.
+    function setWorkspace(workspace, { focusPanel = false } = {}) {
       closeComplexityPopover();
+      const activeElement = document.activeElement;
+      // An unfocused webview still reports its last activeElement; never steal focus then.
+      const focusWillBeHidden = document.hasFocus() && Array.from(workspacePanels).some(
+        (panel) => panel.dataset.workspacePanel !== workspace && panel.contains(activeElement)
+      );
       workspaceTabs.forEach((tab) => {
         const isSelected = tab.dataset.workspace === workspace;
         tab.setAttribute('aria-selected', String(isSelected));
@@ -2028,6 +2064,9 @@ function getWebviewHtml({
         panel.hidden = panel.dataset.workspacePanel !== workspace;
       });
       saveViewState({ workspace });
+      if (focusPanel || focusWillBeHidden) {
+        getWorkspaceFocusTarget(workspace).focus();
+      }
     }
 
     function setSnippetCategory(snippetCategory) {
@@ -2881,6 +2920,13 @@ function getWebviewHtml({
         // The key is still forwarded to VS Code; both paths only ever target the editor.
         event.preventDefault();
         vscode.postMessage({ type: 'focusEditor' });
+        return;
+      }
+      const shortcutWorkspace = getWorkspaceShortcutTarget(event);
+      if (shortcutWorkspace) {
+        // Let it bubble: VS Code must still see the Alt key combo (see Alt+I).
+        event.preventDefault();
+        setWorkspace(shortcutWorkspace, { focusPanel: true });
         return;
       }
       if (isRunShortcut(event)) {

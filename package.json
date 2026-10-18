@@ -57,6 +57,10 @@
       {
         "command": "piyoyo.toggleInputFocus",
         "title": "Piyoyo: 入力欄とエディタを切り替え"
+      },
+      {
+        "command": "piyoyo.workspaceShortcut",
+        "title": "Piyoyo: パネルのタブ切り替えキー"
       }
     ],
     "keybindings": [
@@ -99,9 +103,27 @@
           "target": "editor"
         },
         "when": "piyoyo.runnerFocused && !editorTextFocus && config.piyoyo.inputFocusShortcut != altI"
+      },
+      {
+        "command": "piyoyo.workspaceShortcut",
+        "key": "alt+1",
+        "mac": "alt+1",
+        "when": "piyoyo.runnerFocused && !editorTextFocus"
+      },
+      {
+        "command": "piyoyo.workspaceShortcut",
+        "key": "alt+2",
+        "mac": "alt+2",
+        "when": "piyoyo.runnerFocused && !editorTextFocus"
       }
     ],
     "menus": {
+      "commandPalette": [
+        {
+          "command": "piyoyo.workspaceShortcut",
+          "when": "false"
+        }
+      ],
       "editor/title": [
         {
           "command": "piyoyo.open",

@@ -53,8 +53,8 @@ test('webview separates execution and snippet insertion into two workspaces', ()
   assert.ok(stdinIndex < stdoutIndex);
   assert.ok(stdoutIndex < detailsIndex);
   assert.ok(detailsIndex < launcherIndex);
-  assert.match(html, /data-workspace="run">実行/);
-  assert.match(html, /data-workspace="snippets">コード挿入/);
+  assert.match(html, /data-workspace="run"[^>]*>実行</);
+  assert.match(html, /data-workspace="snippets"[^>]*>コード挿入</);
   assert.match(html, /id="snippetWorkspace"[^>]*hidden/);
   assert.doesNotMatch(html, /id="targetFile"/);
   assert.doesNotMatch(html, /id="activeFile"/);
@@ -802,6 +802,35 @@ test('workspace tabs follow the tablist pattern with arrow keys', () => {
   assert.match(html, /tab\.tabIndex = isSelected \? 0 : -1;/);
   assert.match(html, /getNextIndex\(tabs\.indexOf\(tab\), tabs\.length, event\.key, 'horizontal'\)/);
   assert.match(html, /setWorkspace\(tabs\[nextIndex\]\.dataset\.workspace\);\s*tabs\[nextIndex\]\.focus\(\);/);
+});
+
+test('workspace tabs show their Alt+1 / Alt+2 shortcut and use the platform label', () => {
+  const html = getWebviewHtml();
+  assert.match(html, /id="runWorkspaceTab"[^>]*title="実行 \(Alt\+1\)"[^>]*aria-keyshortcuts="Alt\+1"/);
+  assert.match(html, /id="snippetWorkspaceTab"[^>]*title="コード挿入 \(Alt\+2\)"[^>]*aria-keyshortcuts="Alt\+2"/);
+
+  const mac = getWebviewHtml({ workspaceShortcutLabels: { run: 'Option+1', snippets: 'Option+2' } });
+  assert.match(mac, /id="runWorkspaceTab"[^>]*title="実行 \(Option\+1\)"/);
+  assert.match(mac, /id="snippetWorkspaceTab"[^>]*title="コード挿入 \(Option\+2\)"/);
+});
+
+test('Alt+1 / Alt+2 switch workspaces from anywhere and move focus into the shown panel', () => {
+  const html = getWebviewHtml();
+  assert.match(html, /function getWorkspaceShortcutTarget\(event\)/);
+  assert.match(html, /const shortcutWorkspace = getWorkspaceShortcutTarget\(event\);\s*if \(shortcutWorkspace\) \{[\s\S]*?event\.preventDefault\(\);\s*setWorkspace\(shortcutWorkspace, \{ focusPanel: true \}\);/);
+  // Same as Alt+I: stopping the event would leave VS Code with a lone Alt press.
+  assert.doesNotMatch(html, /if \(shortcutWorkspace\) \{[^}]*stopPropagation/);
+  // Mouse clicks keep focus on the tab.
+  assert.match(html, /tab\.addEventListener\('click', \(\) => setWorkspace\(tab\.dataset\.workspace\)\);/);
+});
+
+test('hiding a workspace that holds focus moves focus into the shown panel', () => {
+  const html = getWebviewHtml();
+  assert.match(html, /panel\.addEventListener\('focusin', \(event\) => \{\s*lastFocusedInWorkspace\[panel\.dataset\.workspacePanel\] = event\.target;/);
+  assert.match(html, /element\.isConnected && !element\.disabled\s*&& element\.getClientRects\(\)\.length > 0/);
+  assert.match(html, /return snippetPreferencesOpen \? snippetPreferencesSearchInput : snippetSearchInput;\s*\}\s*return stdin;/);
+  // Focus is checked before the panel is hidden, and only while the webview itself has focus.
+  assert.match(html, /const focusWillBeHidden = document\.hasFocus\(\) && Array\.from\(workspacePanels\)\.some\(\s*\(panel\) => panel\.dataset\.workspacePanel !== workspace && panel\.contains\(activeElement\)\s*\);[\s\S]*?panel\.hidden = panel\.dataset\.workspacePanel !== workspace;[\s\S]*?if \(focusPanel \|\| focusWillBeHidden\) \{\s*getWorkspaceFocusTarget\(workspace\)\.focus\(\);/);
 });
 
 test('snippet list uses roving focus, Enter inserts, and chips are reached with arrows', () => {
