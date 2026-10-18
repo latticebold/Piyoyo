@@ -222,7 +222,12 @@ class RunnerViewProvider {
       return;
     }
 
-    await openRunner();
+    try {
+      await openRunner();
+    } catch (error) {
+      this.pendingRunRequest = false;
+      throw error;
+    }
     if (editor) {
       // Opening the view moves focus into it; return to the editor so typing can continue.
       await vscode.window.showTextDocument(editor.document, editor.viewColumn);
