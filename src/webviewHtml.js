@@ -2878,9 +2878,8 @@ function getWebviewHtml({
 
     document.addEventListener('keydown', (event) => {
       if (allowsAltI() && isInputFocusShortcut(event)) {
-        // Stop here so VS Code does not also receive the forwarded key.
+        // The key is still forwarded to VS Code; both paths only ever target the editor.
         event.preventDefault();
-        event.stopPropagation();
         vscode.postMessage({ type: 'focusEditor' });
         return;
       }

@@ -82,7 +82,7 @@
         "args": {
           "target": "editor"
         },
-        "when": "piyoyo.runnerFocused && config.piyoyo.inputFocusShortcut != shiftShift"
+        "when": "piyoyo.runnerFocused && !editorTextFocus && config.piyoyo.inputFocusShortcut != shiftShift"
       },
       {
         "command": "piyoyo.toggleInputFocus",
@@ -98,7 +98,7 @@
         "args": {
           "target": "editor"
         },
-        "when": "piyoyo.runnerFocused && config.piyoyo.inputFocusShortcut != altI"
+        "when": "piyoyo.runnerFocused && !editorTextFocus && config.piyoyo.inputFocusShortcut != altI"
       }
     ],
     "menus": {

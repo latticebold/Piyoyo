@@ -138,9 +138,9 @@ test('manifest contributes the input focus toggle with Alt+I and Shift double-ta
   }));
   assert.deepEqual(simplified, [
     { key: 'alt+i', mac: 'alt+i', target: 'input', when: `${editorWhen} && config.piyoyo.inputFocusShortcut != shiftShift` },
-    { key: 'alt+i', mac: 'alt+i', target: 'editor', when: 'piyoyo.runnerFocused && config.piyoyo.inputFocusShortcut != shiftShift' },
+    { key: 'alt+i', mac: 'alt+i', target: 'editor', when: 'piyoyo.runnerFocused && !editorTextFocus && config.piyoyo.inputFocusShortcut != shiftShift' },
     { key: 'shift shift', mac: undefined, target: 'input', when: `${editorWhen} && config.piyoyo.inputFocusShortcut != altI` },
-    { key: 'shift shift', mac: undefined, target: 'editor', when: 'piyoyo.runnerFocused && config.piyoyo.inputFocusShortcut != altI' }
+    { key: 'shift shift', mac: undefined, target: 'editor', when: 'piyoyo.runnerFocused && !editorTextFocus && config.piyoyo.inputFocusShortcut != altI' }
   ]);
   for (const binding of bindings) {
     assert.doesNotMatch(binding.when, /\|\||\(/);

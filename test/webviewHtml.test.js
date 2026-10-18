@@ -868,7 +868,9 @@ test('webview focuses stdin on request and returns to the editor with Alt+I or S
   assert.match(html, /const shiftDoubleTap = createShiftDoubleTapDetector\(400\);/);
   assert.match(html, /function focusStdin\(\) \{\s*setWorkspace\('run'\);\s*stdin\.focus\(\);/);
   assert.match(html, /message\.type === 'focusStdin'\) \{\s*focusStdin\(\);/);
-  assert.match(html, /allowsAltI\(\) && isInputFocusShortcut\(event\)\) \{[\s\S]*?event\.preventDefault\(\);\s*event\.stopPropagation\(\);\s*vscode\.postMessage\(\{ type: 'focusEditor' \}\);/);
+  assert.match(html, /allowsAltI\(\) && isInputFocusShortcut\(event\)\) \{[\s\S]*?event\.preventDefault\(\);\s*vscode\.postMessage\(\{ type: 'focusEditor' \}\);/);
+  // The key must reach VS Code so Alt is not seen as a lone press (menu bar focus).
+  assert.doesNotMatch(html, /isInputFocusShortcut\(event\)\) \{[^}]*stopPropagation/);
   assert.match(html, /shiftDoubleTap\.handleKeyDown\(event\);\s*\}, true\);/);
   assert.match(html, /shiftDoubleTap\.handleKeyUp\(event, event\.timeStamp\) && allowsShiftShift\(\)\) \{\s*vscode\.postMessage\(\{ type: 'focusEditor' \}\);\s*\}\s*\}, true\);/);
   assert.match(html, /return inputFocusMode !== 'shiftShift';/);
