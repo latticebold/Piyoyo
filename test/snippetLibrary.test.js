@@ -15,7 +15,7 @@ const EXPECTED_CATEGORY_COUNTS = {
   'number-conversion': 12,
   'list-comprehension': 16,
   'index-slice': 6,
-  string: 8,
+  string: 9,
   'condition-check': 6,
   aggregation: 9,
   'prefix-sum': 2,
@@ -63,6 +63,7 @@ const ADDED_SNIPPET_IDS = [
   'string-count',
   'string-contains', 'string-reverse', 'string-lower', 'string-upper',
   'string-replace', 'string-find',
+  'string-set-char',
   'list-max', 'list-min', 'list-sum', 'list-contains', 'list-count',
   'list-sort-ascending', 'list-sort-descending', 'comprehension-range',
   'comprehension-squares', 'comprehension-even-filter', 'comprehension-conditional-expression', 'comprehension-zero-matrix',
@@ -80,12 +81,12 @@ const ADDED_SNIPPET_IDS = [
   'set-add', 'set-contains', 'dict-lookup', 'dict-contains'
 ];
 
-test('96 snippets have complete frozen metadata in the 14-category usage order', () => {
+test('97 snippets have complete frozen metadata in the 14-category usage order', () => {
   const ids = INPUT_SNIPPETS.map((snippet) => snippet.id);
   const categories = [...new Set(INPUT_SNIPPETS.map((snippet) => snippet.category))];
 
-  assert.equal(INPUT_SNIPPETS.length, 96);
-  assert.equal(new Set(ids).size, 96);
+  assert.equal(INPUT_SNIPPETS.length, 97);
+  assert.equal(new Set(ids).size, 97);
   assert.deepEqual(SNIPPET_CATEGORY_ORDER, Object.keys(EXPECTED_CATEGORY_COUNTS));
   assert.deepEqual(categories, SNIPPET_CATEGORY_ORDER);
   assert.deepEqual(
@@ -195,8 +196,8 @@ test('retained original bodies and imports remain unchanged', () => {
   }
 });
 
-test('the 72 catalog additions have descriptions and are all present', () => {
-  assert.equal(ADDED_SNIPPET_IDS.length, 72);
+test('the 73 catalog additions have descriptions and are all present', () => {
+  assert.equal(ADDED_SNIPPET_IDS.length, 73);
 
   ADDED_SNIPPET_IDS.forEach((id) => {
     const snippet = getInputSnippet(id);
@@ -341,6 +342,21 @@ test('index and slice examples explain selected positions and returned values', 
   assert.match(getInputSnippet('queue-index').description, /i\+1番目.*i=-1なら末尾/);
   assert.equal(getInputSnippet('queue-peek-left'), undefined);
   assert.equal(getInputSnippet('queue-peek-right'), undefined);
+});
+
+test('string-set-char builds a new string and explains immutability', () => {
+  const snippet = getInputSnippet('string-set-char');
+  assert.equal(snippet.category, 'string');
+  assert.equal(snippet.body, '${1:s}[:${2:i}] + "${3:a}" + ${1:s}[${2:i} + 1:]');
+  assert.deepEqual(getSnippetPlaceholders(snippet.body), [
+    { index: 1, defaultValue: 's' },
+    { index: 2, defaultValue: 'i' },
+    { index: 3, defaultValue: 'a' }
+  ]);
+  assert.match(snippet.description, /immutable/);
+  assert.match(snippet.precondition, /0 <= i < len\(s\)/);
+  assert.match(snippet.precondition, /list\(s\).*join/);
+  assert.equal(snippet.complexity.time, 'O(n)');
 });
 
 test('position-returning snippets distinguish zero-based indices from ordinal positions', () => {
