@@ -26,7 +26,7 @@ push 先は `origin`（`latticebold/Piyoyo`）だけです。
 
 部員は GitHub Releases の VSIX を入れて使います。更新を配るときは、次の順番を必ず守ります。詳しい背景は `docs/releasing.md` にあります。
 
-1. **バージョンを上げる**：`package.json` の `version` を上げ、`test/packageManifest.test.js` のバージョンの期待値も合わせる。**公開済みの番号は二度と使わない**（同じ番号で作り直さない）。
+1. **バージョンを上げる**：`package.json` の `version` を上げ、`test/packageManifest.test.js` のバージョンの期待値も合わせる。**公開済みの番号は二度と使わない**（同じ番号で作り直さない）。`CHANGELOG.md` の先頭に、その版の変更点を日本語で追記する。
 2. **確認する**：次がすべて成功することを確かめる。
 
    ```powershell

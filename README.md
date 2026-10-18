@@ -51,6 +51,7 @@ Piyoyoは、GitHub ReleasesからダウンロードしたVSIXファイルを、V
 インストールには `.vsix` ファイルを使ってください。
 
 最初の実行、Pythonの選び方、スニペットの使い方は[利用ガイド](docs/user-guide.md)を参照してください。
+版ごとの変更点は[変更履歴](CHANGELOG.md)にまとめています。
 配布担当者は[リリース手順](docs/releasing.md)を参照してください。
 
 ### インストール後のVSIXファイル
