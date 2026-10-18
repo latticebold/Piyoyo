@@ -29,10 +29,10 @@ function runPython(source) {
 }
 
 function runWithSnippet(id, checks) {
-  return runPython(`${getInputSnippet(id).body}\n\n${checks.join('\n')}\nprint("ok")\n`);
+  return runPython(`${getInputSnippet(id).helpers[0].code}\n\n${checks.join('\n')}\nprint("ok")\n`);
 }
 
-test('string algorithm snippets form their own category with literal function bodies', () => {
+test('string algorithm snippets insert a call and declare their def as a helper', () => {
   assert.deepEqual(
     INPUT_SNIPPETS.filter((snippet) => snippet.category === 'string-algorithm').map((snippet) => snippet.id),
     STRING_ALGORITHM_IDS
@@ -40,12 +40,24 @@ test('string algorithm snippets form their own category with literal function bo
   for (const id of STRING_ALGORITHM_IDS) {
     const snippet = getInputSnippet(id);
     assert.equal(snippet.categoryLabel, '文字列アルゴリズム');
-    assert.match(snippet.label, /^def [a-z_]+\(/);
-    assert.ok(snippet.body.startsWith(`${snippet.label}:\n`), id);
-    assert.deepEqual(getSnippetPlaceholders(snippet.body), [], id);
-    assert.doesNotMatch(snippet.body, /[$\\]/, id);
+    assert.match(snippet.label, /^[a-z_]+\([a-z, ]+\)$/, id);
+    assert.doesNotMatch(snippet.label, /def/, id);
+    assert.doesNotMatch(snippet.body, /\n|def /, id);
     assert.deepEqual(snippet.imports, []);
+    assert.ok(Object.isFrozen(snippet.helpers));
+    assert.equal(snippet.helpers.length, 1, id);
+    const [helper] = snippet.helpers;
+    assert.ok(Object.isFrozen(helper));
+    assert.ok(snippet.label.startsWith(`${helper.name}(`), id);
+    assert.ok(helper.code.startsWith(`def ${snippet.label}:\n`), id);
+    assert.doesNotMatch(helper.code, /[$\\]/, id);
+    assert.doesNotMatch(snippet.precondition, /上に挿入/, id);
+    const defaults = getSnippetPlaceholders(snippet.body).map((field) => field.defaultValue);
+    assert.equal(snippet.body.replace(/\$\{\d+:([^}]*)\}/g, '$1'), snippet.label, id);
+    assert.ok(defaults.length > 0, id);
   }
+  assert.equal(getInputSnippet('string-hamming-distance').body, 'hamming_distance(${1:s}, ${2:t})');
+  assert.equal(getInputSnippet('string-z-algorithm').body, 'z_algorithm(${1:s})');
   assert.match(getInputSnippet('string-hamming-distance').precondition, /長さが違うとValueError/);
   assert.match(getInputSnippet('string-find-all').precondition, /空文字列だとValueError/);
   assert.equal(getInputSnippet('string-levenshtein-distance').complexity.time, 'O(n × m)');
@@ -119,4 +131,29 @@ test('z_algorithm matches a brute-force definition', () => {
     'z = z_algorithm(t + "#" + s)',
     'assert [i - len(t) - 1 for i in range(len(z)) if z[i] == len(t)] == [0, 2]'
   ]).trim(), 'ok');
+});
+
+test('inserting a string algorithm snippet yields a runnable file with one def above the call', async () => {
+  const { insertInputSnippet } = require('../src/snippetInsertion');
+  const { createFakeTextEditor, createFakeVscodeApi } = require('./fakeTextEditor');
+  const { editor, state } = createFakeTextEditor('s = "karolin"\nt = "kathrin"\nprint(');
+  const snippet = getInputSnippet('string-hamming-distance');
+
+  const first = await insertInputSnippet({ vscodeApi: createFakeVscodeApi(), editor, snippet });
+  assert.equal(first.ok, true);
+  assert.deepEqual(first.addedHelpers, ['hamming_distance']);
+  assert.match(first.message, /関数の定義を追加しました: hamming_distance/);
+  state.type(')\nprint(');
+
+  const second = await insertInputSnippet({ vscodeApi: createFakeVscodeApi(), editor, snippet });
+  assert.equal(second.ok, true);
+  assert.deepEqual(second.addedHelpers, []);
+  state.type(')\n');
+
+  assert.equal((state.text.match(/^def hamming_distance\(/gm) || []).length, 1);
+  assert.equal(
+    state.text,
+    `${snippet.helpers[0].code}\n\n\ns = "karolin"\nt = "kathrin"\nprint(hamming_distance(s, t))\nprint(hamming_distance(s, t))\n`
+  );
+  assert.deepEqual(runPython(state.text).split(/\r?\n/), ['3', '3', '']);
 });
