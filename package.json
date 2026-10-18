@@ -30,6 +30,7 @@
   "activationEvents": [
     "onCommand:piyoyo.open",
     "onCommand:ioSprint.open",
+    "onCommand:piyoyo.saveAndRun",
     "onView:piyoyo.runnerView"
   ],
   "main": "./extension.js",
@@ -47,6 +48,18 @@
         "command": "piyoyo.openSettings",
         "title": "Piyoyo: 設定を開く",
         "icon": "$(gear)"
+      },
+      {
+        "command": "piyoyo.saveAndRun",
+        "title": "Piyoyo: 保存して実行"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "piyoyo.saveAndRun",
+        "key": "ctrl+enter",
+        "mac": "cmd+enter",
+        "when": "editorTextFocus && editorLangId == python && !notebookEditorFocused"
       }
     ],
     "menus": {
@@ -128,6 +141,6 @@
   },
   "scripts": {
     "test": "node --test test/*.test.js",
-    "check": "node --check extension.js && node --check src/webviewHtml.js && node --check src/snippetLibrary.js && node --check src/snippetPreferences.js && node --check src/snippetInsertion.js && node --check src/pythonImportInsertion.js && node --check src/pythonHelperInsertion.js &&node --check src/pythonStatements.js && node --check src/runners/pythonRunner.js && node --check src/runners/pythonErrorExplainer.js && node --check src/runners/boundedOutput.js && node --check src/runners/processTermination.js && node --check src/errorDisplayMode.js && node --check src/piyoyoSettings.js && node --check src/targetSelection.js && node --check src/pythonPathSelection.js && node --check src/pythonPathPreference.js && node --check src/pythonLauncherAvailability.js && node --check src/pythonLauncherAvailabilityCache.js && node --check src/ruffImportOrganizer.js"
+    "check": "node --check extension.js && node --check src/webviewHtml.js && node --check src/snippetLibrary.js && node --check src/snippetPreferences.js && node --check src/snippetInsertion.js && node --check src/pythonImportInsertion.js && node --check src/pythonHelperInsertion.js &&node --check src/pythonStatements.js && node --check src/runners/pythonRunner.js && node --check src/runners/pythonErrorExplainer.js && node --check src/runners/boundedOutput.js && node --check src/runners/processTermination.js && node --check src/errorDisplayMode.js && node --check src/piyoyoSettings.js && node --check src/targetSelection.js && node --check src/keyboardShortcuts.js && node --check src/pythonPathSelection.js && node --check src/pythonPathPreference.js && node --check src/pythonLauncherAvailability.js && node --check src/pythonLauncherAvailabilityCache.js && node --check src/ruffImportOrganizer.js"
   }
 }

@@ -44,6 +44,23 @@ test('manifest contributes a gear command to the Piyoyo view title', () => {
   ]);
 });
 
+test('manifest contributes a save-and-run command bound to Ctrl+Enter in Python editors', () => {
+  const command = manifest.contributes.commands.find((item) => item.command === 'piyoyo.saveAndRun');
+  assert.ok(command);
+  assert.equal(command.title, 'Piyoyo: 保存して実行');
+  assert.ok(manifest.activationEvents.includes('onCommand:piyoyo.saveAndRun'));
+
+  const keybinding = manifest.contributes.keybindings.find((item) => item.command === 'piyoyo.saveAndRun');
+  assert.ok(keybinding);
+  assert.equal(keybinding.key, 'ctrl+enter');
+  assert.equal(keybinding.mac, 'cmd+enter');
+  const conditions = keybinding.when.split('&&').map((part) => part.trim());
+  assert.ok(conditions.includes('editorTextFocus'));
+  assert.ok(conditions.includes('editorLangId == python'));
+  // Notebook cells keep their own Ctrl+Enter (run cell).
+  assert.ok(conditions.includes('!notebookEditorFocused'));
+});
+
 test('manifest describes every setting in Japanese', () => {
   const properties = manifest.contributes.configuration.properties;
   for (const [key, setting] of Object.entries(properties)) {
