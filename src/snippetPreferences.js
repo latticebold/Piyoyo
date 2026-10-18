@@ -1,22 +1,26 @@
 'use strict';
 
-const { SNIPPET_CATEGORY_ORDER } = require('./snippetLibrary');
+const { SNIPPET_CATEGORY_ORDER, SNIPPET_ID_ALIASES } = require('./snippetLibrary');
 
 const PREFERENCES_KEY = 'piyoyo.snippetPreferences.v1';
 
-function normalizeSnippetPreferences(value, snippets) {
+function normalizeSnippetPreferences(value, snippets, aliases = SNIPPET_ID_ALIASES) {
   const snippetIds = snippets.map((snippet) => snippet.id);
   const knownIds = new Set(snippetIds);
   const source = value && typeof value === 'object' && !Array.isArray(value)
     ? value
     : {};
+  const isAlias = (snippetId) => !knownIds.has(snippetId) && Object.hasOwn(aliases, snippetId);
+  // Hiding a removed duplicate must not hide the snippet that replaced it.
   const hiddenSnippetIds = [...new Set(
     (Array.isArray(source.hiddenSnippetIds) ? source.hiddenSnippetIds : [])
       .filter((snippetId) => typeof snippetId === 'string' && knownIds.has(snippetId))
   )];
   const configuredOrder = [...new Set(
     (Array.isArray(source.order) ? source.order : [])
-      .filter((snippetId) => typeof snippetId === 'string' && knownIds.has(snippetId))
+      .filter((snippetId) => typeof snippetId === 'string')
+      .map((snippetId) => (isAlias(snippetId) ? aliases[snippetId] : snippetId))
+      .filter((snippetId) => knownIds.has(snippetId))
   )];
   const configuredIds = new Set(configuredOrder);
 

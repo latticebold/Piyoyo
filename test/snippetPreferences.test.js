@@ -29,6 +29,46 @@ test('normalizes hidden ids and appends newly added snippets to the order', () =
   );
 });
 
+test('maps merged ids in the saved order to their survivor and drops unknown ids', () => {
+  const aliases = { 'input-old': 'input-b', 'input-missing-target': 'gone' };
+  assert.deepEqual(
+    normalizeSnippetPreferences({
+      hiddenSnippetIds: ['input-old', 'unknown', 'input-missing-target'],
+      order: ['input-old', 'heap-a', 'input-missing-target', 'unknown', 'input-a']
+    }, SNIPPETS, aliases),
+    {
+      hiddenSnippetIds: [],
+      order: ['input-b', 'heap-a', 'input-a']
+    }
+  );
+});
+
+test('keeps the first position when both a merged id and its survivor are saved', () => {
+  const aliases = { 'input-old': 'input-b' };
+  assert.deepEqual(
+    normalizeSnippetPreferences({
+      hiddenSnippetIds: ['input-old', 'input-b'],
+      order: ['input-a', 'input-b', 'input-old']
+    }, SNIPPETS, aliases),
+    {
+      hiddenSnippetIds: ['input-b'],
+      order: ['input-a', 'input-b', 'heap-a']
+    }
+  );
+});
+
+test('real merged snippet ids from older versions keep working', () => {
+  const { INPUT_SNIPPETS } = require('../src/snippetLibrary');
+  const normalized = normalizeSnippetPreferences({
+    hiddenSnippetIds: ['string-first', 'dict-contains'],
+    order: ['string-slice', 'list-access']
+  }, INPUT_SNIPPETS);
+  assert.deepEqual(normalized.hiddenSnippetIds, []);
+  assert.deepEqual(normalized.order.slice(0, 2), ['list-slice', 'list-access']);
+  assert.equal(normalized.order.length, INPUT_SNIPPETS.length);
+  assert.equal(applySnippetPreferences(INPUT_SNIPPETS, normalized).length, INPUT_SNIPPETS.length);
+});
+
 test('applies visibility and custom order only within the fixed category order', () => {
   const visible = applySnippetPreferences(SNIPPETS, {
     hiddenSnippetIds: ['heap-a'],

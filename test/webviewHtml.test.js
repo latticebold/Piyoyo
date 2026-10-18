@@ -185,7 +185,7 @@ test('webview renders every snippet row in the intended category order', () => {
   });
   assert.match(html, /<summary>\s*<span[^>]*>入力<\/span>/s);
   assert.equal((html.match(/class="snippetCategoryDropdown"/g) || []).length, categoryIds.length);
-  assert.equal((html.match(/data-snippet-variants=/g) || []).length, 11);
+  assert.equal((html.match(/data-snippet-variants=/g) || []).length, 16);
   assert.ok((html.match(/data-snippet-entry=/g) || []).length > 60);
   assert.doesNotMatch(html, /data-snippet-select=/);
   assert.doesNotMatch(html, /class="snippetVariantSelect"/);
@@ -611,7 +611,7 @@ test('snippet rows show badges for helpers and imports, but not for built-ins', 
   assert.match(importRow, /<span class="snippetBadge snippetBadge-import" role="img" aria-label="importが必要: [^"]+"[^>]*>import<\/span>/);
   assert.doesNotMatch(importRow, /snippetBadge-helper/);
 
-  const builtInRow = rowHtml(html, 'output-value');
+  const builtInRow = rowHtml(html, 'output-two-values');
   assert.match(builtInRow, /<span class="snippetBadges" data-snippet-badges><\/span>/);
 
   const groupedRow = rowHtml(html, 'binary-search-bisect-bound');

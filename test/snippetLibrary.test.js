@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const {
   INPUT_SNIPPETS,
   SNIPPET_CATEGORY_ORDER,
+  SNIPPET_ID_ALIASES,
   getInputSnippet,
   getSnippetPlaceholders,
   applySnippetPlaceholderValues
@@ -14,10 +15,10 @@ const EXPECTED_CATEGORY_COUNTS = {
   output: 4,
   'number-conversion': 12,
   'list-comprehension': 16,
-  'index-slice': 6,
+  'index-slice': 3,
   string: 9,
   'condition-check': 6,
-  aggregation: 9,
+  aggregation: 8,
   'prefix-sum': 2,
   'brute-force': 2,
   'binary-search': 3,
@@ -59,8 +60,8 @@ const ADDED_SNIPPET_IDS = [
   'number-abs', 'number-max-two', 'number-min-two', 'number-floor-division',
   'number-remainder', 'math-lcm', 'conversion-int', 'conversion-float',
   'conversion-str', 'conversion-digit-list',
-  'sequence-length', 'string-first', 'string-last',
-  'list-access', 'list-access-from-end', 'list-slice', 'string-slice',
+  'sequence-length',
+  'list-access', 'list-access-from-end', 'list-slice',
   'string-count',
   'string-contains', 'string-reverse', 'string-lower', 'string-upper',
   'string-replace', 'string-find',
@@ -79,15 +80,15 @@ const ADDED_SNIPPET_IDS = [
   'tuple-coordinate', 'tuple-single-item', 'tuple-unpack-coordinate',
   'debug-type', 'debug-isinstance-int', 'debug-isinstance-str',
   'list-append', 'list-pop', 'list-pop-first', 'list-index',
-  'set-add', 'set-contains', 'dict-lookup', 'dict-contains'
+  'set-add', 'set-contains', 'dict-lookup'
 ];
 
-test('101 snippets have complete frozen metadata in the 15-category usage order', () => {
+test('97 snippets have complete frozen metadata in the 15-category usage order', () => {
   const ids = INPUT_SNIPPETS.map((snippet) => snippet.id);
   const categories = [...new Set(INPUT_SNIPPETS.map((snippet) => snippet.category))];
 
-  assert.equal(INPUT_SNIPPETS.length, 101);
-  assert.equal(new Set(ids).size, 101);
+  assert.equal(INPUT_SNIPPETS.length, 97);
+  assert.equal(new Set(ids).size, 97);
   assert.deepEqual(SNIPPET_CATEGORY_ORDER, Object.keys(EXPECTED_CATEGORY_COUNTS));
   assert.deepEqual(categories, SNIPPET_CATEGORY_ORDER);
   assert.deepEqual(
@@ -190,6 +191,68 @@ test('similar alternatives expose stable selector groups for the compact UI', ()
   );
 });
 
+test('trivially different snippets share one variant row', () => {
+  const groups = {
+    'output-single-value': ['output-value', 'output-text'],
+    'string-to-number': ['conversion-int', 'conversion-float'],
+    'string-char-kind': [
+      'string-isdigit', 'string-isalpha', 'string-isalnum',
+      'string-islower', 'string-isupper', 'string-isspace'
+    ],
+    'deque-create': ['queue-deque-empty', 'queue-deque'],
+    'isinstance-type': ['debug-isinstance-int', 'debug-isinstance-str']
+  };
+  for (const [group, ids] of Object.entries(groups)) {
+    assert.deepEqual(
+      INPUT_SNIPPETS.filter((snippet) => snippet.selectorGroup === group).map((snippet) => snippet.id),
+      ids,
+      group
+    );
+    const labels = new Set(ids.map((id) => getInputSnippet(id).selectorGroupLabel));
+    assert.equal(labels.size, 1, group);
+    ids.forEach((id) => assert.ok(getInputSnippet(id).choiceLabel, id));
+  }
+});
+
+test('merged snippet ids point to an existing survivor', () => {
+  assert.deepEqual(SNIPPET_ID_ALIASES, {
+    'string-first': 'list-access',
+    'string-last': 'list-access-from-end',
+    'string-slice': 'list-slice',
+    'dict-contains': 'set-contains'
+  });
+  for (const [removedId, survivorId] of Object.entries(SNIPPET_ID_ALIASES)) {
+    assert.equal(getInputSnippet(removedId), undefined, removedId);
+    assert.ok(getInputSnippet(survivorId), survivorId);
+  }
+  assert.match(getInputSnippet('list-access').description, /s\[0\]/);
+  assert.match(getInputSnippet('list-access-from-end').description, /s\[-1\]/);
+  assert.match(getInputSnippet('set-contains').description, /辞書d/);
+});
+
+test('row titles mention the editable names used in the code', () => {
+  // Defaults that are example values rather than names.
+  const valueDefaults = new Set(['True', 'None', 'x > 0', 'Yes']);
+  const titles = new Map();
+  for (const snippet of INPUT_SNIPPETS) {
+    titles.set(`${snippet.id} summary`, [snippet.summary, snippet.body]);
+    if (snippet.selectorGroup && !titles.has(snippet.selectorGroup)) {
+      titles.set(snippet.selectorGroup, [snippet.selectorGroupLabel, snippet.body]);
+    }
+  }
+  for (const [key, [title, body]] of titles) {
+    for (const { defaultValue } of getSnippetPlaceholders(body)) {
+      if (!valueDefaults.has(defaultValue)) {
+        assert.ok(title.includes(defaultValue), `${key}: "${title}" should mention ${defaultValue}`);
+      }
+    }
+  }
+  assert.equal(getInputSnippet('math-gcd').summary, '整数aとbの最大公約数');
+  assert.equal(getInputSnippet('number-max-two').summary, 'aとbの大きい方');
+  assert.equal(getInputSnippet('conversion-int').summary, '文字列sを整数に変換');
+  assert.equal(getInputSnippet('string-hamming-distance').summary, '同じ長さの文字列sとtのハミング距離');
+});
+
 test('retained original bodies and imports remain unchanged', () => {
   assert.equal(Object.keys(EXISTING_SNIPPET_BODIES_AND_IMPORTS).length, 24);
 
@@ -201,8 +264,8 @@ test('retained original bodies and imports remain unchanged', () => {
   }
 });
 
-test('the 73 catalog additions have descriptions and are all present', () => {
-  assert.equal(ADDED_SNIPPET_IDS.length, 73);
+test('the 69 catalog additions have descriptions and are all present', () => {
+  assert.equal(ADDED_SNIPPET_IDS.length, 69);
 
   ADDED_SNIPPET_IDS.forEach((id) => {
     const snippet = getInputSnippet(id);
@@ -264,14 +327,14 @@ test('deque and tuple additions preserve runnable bodies and educational caveats
   assert.match(getInputSnippet('tuple-coordinate').precondition, /全ての要素もハッシュ可能/);
 });
 
-test('user-facing queue summaries use concept names instead of implementation variables', () => {
+test('queue summaries name the deque and values used in the code', () => {
   const correctedSummaries = {
     'queue-deque-empty': '空のキューを作る',
-    'queue-append': 'キューの右端へ要素を追加',
-    'queue-popleft': 'キューの左端から要素を取り出す',
-    'queue-appendleft': 'dequeの左端へ要素を追加',
-    'queue-pop': 'dequeの右端から要素を取り出す',
-    'queue-index': 'dequeのi+1番目の要素を見る（iが0以上）'
+    'queue-append': 'キューqの右端にxを追加',
+    'queue-popleft': 'キューqの左端から取り出す',
+    'queue-appendleft': 'deque qの左端にxを追加',
+    'queue-pop': 'deque qの右端から取り出す',
+    'queue-index': 'deque qの添字iの要素を見る（i+1番目）'
   };
 
   for (const [id, summary] of Object.entries(correctedSummaries)) {
@@ -312,7 +375,7 @@ test('atomic operations state the target, result, and relevant cost caveat', () 
 test('permutations and combinations create lists of tuples', () => {
   const permutations = getInputSnippet('brute-permutations');
   assert.equal(permutations.body, 'list(permutations(${1:A}))');
-  assert.equal(permutations.summary, 'Aの全ての並び順が入ったリストを作る');
+  assert.equal(permutations.summary, 'リストAの全ての並び順が入ったリストを作る');
   assert.match(permutations.returns, /タプルにしたリスト/);
   assert.match(permutations.complexity.detail, /リストに作る/);
 
@@ -325,8 +388,7 @@ test('index and slice examples explain selected positions and returned values', 
   const examples = {
     'list-access': '${1:A}[${2:i}]',
     'list-access-from-end': '${1:A}[-${2:i}]',
-    'list-slice': '${1:A}[${2:start}:${3:end}]',
-    'string-slice': '${1:s}[${2:start}:${3:end}]'
+    'list-slice': '${1:A}[${2:start}:${3:end}]'
   };
   for (const [id, body] of Object.entries(examples)) {
     const snippet = getInputSnippet(id);
@@ -339,9 +401,8 @@ test('index and slice examples explain selected positions and returned values', 
   assert.match(getInputSnippet('list-access-from-end').description, /iは1から数えます.*1なら末尾/);
   assert.match(getInputSnippet('list-slice').returns, /添字startを含み、添字endを含まない/);
   assert.match(getInputSnippet('list-slice').description, /start\+1番目からend番目/);
-  assert.match(getInputSnippet('string-slice').description, /start\+1番目からend番目/);
+  assert.match(getInputSnippet('list-slice').description, /文字列でも同じ書き方/);
   assert.equal(getInputSnippet('list-slice').complexity.time, 'O(k)');
-  assert.equal(getInputSnippet('string-slice').complexity.time, 'O(k)');
   assert.equal(getInputSnippet('queue-index').complexity.time, 'O(n)');
   assert.match(getInputSnippet('queue-index').complexity.detail, /i=0.*i=-1.*O\(1\).*O\(n\)/);
   assert.match(getInputSnippet('queue-index').description, /i\+1番目.*i=-1なら末尾/);
