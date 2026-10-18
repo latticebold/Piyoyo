@@ -804,24 +804,28 @@ test('workspace tabs follow the tablist pattern with arrow keys', () => {
   assert.match(html, /setWorkspace\(tabs\[nextIndex\]\.dataset\.workspace\);\s*tabs\[nextIndex\]\.focus\(\);/);
 });
 
-test('workspace tabs advertise Alt+Left / Alt+Right with the digit aliases and platform labels', () => {
+test('workspace tabs advertise Shift+Left / Shift+Right with the digit aliases and platform labels', () => {
   const html = getWebviewHtml();
-  assert.match(html, /id="runWorkspaceTab"[^>]*title="実行 \(Alt\+← \/ Alt\+1\)"[^>]*aria-keyshortcuts="Alt\+ArrowLeft Alt\+1"/);
-  assert.match(html, /id="snippetWorkspaceTab"[^>]*title="コード挿入 \(Alt\+→ \/ Alt\+2\)"[^>]*aria-keyshortcuts="Alt\+ArrowRight Alt\+2"/);
-  assert.match(html, /const isMacPlatform = false;/);
+  assert.match(html, /id="runWorkspaceTab"[^>]*title="実行 \(Shift\+← \/ Alt\+1\)。Shift\+←→は文字の入力欄の外で使えます"[^>]*aria-keyshortcuts="Shift\+ArrowLeft Alt\+1"/);
+  assert.match(html, /id="snippetWorkspaceTab"[^>]*title="コード挿入 \(Shift\+→ \/ Alt\+2\)。/);
+  assert.match(html, /id="snippetWorkspaceTab"[^>]*aria-keyshortcuts="Shift\+ArrowRight Alt\+2"/);
+  assert.doesNotMatch(html, /Alt\+Arrow|Alt\+←|isMacPlatform/);
 
   const mac = getWebviewHtml({ platform: 'darwin' });
-  assert.match(mac, /id="runWorkspaceTab"[^>]*title="実行 \(Option\+← \/ Option\+1\)。文字の入力欄では数字のほうを使います"/);
-  assert.match(mac, /id="snippetWorkspaceTab"[^>]*title="コード挿入 \(Option\+→ \/ Option\+2\)。/);
-  assert.match(mac, /const isMacPlatform = true;/);
+  assert.match(mac, /id="runWorkspaceTab"[^>]*title="実行 \(Shift\+← \/ Option\+1\)。/);
+  assert.match(mac, /id="snippetWorkspaceTab"[^>]*title="コード挿入 \(Shift\+→ \/ Option\+2\)。/);
 });
 
-test('Alt+Left / Alt+Right and Alt+1 / Alt+2 switch workspaces from anywhere and move focus into the shown panel', () => {
+test('Shift+Left / Shift+Right switch workspaces outside text fields and Alt+1 / Alt+2 from anywhere', () => {
   const html = getWebviewHtml();
   assert.match(html, /function getWorkspaceShortcutTarget\(event, \{ allowArrows = true \} = \{\}\)/);
   assert.match(html, /function isTextEntryTarget\(element\)/);
-  // macOS Option+Arrow keeps moving by word inside text fields.
-  assert.match(html, /const shortcutWorkspace = getWorkspaceShortcutTarget\(event, \{\s*allowArrows: !\(isMacPlatform && isTextEntryTarget\(event\.target\)\)\s*\}\);\s*if \(shortcutWorkspace\) \{[\s\S]*?event\.preventDefault\(\);\s*setWorkspace\(shortcutWorkspace, \{ focusPanel: true \}\);/);
+  // Shift+Arrow keeps selecting text inside text fields.
+  assert.match(html, /const shortcutWorkspace = getWorkspaceShortcutTarget\(event, \{\s*allowArrows: !isTextEntryTarget\(event\.target\)\s*\}\);\s*if \(shortcutWorkspace\) \{[\s\S]*?event\.preventDefault\(\);[\s\S]*?setWorkspace\(shortcutWorkspace, \{ focusPanel: true, avoidTextEntry: event\.shiftKey \}\);/);
+  // After a Shift+Arrow switch focus lands on the tab instead of a text field.
+  assert.match(html, /if \(avoidTextEntry && isTextEntryTarget\(target\)\) \{\s*return Array\.from\(workspaceTabs\)\.find\(\(tab\) => tab\.dataset\.workspace === workspace\) \|\| target;/);
+  // Tab buttons leave Shift+Arrow to the global handler.
+  assert.match(html, /if \(nextIndex < 0 \|\| event\.altKey \|\| event\.ctrlKey \|\| event\.metaKey \|\| event\.shiftKey\) \{/);
   // Same as Alt+I: stopping the event would leave VS Code with a lone Alt press.
   assert.doesNotMatch(html, /if \(shortcutWorkspace\) \{[^}]*stopPropagation/);
   // Mouse clicks keep focus on the tab.
@@ -832,7 +836,7 @@ test('shortcut hint bar sits above the tabs and follows the platform and input f
   const html = getWebviewHtml();
   assert.match(html, /<main class="runner">\s*<div class="shortcutHintBar"[\s\S]*?<\/div>\s*<div class="workspaceHeader">/);
   assert.match(html, /<kbd id="inputFocusHintKey">Alt\+I<\/kbd>: エディタ⇄パネル/);
-  assert.match(html, /<kbd>Alt\+←→<\/kbd>: タブ切替/);
+  assert.match(html, /<kbd>Shift\+←→<\/kbd>: タブ切替（入力欄の外）/);
   assert.match(html, /<kbd>Ctrl\+Enter<\/kbd>: 保存して実行/);
   assert.match(html, /\.shortcutHintBar\s*\{(?=[^}]*flex-wrap:\s*wrap;)(?=[^}]*font-size:\s*var\(--piyoyo-font-small\);)[^}]*\}/s);
   assert.match(html, /\.shortcutHintItem\s*\{[^}]*white-space:\s*nowrap;/s);
@@ -843,7 +847,7 @@ test('shortcut hint bar sits above the tabs and follows the platform and input f
     inputFocusShortcut: { mode: 'both', label: 'Option+I / Shift 2回' }
   });
   assert.match(mac, /<kbd id="inputFocusHintKey">Option\+I \/ Shift 2回<\/kbd>/);
-  assert.match(mac, /<kbd>Option\+←→<\/kbd>: タブ切替/);
+  assert.match(mac, /<kbd>Shift\+←→<\/kbd>: タブ切替/);
   assert.match(mac, /<kbd>Cmd\+Enter<\/kbd>: 保存して実行/);
 
   const shift = getWebviewHtml({ inputFocusShortcut: { mode: 'shiftShift', label: 'Shift 2回' } });
@@ -865,8 +869,9 @@ test('hiding a workspace that holds focus moves focus into the shown panel', () 
   assert.match(html, /panel\.addEventListener\('focusin', \(event\) => \{\s*lastFocusedInWorkspace\[panel\.dataset\.workspacePanel\] = event\.target;/);
   assert.match(html, /element\.isConnected && !element\.disabled\s*&& element\.getClientRects\(\)\.length > 0/);
   assert.match(html, /return snippetPreferencesOpen \? snippetPreferencesSearchInput : snippetSearchInput;\s*\}\s*return stdin;/);
+  assert.match(html, /const target = canRestoreFocus\(remembered\) \? remembered : getDefaultWorkspaceFocusTarget\(workspace\);/);
   // Focus is checked before the panel is hidden, and only while the webview itself has focus.
-  assert.match(html, /const focusWillBeHidden = document\.hasFocus\(\) && Array\.from\(workspacePanels\)\.some\(\s*\(panel\) => panel\.dataset\.workspacePanel !== workspace && panel\.contains\(activeElement\)\s*\);[\s\S]*?panel\.hidden = panel\.dataset\.workspacePanel !== workspace;[\s\S]*?if \(focusPanel \|\| focusWillBeHidden\) \{\s*getWorkspaceFocusTarget\(workspace\)\.focus\(\);/);
+  assert.match(html, /const focusWillBeHidden = document\.hasFocus\(\) && Array\.from\(workspacePanels\)\.some\(\s*\(panel\) => panel\.dataset\.workspacePanel !== workspace && panel\.contains\(activeElement\)\s*\);[\s\S]*?panel\.hidden = panel\.dataset\.workspacePanel !== workspace;[\s\S]*?if \(focusPanel \|\| focusWillBeHidden\) \{\s*getWorkspaceFocusTarget\(workspace, \{ avoidTextEntry \}\)\.focus\(\);/);
 });
 
 test('snippet list uses roving focus, Enter inserts, and chips are reached with arrows', () => {

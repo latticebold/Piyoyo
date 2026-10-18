@@ -505,12 +505,11 @@ function getWebviewHtml({
   workspaceShortcutLabels = getWorkspaceShortcutLabels(platform)
 } = {}) {
   const nonce = getNonce();
-  const isMacPlatform = platform === 'darwin';
   const runTabShortcut = escapeHtml(`${workspaceShortcutLabels.run} / ${workspaceShortcutLabels.runAlias}`);
   const snippetTabShortcut = escapeHtml(`${workspaceShortcutLabels.snippets} / ${workspaceShortcutLabels.snippetsAlias}`);
   const tabSwitchLabel = escapeHtml(workspaceShortcutLabels.switch);
-  // Option+Arrow keeps moving by word inside macOS text fields, so only the digits work there.
-  const tabTitleSuffix = isMacPlatform ? '。文字の入力欄では数字のほうを使います' : '';
+  // Shift+Arrow keeps selecting text inside text fields, so only the digit aliases work there.
+  const tabTitleSuffix = '。Shift+←→は文字の入力欄の外で使えます';
   const inputFocusMode = normalizeInputFocusShortcut(inputFocusShortcut && inputFocusShortcut.mode);
   const inputFocusLabel = String((inputFocusShortcut && inputFocusShortcut.label) || 'Alt+I');
   const escapedRunShortcutLabel = escapeHtml(runShortcutLabel);
@@ -1853,13 +1852,13 @@ function getWebviewHtml({
   <main class="runner">
     <div class="shortcutHintBar" aria-label="主なショートカット">
       <span class="shortcutHintItem"><kbd id="inputFocusHintKey">${escapeHtml(inputFocusLabel)}</kbd>: エディタ⇄パネル</span>
-      <span class="shortcutHintItem"><kbd>${tabSwitchLabel}</kbd>: タブ切替</span>
+      <span class="shortcutHintItem"><kbd>${tabSwitchLabel}</kbd>: タブ切替（入力欄の外）</span>
       <span class="shortcutHintItem"><kbd>${escapedRunShortcutLabel}</kbd>: 保存して実行</span>
     </div>
     <div class="workspaceHeader">
       <nav class="workspaceTabs" role="tablist" aria-label="Piyoyoの機能">
-        <button id="runWorkspaceTab" class="workspaceTab" type="button" role="tab" aria-selected="true" aria-controls="runWorkspace" tabindex="0" data-workspace="run" title="実行 (${runTabShortcut})${tabTitleSuffix}" aria-keyshortcuts="Alt+ArrowLeft Alt+1">実行</button>
-        <button id="snippetWorkspaceTab" class="workspaceTab" type="button" role="tab" aria-selected="false" aria-controls="snippetWorkspace" tabindex="-1" data-workspace="snippets" title="コード挿入 (${snippetTabShortcut})${tabTitleSuffix}" aria-keyshortcuts="Alt+ArrowRight Alt+2">コード挿入</button>
+        <button id="runWorkspaceTab" class="workspaceTab" type="button" role="tab" aria-selected="true" aria-controls="runWorkspace" tabindex="0" data-workspace="run" title="実行 (${runTabShortcut})${tabTitleSuffix}" aria-keyshortcuts="Shift+ArrowLeft Alt+1">実行</button>
+        <button id="snippetWorkspaceTab" class="workspaceTab" type="button" role="tab" aria-selected="false" aria-controls="snippetWorkspace" tabindex="-1" data-workspace="snippets" title="コード挿入 (${snippetTabShortcut})${tabTitleSuffix}" aria-keyshortcuts="Shift+ArrowRight Alt+2">コード挿入</button>
       </nav>
       <button id="openSettingsButton" class="settingsButton" type="button" data-open-settings aria-label="Piyoyoの設定を開く" title="Piyoyoの設定を開く"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="8" cy="8" r="4.6" fill="none" stroke="currentColor" stroke-width="1.4"/></svg></button>
     </div>
@@ -2028,7 +2027,6 @@ function getWebviewHtml({
     ${getStdinPlaceholder.toString()}
     ${getStdinTitle.toString()}
     let inputFocusMode = ${scriptJson(inputFocusMode)};
-    const isMacPlatform = ${scriptJsonData(isMacPlatform)};
     const inputFocusHintKey = document.getElementById('inputFocusHintKey');
     const shiftDoubleTap = createShiftDoubleTapDetector(${SHIFT_DOUBLE_TAP_INTERVAL_MS});
     const emptySelectionHelp = ${scriptJson(EMPTY_SELECTION_HELP)};
@@ -2097,20 +2095,26 @@ function getWebviewHtml({
         && element.getClientRects().length > 0);
     }
 
-    function getWorkspaceFocusTarget(workspace) {
-      const remembered = lastFocusedInWorkspace[workspace];
-      if (canRestoreFocus(remembered)) {
-        return remembered;
-      }
+    function getDefaultWorkspaceFocusTarget(workspace) {
       if (workspace === 'snippets') {
         return snippetPreferencesOpen ? snippetPreferencesSearchInput : snippetSearchInput;
       }
       return stdin;
     }
 
+    // avoidTextEntry falls back to the workspace's tab instead of a text field.
+    function getWorkspaceFocusTarget(workspace, { avoidTextEntry = false } = {}) {
+      const remembered = lastFocusedInWorkspace[workspace];
+      const target = canRestoreFocus(remembered) ? remembered : getDefaultWorkspaceFocusTarget(workspace);
+      if (avoidTextEntry && isTextEntryTarget(target)) {
+        return Array.from(workspaceTabs).find((tab) => tab.dataset.workspace === workspace) || target;
+      }
+      return target;
+    }
+
     // focusPanel moves focus into the shown panel. Otherwise focus only moves when it
     // would be lost inside the panel being hidden.
-    function setWorkspace(workspace, { focusPanel = false } = {}) {
+    function setWorkspace(workspace, { focusPanel = false, avoidTextEntry = false } = {}) {
       closeComplexityPopover();
       const activeElement = document.activeElement;
       // An unfocused webview still reports its last activeElement; never steal focus then.
@@ -2127,7 +2131,7 @@ function getWebviewHtml({
       });
       saveViewState({ workspace });
       if (focusPanel || focusWillBeHidden) {
-        getWorkspaceFocusTarget(workspace).focus();
+        getWorkspaceFocusTarget(workspace, { avoidTextEntry }).focus();
       }
     }
 
@@ -2732,7 +2736,7 @@ function getWebviewHtml({
       tab.addEventListener('keydown', (event) => {
         const tabs = Array.from(workspaceTabs);
         const nextIndex = getNextIndex(tabs.indexOf(tab), tabs.length, event.key, 'horizontal');
-        if (nextIndex < 0 || event.altKey || event.ctrlKey || event.metaKey) {
+        if (nextIndex < 0 || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
           return;
         }
         event.preventDefault();
@@ -2990,12 +2994,13 @@ function getWebviewHtml({
         return;
       }
       const shortcutWorkspace = getWorkspaceShortcutTarget(event, {
-        allowArrows: !(isMacPlatform && isTextEntryTarget(event.target))
+        allowArrows: !isTextEntryTarget(event.target)
       });
       if (shortcutWorkspace) {
         // Let it bubble: VS Code must still see the Alt key combo (see Alt+I).
         event.preventDefault();
-        setWorkspace(shortcutWorkspace, { focusPanel: true });
+        // Shift+Arrow must stay usable after the switch, so it never lands in a text field.
+        setWorkspace(shortcutWorkspace, { focusPanel: true, avoidTextEntry: event.shiftKey });
         return;
       }
       if (isRunShortcut(event)) {

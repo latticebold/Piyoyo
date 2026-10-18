@@ -28,23 +28,33 @@ function isInputFocusShortcut(event) {
   return event.code === 'KeyI';
 }
 
-// Returns 'run', 'snippets', or '' for Alt+Left / Alt+Right and the Alt+1 / Alt+2 aliases
-// (macOS Option). allowArrows is false where Option+Arrow must keep moving by word.
+// Returns 'run', 'snippets', or '' for Shift+Left / Shift+Right and the Alt+1 / Alt+2 aliases
+// (macOS Option). allowArrows is false in text fields, where Shift+Arrow selects text.
+// Repeats are allowed: each key always picks the same tab, so holding it is harmless.
 function getWorkspaceShortcutTarget(event, { allowArrows = true } = {}) {
-  if (!event || !event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+  if (!event || event.ctrlKey || event.metaKey) {
     return '';
   }
   if (event.isComposing || event.keyCode === 229) {
     return '';
   }
+  if (event.shiftKey && !event.altKey) {
+    if (!allowArrows) {
+      return '';
+    }
+    if (event.code === 'ArrowLeft') {
+      return 'run';
+    }
+    return event.code === 'ArrowRight' ? 'snippets' : '';
+  }
+  if (!event.altKey || event.shiftKey) {
+    return '';
+  }
   // event.code keeps the physical key on macOS and AZERTY; numpad stays free for Alt codes.
-  if (event.code === 'Digit1' || (allowArrows && event.code === 'ArrowLeft')) {
+  if (event.code === 'Digit1') {
     return 'run';
   }
-  if (event.code === 'Digit2' || (allowArrows && event.code === 'ArrowRight')) {
-    return 'snippets';
-  }
-  return '';
+  return event.code === 'Digit2' ? 'snippets' : '';
 }
 
 function isTextEntryTarget(element) {
@@ -190,9 +200,9 @@ const WORKSPACE_SHORTCUT_COMMAND = 'piyoyo.workspaceShortcut';
 function getWorkspaceShortcutLabels(platform) {
   const modifier = platform === 'darwin' ? 'Option' : 'Alt';
   return {
-    run: `${modifier}+←`,
-    snippets: `${modifier}+→`,
-    switch: `${modifier}+←→`,
+    run: 'Shift+←',
+    snippets: 'Shift+→',
+    switch: 'Shift+←→',
     runAlias: `${modifier}+1`,
     snippetsAlias: `${modifier}+2`
   };

@@ -163,10 +163,13 @@ test('manifest keeps the tab keys inside the Piyoyo panel away from openEditorAt
     .map((item) => ({ key: item.key, mac: item.mac, args: item.args, when: item.when }));
   assert.deepEqual(bindings, [
     { key: 'alt+1', mac: 'alt+1', args: undefined, when: 'piyoyo.runnerFocused && !editorTextFocus' },
-    { key: 'alt+2', mac: 'alt+2', args: undefined, when: 'piyoyo.runnerFocused && !editorTextFocus' },
-    { key: 'alt+left', mac: 'alt+left', args: undefined, when: 'piyoyo.runnerFocused && !editorTextFocus' },
-    { key: 'alt+right', mac: 'alt+right', args: undefined, when: 'piyoyo.runnerFocused && !editorTextFocus' }
+    { key: 'alt+2', mac: 'alt+2', args: undefined, when: 'piyoyo.runnerFocused && !editorTextFocus' }
   ]);
+  // Alt+Left / Alt+Right stay with VS Code's Go Back / Go Forward.
+  const keys = manifest.contributes.keybindings.flatMap((item) => [item.key, item.mac]);
+  for (const key of ['alt+left', 'alt+right', 'shift+left', 'shift+right']) {
+    assert.ok(!keys.includes(key), key);
+  }
 });
 
 test('manifest offers the input focus shortcut setting with Japanese choices', () => {

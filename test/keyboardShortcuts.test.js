@@ -36,23 +36,29 @@ test('getWorkspaceShortcutTarget ignores other keys, modifiers, numpad and IME',
   assert.equal(getWorkspaceShortcutTarget(undefined), '');
 });
 
-test('getWorkspaceShortcutTarget maps Alt+Left / Alt+Right to the left and right tab', () => {
-  assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'ArrowLeft', key: 'ArrowLeft' }), 'run');
-  assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'ArrowRight', key: 'ArrowRight' }), 'snippets');
-  assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'ArrowRight', key: 'ArrowRight', repeat: true }), 'snippets');
-  // NumLock-off numpad reports ArrowLeft as key but must stay free for Alt codes.
-  assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'Numpad4', key: 'ArrowLeft' }), '');
+test('getWorkspaceShortcutTarget maps Shift+Left / Shift+Right to the left and right tab', () => {
+  assert.equal(getWorkspaceShortcutTarget({ shiftKey: true, code: 'ArrowLeft', key: 'ArrowLeft' }), 'run');
+  assert.equal(getWorkspaceShortcutTarget({ shiftKey: true, code: 'ArrowRight', key: 'ArrowRight' }), 'snippets');
+  assert.equal(getWorkspaceShortcutTarget({ shiftKey: true, code: 'ArrowRight', key: 'ArrowRight', repeat: true }), 'snippets');
+  assert.equal(getWorkspaceShortcutTarget({ shiftKey: true, code: 'Numpad4', key: 'ArrowLeft' }), '');
   assert.equal(getWorkspaceShortcutTarget({ code: 'ArrowLeft', key: 'ArrowLeft' }), '');
-  assert.equal(getWorkspaceShortcutTarget({ altKey: true, shiftKey: true, code: 'ArrowLeft', key: 'ArrowLeft' }), '');
-  assert.equal(getWorkspaceShortcutTarget({ altKey: true, ctrlKey: true, code: 'ArrowRight', key: 'ArrowRight' }), '');
-  assert.equal(getWorkspaceShortcutTarget({ altKey: true, metaKey: true, code: 'ArrowRight', key: 'ArrowRight' }), '');
-  assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'ArrowUp', key: 'ArrowUp' }), '');
+  assert.equal(getWorkspaceShortcutTarget({ shiftKey: true, code: 'ArrowUp', key: 'ArrowUp' }), '');
+  assert.equal(getWorkspaceShortcutTarget({ shiftKey: true, ctrlKey: true, code: 'ArrowRight', key: 'ArrowRight' }), '');
+  assert.equal(getWorkspaceShortcutTarget({ shiftKey: true, metaKey: true, code: 'ArrowRight', key: 'ArrowRight' }), '');
+  assert.equal(getWorkspaceShortcutTarget({ shiftKey: true, altKey: true, code: 'ArrowLeft', key: 'ArrowLeft' }), '');
+  assert.equal(getWorkspaceShortcutTarget({ shiftKey: true, code: 'ArrowLeft', key: 'ArrowLeft', isComposing: true }), '');
+  assert.equal(getWorkspaceShortcutTarget({ shiftKey: true, code: 'ArrowLeft', key: 'Process', keyCode: 229 }), '');
 });
 
-test('getWorkspaceShortcutTarget can leave arrows alone while keeping the digit aliases', () => {
+test('getWorkspaceShortcutTarget no longer uses Alt+Left / Alt+Right', () => {
+  assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'ArrowLeft', key: 'ArrowLeft' }), '');
+  assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'ArrowRight', key: 'ArrowRight' }), '');
+});
+
+test('getWorkspaceShortcutTarget leaves Shift+Arrow to text fields while keeping the digit aliases', () => {
   const options = { allowArrows: false };
-  assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'ArrowLeft', key: 'ArrowLeft' }, options), '');
-  assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'ArrowRight', key: 'ArrowRight' }, options), '');
+  assert.equal(getWorkspaceShortcutTarget({ shiftKey: true, code: 'ArrowLeft', key: 'ArrowLeft' }, options), '');
+  assert.equal(getWorkspaceShortcutTarget({ shiftKey: true, code: 'ArrowRight', key: 'ArrowRight' }, options), '');
   assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'Digit1', key: '¡' }, options), 'run');
   assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'Digit2', key: '™' }, options), 'snippets');
 });
@@ -69,15 +75,15 @@ test('isTextEntryTarget only matches fields where arrows move the caret', () => 
   assert.equal(isTextEntryTarget(null), false);
 });
 
-test('workspace shortcut labels follow the platform', () => {
-  const alt = { run: 'Alt+←', snippets: 'Alt+→', switch: 'Alt+←→', runAlias: 'Alt+1', snippetsAlias: 'Alt+2' };
+test('workspace shortcut labels use Shift arrows and platform digit aliases', () => {
+  const alt = { run: 'Shift+←', snippets: 'Shift+→', switch: 'Shift+←→', runAlias: 'Alt+1', snippetsAlias: 'Alt+2' };
   assert.deepEqual(getWorkspaceShortcutLabels('win32'), alt);
   assert.deepEqual(getWorkspaceShortcutLabels('linux'), alt);
   assert.deepEqual(getWorkspaceShortcutLabels(), alt);
   assert.deepEqual(getWorkspaceShortcutLabels('darwin'), {
-    run: 'Option+←',
-    snippets: 'Option+→',
-    switch: 'Option+←→',
+    run: 'Shift+←',
+    snippets: 'Shift+→',
+    switch: 'Shift+←→',
     runAlias: 'Option+1',
     snippetsAlias: 'Option+2'
   });
