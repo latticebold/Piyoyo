@@ -17,6 +17,64 @@ function isRunShortcut(event) {
   return Boolean(event.ctrlKey || event.metaKey);
 }
 
+function isInputFocusShortcut(event) {
+  if (!event || !event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+    return false;
+  }
+  if (event.isComposing || event.keyCode === 229) {
+    return false;
+  }
+  // event.code stays KeyI even when macOS Option+I produces a dead key.
+  return event.code === 'KeyI';
+}
+
+// Detects two clean Shift taps (no other key in between) within intervalMs.
+function createShiftDoubleTapDetector(intervalMs) {
+  let shiftDown = false;
+  let cleanTap = false;
+  let lastTapAt = -Infinity;
+  const reset = () => {
+    shiftDown = false;
+    cleanTap = false;
+    lastTapAt = -Infinity;
+  };
+  return {
+    handleKeyDown(event) {
+      if (!event || event.isComposing || event.keyCode === 229 || event.key !== 'Shift') {
+        reset();
+        return;
+      }
+      if (event.repeat) {
+        return;
+      }
+      if (event.ctrlKey || event.altKey || event.metaKey) {
+        reset();
+        return;
+      }
+      shiftDown = true;
+      cleanTap = true;
+    },
+    handleKeyUp(event, now) {
+      if (!event || event.key !== 'Shift') {
+        return false;
+      }
+      const wasCleanTap = shiftDown && cleanTap && !event.isComposing;
+      shiftDown = false;
+      cleanTap = false;
+      if (!wasCleanTap) {
+        lastTapAt = -Infinity;
+        return false;
+      }
+      if (now - lastTapAt <= intervalMs) {
+        lastTapAt = -Infinity;
+        return true;
+      }
+      lastTapAt = now;
+      return false;
+    }
+  };
+}
+
 function isSearchShortcut(event, targetIsEditable) {
   if (!event || event.altKey || event.isComposing || event.keyCode === 229) {
     return false;
@@ -68,11 +126,38 @@ function getRunShortcutLabel(platform) {
   return platform === 'darwin' ? 'Cmd+Enter' : 'Ctrl+Enter';
 }
 
+const INPUT_FOCUS_SHORTCUTS = Object.freeze(['altI', 'shiftShift', 'both']);
+const DEFAULT_INPUT_FOCUS_SHORTCUT = 'altI';
+const SHIFT_DOUBLE_TAP_INTERVAL_MS = 400;
+
+function normalizeInputFocusShortcut(value) {
+  return INPUT_FOCUS_SHORTCUTS.includes(value) ? value : DEFAULT_INPUT_FOCUS_SHORTCUT;
+}
+
+function getInputFocusShortcutLabel(mode, platform) {
+  const altLabel = platform === 'darwin' ? 'Option+I' : 'Alt+I';
+  const normalized = normalizeInputFocusShortcut(mode);
+  if (normalized === 'shiftShift') {
+    return 'Shift 2回';
+  }
+  if (normalized === 'both') {
+    return `${altLabel} / Shift 2回`;
+  }
+  return altLabel;
+}
+
 module.exports = {
+  DEFAULT_INPUT_FOCUS_SHORTCUT,
+  INPUT_FOCUS_SHORTCUTS,
+  SHIFT_DOUBLE_TAP_INTERVAL_MS,
+  createShiftDoubleTapDetector,
+  getInputFocusShortcutLabel,
   getNextIndex,
   getRunShortcutLabel,
   isEditableTarget,
   isImeComposing,
+  isInputFocusShortcut,
   isRunShortcut,
-  isSearchShortcut
+  isSearchShortcut,
+  normalizeInputFocusShortcut
 };

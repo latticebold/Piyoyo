@@ -75,3 +75,93 @@ test('getRunShortcutLabel shows Cmd on macOS and Ctrl elsewhere', () => {
   assert.equal(getRunShortcutLabel('win32'), 'Ctrl+Enter');
   assert.equal(getRunShortcutLabel('linux'), 'Ctrl+Enter');
 });
+
+const {
+  createShiftDoubleTapDetector,
+  getInputFocusShortcutLabel,
+  isInputFocusShortcut,
+  normalizeInputFocusShortcut
+} = require('../src/keyboardShortcuts');
+
+function tapShift(detector, at, extra = {}) {
+  detector.handleKeyDown({ key: 'Shift', shiftKey: true, ...extra });
+  return detector.handleKeyUp({ key: 'Shift' }, at);
+}
+
+test('isInputFocusShortcut matches Alt+I by physical key, also for the macOS dead key', () => {
+  assert.equal(isInputFocusShortcut({ code: 'KeyI', key: 'i', altKey: true }), true);
+  assert.equal(isInputFocusShortcut({ code: 'KeyI', key: 'Dead', altKey: true }), true);
+  assert.equal(isInputFocusShortcut({ code: 'KeyI', key: 'i' }), false);
+  assert.equal(isInputFocusShortcut({ code: 'KeyI', altKey: true, ctrlKey: true }), false);
+  assert.equal(isInputFocusShortcut({ code: 'KeyI', altKey: true, shiftKey: true }), false);
+  assert.equal(isInputFocusShortcut({ code: 'KeyI', altKey: true, metaKey: true }), false);
+  assert.equal(isInputFocusShortcut({ code: 'KeyI', altKey: true, isComposing: true }), false);
+  assert.equal(isInputFocusShortcut({ code: 'KeyJ', altKey: true }), false);
+  assert.equal(isInputFocusShortcut(undefined), false);
+});
+
+test('shift double tap fires once for two quick clean taps', () => {
+  const detector = createShiftDoubleTapDetector(400);
+  assert.equal(tapShift(detector, 1000), false);
+  assert.equal(tapShift(detector, 1300), true);
+  // A third tap starts over instead of firing again.
+  assert.equal(tapShift(detector, 1500), false);
+});
+
+test('shift double tap ignores slow taps', () => {
+  const detector = createShiftDoubleTapDetector(400);
+  assert.equal(tapShift(detector, 1000), false);
+  assert.equal(tapShift(detector, 1500), false);
+  assert.equal(tapShift(detector, 1700), true);
+});
+
+test('shift double tap ignores Shift used to type a capital letter', () => {
+  const detector = createShiftDoubleTapDetector(400);
+  detector.handleKeyDown({ key: 'Shift', shiftKey: true });
+  detector.handleKeyDown({ key: 'A', shiftKey: true });
+  assert.equal(detector.handleKeyUp({ key: 'Shift' }, 1000), false);
+  assert.equal(tapShift(detector, 1100), false);
+});
+
+test('shift double tap is reset by another key between the taps', () => {
+  const detector = createShiftDoubleTapDetector(400);
+  assert.equal(tapShift(detector, 1000), false);
+  detector.handleKeyDown({ key: 'a' });
+  assert.equal(tapShift(detector, 1100), false);
+});
+
+test('shift double tap ignores key repeat, other modifiers and IME composition', () => {
+  const repeat = createShiftDoubleTapDetector(400);
+  repeat.handleKeyDown({ key: 'Shift' });
+  repeat.handleKeyDown({ key: 'Shift', repeat: true });
+  assert.equal(repeat.handleKeyUp({ key: 'Shift' }, 1000), false);
+  assert.equal(tapShift(repeat, 1100), true);
+
+  const withCtrl = createShiftDoubleTapDetector(400);
+  assert.equal(tapShift(withCtrl, 1000), false);
+  assert.equal(tapShift(withCtrl, 1100, { ctrlKey: true }), false);
+
+  const composing = createShiftDoubleTapDetector(400);
+  assert.equal(tapShift(composing, 1000), false);
+  composing.handleKeyDown({ key: 'Shift', isComposing: true });
+  assert.equal(composing.handleKeyUp({ key: 'Shift', isComposing: true }, 1100), false);
+  assert.equal(tapShift(composing, 1200), false);
+});
+
+test('shift double tap needs a keydown before the keyup', () => {
+  const detector = createShiftDoubleTapDetector(400);
+  assert.equal(detector.handleKeyUp({ key: 'Shift' }, 1000), false);
+  assert.equal(detector.handleKeyUp({ key: 'Shift' }, 1100), false);
+  assert.equal(detector.handleKeyUp({ key: 'a' }, 1200), false);
+});
+
+test('input focus shortcut setting falls back to Alt+I and labels each option', () => {
+  assert.equal(normalizeInputFocusShortcut('shiftShift'), 'shiftShift');
+  assert.equal(normalizeInputFocusShortcut('both'), 'both');
+  assert.equal(normalizeInputFocusShortcut('unknown'), 'altI');
+  assert.equal(normalizeInputFocusShortcut(undefined), 'altI');
+  assert.equal(getInputFocusShortcutLabel('altI', 'win32'), 'Alt+I');
+  assert.equal(getInputFocusShortcutLabel('altI', 'darwin'), 'Option+I');
+  assert.equal(getInputFocusShortcutLabel('shiftShift', 'win32'), 'Shift 2回');
+  assert.equal(getInputFocusShortcutLabel('both', 'linux'), 'Alt+I / Shift 2回');
+});

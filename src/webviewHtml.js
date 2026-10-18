@@ -11,12 +11,25 @@ const {
   normalizeErrorDisplayMode
 } = require('./errorDisplayMode');
 const {
+  DEFAULT_INPUT_FOCUS_SHORTCUT,
+  SHIFT_DOUBLE_TAP_INTERVAL_MS,
+  createShiftDoubleTapDetector,
   getNextIndex,
   isEditableTarget,
   isImeComposing,
+  isInputFocusShortcut,
   isRunShortcut,
-  isSearchShortcut
+  isSearchShortcut,
+  normalizeInputFocusShortcut
 } = require('./keyboardShortcuts');
+
+function getStdinPlaceholder(shortcutLabel) {
+  return `ここに複数行の入力を貼り付け（${shortcutLabel} でエディタと行き来）`;
+}
+
+function getStdinTitle(shortcutLabel) {
+  return `${shortcutLabel} でPythonのエディタと行き来できます`;
+}
 
 const EMPTY_SELECTION_HELP = '一覧から使いたいコードを選んでください（↑↓ で移動、Enter で挿入）。';
 
@@ -483,9 +496,12 @@ function getWebviewHtml({
   snippetPreferences = { hiddenSnippetIds: [], order: [] },
   defaultSnippetOrder = preferenceSnippets.map((snippet) => snippet.id),
   errorDisplayMode = DEFAULT_ERROR_DISPLAY_MODE,
-  runShortcutLabel = 'Ctrl+Enter'
+  runShortcutLabel = 'Ctrl+Enter',
+  inputFocusShortcut = { mode: DEFAULT_INPUT_FOCUS_SHORTCUT, label: 'Alt+I' }
 } = {}) {
   const nonce = getNonce();
+  const inputFocusMode = normalizeInputFocusShortcut(inputFocusShortcut && inputFocusShortcut.mode);
+  const inputFocusLabel = String((inputFocusShortcut && inputFocusShortcut.label) || 'Alt+I');
   const escapedRunShortcutLabel = escapeHtml(runShortcutLabel);
   const isMacShortcut = runShortcutLabel.startsWith('Cmd');
   const modifierLabel = isMacShortcut ? 'Cmd' : 'Ctrl';
@@ -1791,7 +1807,7 @@ function getWebviewHtml({
 
       <label class="ioLabel">
         標準入力
-        <textarea id="stdin" class="stdinBox" spellcheck="false" placeholder="ここに複数行の入力を貼り付け"></textarea>
+        <textarea id="stdin" class="stdinBox" spellcheck="false" placeholder="${escapeHtml(getStdinPlaceholder(inputFocusLabel))}" title="${escapeHtml(getStdinTitle(inputFocusLabel))}"></textarea>
       </label>
 
       <section class="outputSection" aria-label="実行結果">
@@ -1941,6 +1957,12 @@ function getWebviewHtml({
     ${isSearchShortcut.toString()}
     ${isEditableTarget.toString()}
     ${getNextIndex.toString()}
+    ${isInputFocusShortcut.toString()}
+    ${createShiftDoubleTapDetector.toString()}
+    ${getStdinPlaceholder.toString()}
+    ${getStdinTitle.toString()}
+    let inputFocusMode = ${scriptJson(inputFocusMode)};
+    const shiftDoubleTap = createShiftDoubleTapDetector(${SHIFT_DOUBLE_TAP_INTERVAL_MS});
     const emptySelectionHelp = ${scriptJson(EMPTY_SELECTION_HELP)};
     const runtimeImplementation = document.getElementById('runtimeImplementation');
     const runtimeVersion = document.getElementById('runtimeVersion');
@@ -2829,7 +2851,39 @@ function getWebviewHtml({
 
     runButton.addEventListener('click', () => startRun());
 
+    function allowsAltI() {
+      return inputFocusMode !== 'shiftShift';
+    }
+    function allowsShiftShift() {
+      return inputFocusMode !== 'altI';
+    }
+    function focusStdin() {
+      setWorkspace('run');
+      stdin.focus();
+    }
+    function postFocusState() {
+      vscode.postMessage({ type: 'focusState', focused: document.hasFocus() });
+    }
+    window.addEventListener('focus', postFocusState);
+    window.addEventListener('blur', postFocusState);
+    // Capture phase so keys stopped by inner handlers still break a Shift double tap.
     document.addEventListener('keydown', (event) => {
+      shiftDoubleTap.handleKeyDown(event);
+    }, true);
+    document.addEventListener('keyup', (event) => {
+      if (shiftDoubleTap.handleKeyUp(event, event.timeStamp) && allowsShiftShift()) {
+        vscode.postMessage({ type: 'focusEditor' });
+      }
+    }, true);
+
+    document.addEventListener('keydown', (event) => {
+      if (allowsAltI() && isInputFocusShortcut(event)) {
+        // Stop here so VS Code does not also receive the forwarded key.
+        event.preventDefault();
+        event.stopPropagation();
+        vscode.postMessage({ type: 'focusEditor' });
+        return;
+      }
       if (isRunShortcut(event)) {
         event.preventDefault();
         startRun({ saveFirst: true });
@@ -2840,7 +2894,6 @@ function getWebviewHtml({
         focusSnippetSearch();
       }
     });
-
     window.addEventListener('message', (event) => {
       const message = event.data;
 
@@ -2873,6 +2926,18 @@ function getWebviewHtml({
 
       if (message.type === 'requestRun') {
         startRun();
+        return;
+      }
+
+      if (message.type === 'focusStdin') {
+        focusStdin();
+        return;
+      }
+
+      if (message.type === 'inputFocusShortcut') {
+        inputFocusMode = message.mode;
+        stdin.placeholder = getStdinPlaceholder(message.label);
+        stdin.title = getStdinTitle(message.label);
         return;
       }
 
@@ -2933,6 +2998,7 @@ function getWebviewHtml({
       }
     });
 
+    postFocusState();
     vscode.postMessage({ type: 'ready' });
   </script>
 </body>

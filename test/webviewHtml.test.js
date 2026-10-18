@@ -844,3 +844,35 @@ test('snippet rows and category headers keep a visible focus ring inside the scr
   assert.match(html, /\.snippetCategoryDropdown > summary:focus-visible,\s*\.snippetChoice:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--vscode-focusBorder\);[^}]*outline-offset:\s*-2px;/s);
   assert.match(html, /button:focus-visible,\s*summary:focus-visible,\s*select:focus-visible,\s*input:focus-visible,\s*textarea:focus-visible\s*\{/);
 });
+
+test('stdin hints at the input focus shortcut and follows setting updates', () => {
+  const html = getWebviewHtml();
+  assert.match(html, /id="stdin"[^>]*placeholder="ここに複数行の入力を貼り付け（Alt\+I でエディタと行き来）"/);
+  assert.match(html, /id="stdin"[^>]*title="Alt\+I でPythonのエディタと行き来できます"/);
+  assert.match(html, /let inputFocusMode = "altI";/);
+
+  const shift = getWebviewHtml({ inputFocusShortcut: { mode: 'shiftShift', label: 'Shift 2回' } });
+  assert.match(shift, /placeholder="ここに複数行の入力を貼り付け（Shift 2回 でエディタと行き来）"/);
+  assert.match(shift, /let inputFocusMode = "shiftShift";/);
+
+  const unknown = getWebviewHtml({ inputFocusShortcut: { mode: 'bogus', label: 'Alt+I' } });
+  assert.match(unknown, /let inputFocusMode = "altI";/);
+
+  assert.match(html, /message\.type === 'inputFocusShortcut'\) \{\s*inputFocusMode = message\.mode;\s*stdin\.placeholder = getStdinPlaceholder\(message\.label\);/);
+});
+
+test('webview focuses stdin on request and returns to the editor with Alt+I or Shift twice', () => {
+  const html = getWebviewHtml();
+  assert.match(html, /function isInputFocusShortcut\(event\)/);
+  assert.match(html, /function createShiftDoubleTapDetector\(intervalMs\)/);
+  assert.match(html, /const shiftDoubleTap = createShiftDoubleTapDetector\(400\);/);
+  assert.match(html, /function focusStdin\(\) \{\s*setWorkspace\('run'\);\s*stdin\.focus\(\);/);
+  assert.match(html, /message\.type === 'focusStdin'\) \{\s*focusStdin\(\);/);
+  assert.match(html, /allowsAltI\(\) && isInputFocusShortcut\(event\)\) \{[\s\S]*?event\.preventDefault\(\);\s*event\.stopPropagation\(\);\s*vscode\.postMessage\(\{ type: 'focusEditor' \}\);/);
+  assert.match(html, /shiftDoubleTap\.handleKeyDown\(event\);\s*\}, true\);/);
+  assert.match(html, /shiftDoubleTap\.handleKeyUp\(event, event\.timeStamp\) && allowsShiftShift\(\)\) \{\s*vscode\.postMessage\(\{ type: 'focusEditor' \}\);\s*\}\s*\}, true\);/);
+  assert.match(html, /return inputFocusMode !== 'shiftShift';/);
+  assert.match(html, /return inputFocusMode !== 'altI';/);
+  assert.match(html, /window\.addEventListener\('focus', postFocusState\);\s*window\.addEventListener\('blur', postFocusState\);/);
+  assert.match(html, /vscode\.postMessage\(\{ type: 'focusState', focused: document\.hasFocus\(\) \}\);/);
+});

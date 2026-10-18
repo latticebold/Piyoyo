@@ -121,3 +121,52 @@ test('manifest offers three error display modes with Japanese labels', () => {
   assert.deepEqual(setting.enumItemLabels, ['やさしい表示', '両方表示', '原文表示']);
   assert.equal(setting.enumDescriptions.length, setting.enum.length);
 });
+
+test('manifest contributes the input focus toggle with Alt+I and Shift double-tap bindings', () => {
+  const command = manifest.contributes.commands.find((item) => item.command === 'piyoyo.toggleInputFocus');
+  assert.ok(command);
+  assert.equal(command.title, 'Piyoyo: 入力欄とエディタを切り替え');
+  assert.ok(manifest.activationEvents.includes('onCommand:piyoyo.toggleInputFocus'));
+
+  const bindings = manifest.contributes.keybindings.filter((item) => item.command === 'piyoyo.toggleInputFocus');
+  const editorWhen = 'editorTextFocus && editorLangId == python && !notebookEditorFocused';
+  const simplified = bindings.map((item) => ({
+    key: item.key,
+    mac: item.mac,
+    target: item.args && item.args.target,
+    when: item.when
+  }));
+  assert.deepEqual(simplified, [
+    { key: 'alt+i', mac: 'alt+i', target: 'input', when: `${editorWhen} && config.piyoyo.inputFocusShortcut != shiftShift` },
+    { key: 'alt+i', mac: 'alt+i', target: 'editor', when: 'piyoyo.runnerFocused && config.piyoyo.inputFocusShortcut != shiftShift' },
+    { key: 'shift shift', mac: undefined, target: 'input', when: `${editorWhen} && config.piyoyo.inputFocusShortcut != altI` },
+    { key: 'shift shift', mac: undefined, target: 'editor', when: 'piyoyo.runnerFocused && config.piyoyo.inputFocusShortcut != altI' }
+  ]);
+  for (const binding of bindings) {
+    assert.doesNotMatch(binding.when, /\|\||\(/);
+  }
+
+  const { RUNNER_FOCUSED_CONTEXT, TOGGLE_INPUT_FOCUS_COMMAND } = require('../src/inputFocus');
+  assert.equal(TOGGLE_INPUT_FOCUS_COMMAND, 'piyoyo.toggleInputFocus');
+  assert.equal(RUNNER_FOCUSED_CONTEXT, 'piyoyo.runnerFocused');
+});
+
+test('manifest offers the input focus shortcut setting with Japanese choices', () => {
+  const { INPUT_FOCUS_SHORTCUTS, DEFAULT_INPUT_FOCUS_SHORTCUT } = require('../src/keyboardShortcuts');
+  const setting = manifest.contributes.configuration.properties['piyoyo.inputFocusShortcut'];
+  assert.equal(setting.type, 'string');
+  assert.deepEqual(setting.enum, [...INPUT_FOCUS_SHORTCUTS]);
+  assert.equal(setting.default, DEFAULT_INPUT_FOCUS_SHORTCUT);
+  assert.equal(setting.enumItemLabels.length, setting.enum.length);
+  assert.equal(setting.enumDescriptions.length, setting.enum.length);
+  for (const description of setting.enumDescriptions) {
+    assert.match(description, /[぀-ヿ一-鿿]/);
+  }
+  assert.match(setting.enumDescriptions[1], /IME/);
+});
+
+test('manifest syntax-checks every source file', () => {
+  for (const file of ['src/keyboardShortcuts.js', 'src/inputFocus.js']) {
+    assert.ok(manifest.scripts.check.includes(`node --check ${file}`), file);
+  }
+});

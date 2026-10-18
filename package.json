@@ -31,6 +31,7 @@
     "onCommand:piyoyo.open",
     "onCommand:ioSprint.open",
     "onCommand:piyoyo.saveAndRun",
+    "onCommand:piyoyo.toggleInputFocus",
     "onView:piyoyo.runnerView"
   ],
   "main": "./extension.js",
@@ -52,6 +53,10 @@
       {
         "command": "piyoyo.saveAndRun",
         "title": "Piyoyo: 保存して実行"
+      },
+      {
+        "command": "piyoyo.toggleInputFocus",
+        "title": "Piyoyo: 入力欄とエディタを切り替え"
       }
     ],
     "keybindings": [
@@ -60,6 +65,40 @@
         "key": "ctrl+enter",
         "mac": "cmd+enter",
         "when": "editorTextFocus && editorLangId == python && !notebookEditorFocused"
+      },
+      {
+        "command": "piyoyo.toggleInputFocus",
+        "key": "alt+i",
+        "mac": "alt+i",
+        "args": {
+          "target": "input"
+        },
+        "when": "editorTextFocus && editorLangId == python && !notebookEditorFocused && config.piyoyo.inputFocusShortcut != shiftShift"
+      },
+      {
+        "command": "piyoyo.toggleInputFocus",
+        "key": "alt+i",
+        "mac": "alt+i",
+        "args": {
+          "target": "editor"
+        },
+        "when": "piyoyo.runnerFocused && config.piyoyo.inputFocusShortcut != shiftShift"
+      },
+      {
+        "command": "piyoyo.toggleInputFocus",
+        "key": "shift shift",
+        "args": {
+          "target": "input"
+        },
+        "when": "editorTextFocus && editorLangId == python && !notebookEditorFocused && config.piyoyo.inputFocusShortcut != altI"
+      },
+      {
+        "command": "piyoyo.toggleInputFocus",
+        "key": "shift shift",
+        "args": {
+          "target": "editor"
+        },
+        "when": "piyoyo.runnerFocused && config.piyoyo.inputFocusShortcut != altI"
       }
     ],
     "menus": {
@@ -130,6 +169,26 @@
           "default": "friendly",
           "description": "Pythonのエラーが起きたときの表示方法を選びます。"
         },
+        "piyoyo.inputFocusShortcut": {
+          "type": "string",
+          "enum": [
+            "altI",
+            "shiftShift",
+            "both"
+          ],
+          "enumItemLabels": [
+            "Alt+I",
+            "Shiftを2回",
+            "両方"
+          ],
+          "enumDescriptions": [
+            "Alt+I（macOSはOption+I）で、Pythonのエディタと「標準入力」の欄を行き来します。",
+            "Shiftキーを素早く2回押して、Pythonのエディタと「標準入力」の欄を行き来します。日本語入力（IME）がShiftで入力モードを切り替える場合は、その動作も起きることがあります。",
+            "Alt+I と Shiftを2回の両方を使えます。"
+          ],
+          "default": "altI",
+          "description": "Pythonのエディタと、Piyoyoの「標準入力」の欄を行き来するキーを選びます。キーボードショートカットの画面で別のキーにすることもできます。"
+        },
         "piyoyo.advanced.showOriginalErrors": {
           "type": "boolean",
           "default": false,
@@ -141,6 +200,6 @@
   },
   "scripts": {
     "test": "node --test test/*.test.js",
-    "check": "node --check extension.js && node --check src/webviewHtml.js && node --check src/snippetLibrary.js && node --check src/snippetPreferences.js && node --check src/snippetInsertion.js && node --check src/pythonImportInsertion.js && node --check src/pythonHelperInsertion.js &&node --check src/pythonStatements.js && node --check src/runners/pythonRunner.js && node --check src/runners/pythonErrorExplainer.js && node --check src/runners/boundedOutput.js && node --check src/runners/processTermination.js && node --check src/errorDisplayMode.js && node --check src/piyoyoSettings.js && node --check src/targetSelection.js && node --check src/keyboardShortcuts.js && node --check src/pythonPathSelection.js && node --check src/pythonPathPreference.js && node --check src/pythonLauncherAvailability.js && node --check src/pythonLauncherAvailabilityCache.js && node --check src/ruffImportOrganizer.js"
+    "check": "node --check extension.js && node --check src/webviewHtml.js && node --check src/snippetLibrary.js && node --check src/snippetPreferences.js && node --check src/snippetInsertion.js && node --check src/pythonImportInsertion.js && node --check src/pythonHelperInsertion.js &&node --check src/pythonStatements.js && node --check src/runners/pythonRunner.js && node --check src/runners/pythonErrorExplainer.js && node --check src/runners/boundedOutput.js && node --check src/runners/processTermination.js && node --check src/errorDisplayMode.js && node --check src/piyoyoSettings.js && node --check src/targetSelection.js && node --check src/keyboardShortcuts.js && node --check src/inputFocus.js && node --check src/pythonPathSelection.js && node --check src/pythonPathPreference.js && node --check src/pythonLauncherAvailability.js && node --check src/pythonLauncherAvailabilityCache.js && node --check src/ruffImportOrganizer.js"
   }
 }

@@ -20,7 +20,18 @@ const {
   orderSnippetsByPreferences,
   saveSnippetPreferences
 } = require('./src/snippetPreferences');
-const { getRunShortcutLabel } = require('./src/keyboardShortcuts');
+const {
+  RUNNER_FOCUSED_CONTEXT,
+  TOGGLE_INPUT_FOCUS_COMMAND,
+  isOpenPythonEditor,
+  pickPythonEditor,
+  resolveFocusTarget
+} = require('./src/inputFocus');
+const {
+  getInputFocusShortcutLabel,
+  getRunShortcutLabel,
+  normalizeInputFocusShortcut
+} = require('./src/keyboardShortcuts');
 const { getRunnablePythonFileFromDocument, saveDocumentBeforeRun } = require('./src/targetSelection');
 const { getWebviewHtml } = require('./src/webviewHtml');
 
@@ -57,10 +68,15 @@ function activate(context) {
     () => provider.saveAndRun(openRunner)
   ));
   context.subscriptions.push(vscode.commands.registerCommand(
+    TOGGLE_INPUT_FOCUS_COMMAND,
+    (args) => provider.toggleInputFocus(openRunner, args)
+  ));
+  context.subscriptions.push(vscode.commands.registerCommand(
     OPEN_SETTINGS_COMMAND,
     () => openPiyoyoSettings(vscode.commands, context.extension && context.extension.id)
   ));
 
+  provider.handleActiveEditorChange(vscode.window.activeTextEditor);
   context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor((editor) => {
     provider.handleActiveEditorChange(editor);
   }));
@@ -70,8 +86,19 @@ function activate(context) {
       || event.affectsConfiguration('piyoyo.advanced.showOriginalErrors')) {
       provider.renderWebview();
     }
+    // Posted instead of re-rendering so the stdin text is kept.
+    if (event.affectsConfiguration('piyoyo.inputFocusShortcut')) {
+      provider.postInputFocusShortcut();
+    }
   }));
 
+}
+
+function getConfiguredInputFocusShortcut() {
+  const mode = normalizeInputFocusShortcut(
+    vscode.workspace.getConfiguration('piyoyo').get('inputFocusShortcut')
+  );
+  return { mode, label: getInputFocusShortcutLabel(mode, process.platform) };
 }
 
 function deactivate() {}
@@ -92,6 +119,9 @@ class RunnerViewProvider {
     this.view = undefined;
     this.webviewReady = false;
     this.pendingRunRequest = false;
+    this.pendingFocusInputRequest = false;
+    this.runnerFocused = false;
+    this.lastPythonEditor = undefined;
     this.activeFile = getRunnablePythonFileFromDocument(undefined);
     this.launcherAvailabilityCache = createLauncherAvailabilityCache();
   }
@@ -103,6 +133,7 @@ class RunnerViewProvider {
       if (this.view === webviewView) {
         this.view = undefined;
         this.webviewReady = false;
+        this.setRunnerFocused(false);
       }
     });
     this.refreshActiveFile(vscode.window.activeTextEditor);
@@ -122,6 +153,17 @@ class RunnerViewProvider {
       if (message.type === 'ready') {
         this.webviewReady = true;
         this.flushPendingRunRequest();
+        this.flushPendingFocusInputRequest();
+        return;
+      }
+
+      if (message.type === 'focusState') {
+        this.setRunnerFocused(Boolean(message.focused));
+        return;
+      }
+
+      if (message.type === 'focusEditor') {
+        await this.focusPythonEditor();
         return;
       }
 
@@ -188,6 +230,9 @@ class RunnerViewProvider {
   }
 
   handleActiveEditorChange(editor) {
+    if (isOpenPythonEditor(editor)) {
+      this.lastPythonEditor = editor;
+    }
     this.refreshActiveFile(editor);
   }
 
@@ -205,7 +250,64 @@ class RunnerViewProvider {
       preferenceSnippets: orderSnippetsByPreferences(INPUT_SNIPPETS, snippetPreferences),
       snippetPreferences,
       defaultSnippetOrder: INPUT_SNIPPETS.map((snippet) => snippet.id),
-      errorDisplayMode: getConfiguredErrorDisplayMode()
+      errorDisplayMode: getConfiguredErrorDisplayMode(),
+      inputFocusShortcut: getConfiguredInputFocusShortcut()
+    });
+  }
+
+  postInputFocusShortcut() {
+    this.postMessage({ type: 'inputFocusShortcut', ...getConfiguredInputFocusShortcut() });
+  }
+
+  setRunnerFocused(focused) {
+    if (this.runnerFocused === focused) {
+      return;
+    }
+    this.runnerFocused = focused;
+    vscode.commands.executeCommand('setContext', RUNNER_FOCUSED_CONTEXT, focused);
+  }
+
+  async toggleInputFocus(openRunner, args) {
+    if (resolveFocusTarget(args, this.runnerFocused) === 'editor') {
+      await this.focusPythonEditor();
+      return;
+    }
+    await this.focusStdin(openRunner);
+  }
+
+  async focusStdin(openRunner) {
+    this.pendingFocusInputRequest = true;
+    if (this.view) {
+      this.view.show(false);
+      this.flushPendingFocusInputRequest();
+      return;
+    }
+    try {
+      await openRunner();
+    } catch (error) {
+      this.pendingFocusInputRequest = false;
+      throw error;
+    }
+    this.flushPendingFocusInputRequest();
+  }
+
+  flushPendingFocusInputRequest() {
+    if (!this.pendingFocusInputRequest || !this.view || !this.webviewReady) {
+      return;
+    }
+    this.pendingFocusInputRequest = false;
+    this.postMessage({ type: 'focusStdin' });
+  }
+
+  async focusPythonEditor() {
+    const editor = pickPythonEditor(this.lastPythonEditor, vscode.window.visibleTextEditors);
+    if (!editor) {
+      await vscode.commands.executeCommand('workbench.action.focusActiveEditorGroup');
+      return;
+    }
+    await vscode.window.showTextDocument(editor.document, {
+      viewColumn: editor.viewColumn,
+      preserveFocus: false
     });
   }
 
