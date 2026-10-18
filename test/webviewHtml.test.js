@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { Script } = require('node:vm');
 
-const { getWebviewHtml } = require('../src/webviewHtml');
+const { getComplexityShortForm, getWebviewHtml } = require('../src/webviewHtml');
 const { INPUT_SNIPPETS } = require('../src/snippetLibrary');
 
 test('webview keeps the document title without a visible brand heading', () => {
@@ -279,7 +279,7 @@ test('webview styles IO labels and compact high-contrast snippets', () => {
   assert.match(html, /\.snippetParameter\s*\{[^}]*color:\s*var\(--piyoyo-orange\)/s);
   assert.match(html, /--piyoyo-muted:\s*#c5c5c5/);
   assert.match(html, /\.snippetChoice\s*\{[^}]*min-height:\s*30px/s);
-  assert.match(html, /\.snippetRowSummary\s*\{[^}]*white-space:\s*nowrap/s);
+  assert.match(html, /\.snippetRowSummary\s*\{(?=[^}]*white-space:\s*normal)(?![^}]*text-overflow)[^}]*\}/s);
   assert.match(html, /\.snippetComplexity\s*\{[^}]*color:\s*var\(--piyoyo-text\)/s);
   assert.match(html, /\.snippetDetailsText\s*\{(?=[^}]*color:\s*var\(--piyoyo-text\))(?=[^}]*font-size:\s*14px)(?=[^}]*line-height:\s*1\.8)[^}]*\}/s);
   assert.match(html, /\.snippetDetails\s*>\s*summary\s*\{(?=[^}]*color:\s*var\(--piyoyo-text\))(?=[^}]*font-size:\s*14px)[^}]*\}/s);
@@ -320,10 +320,76 @@ test('webview shows complexity in each row and updates grouped variants', () => 
     summary: 'リストの先頭を削除して返す', label: 'A.pop(0)', body: 'A.pop(0)',
     complexity: { qualifier: '最悪', time: 'O(n)', detail: 'リストAの要素数をnとする。' }
   }] });
-  assert.match(html, /class="snippetComplexity"[^>]*>最悪 O\(n\)<\/span>/);
-  assert.match(html, /title="リストAの要素数をnとする。"/);
-  assert.match(html, /complexityBadge\.textContent = complexity\.qualifier \+ ' ' \+ complexity\.time/);
+  const chip = html.match(/<button type="button" class="snippetComplexity"[^>]*>[^<]*<\/button>/)[0];
+  assert.match(chip, />O\(n\)<\/button>$/);
+  assert.match(chip, /data-complexity-full="最悪 O\(n\)"/);
+  assert.match(chip, /data-complexity-detail="リストAの要素数をnとする。"/);
+  assert.match(chip, /aria-expanded="false"/);
+  assert.match(chip, /aria-controls="snippetComplexityPopover"/);
+  // The chip is a sibling of the row button, never nested inside it.
+  assert.match(html, /<\/code>\s*<\/button>\s*<button type="button" class="snippetComplexity"/);
+  assert.match(html, /id="snippetComplexityPopover"[^>]*role="dialog"[^>]*hidden/);
+  assert.match(html, /complexityChip\.textContent = complexity \? complexity\.short : ''/);
+  assert.match(html, /complexityChip\.dataset\.complexityDetail = /);
+  assert.match(html, /event\.key === 'Escape' && openComplexityChip/);
+  assert.match(html, /function openComplexityPopover\(chip\)/);
   assert.doesNotMatch(html, /snippetEditorExpression/);
+
+  const noComplexity = getWebviewHtml({ snippets: [{
+    id: 'no-complexity', category: 'custom', categoryLabel: 'テスト', summary: '値', label: 'x', body: 'x'
+  }] });
+  assert.match(noComplexity, /class="snippetComplexity"[^>]*hidden><\/button>/);
+});
+
+test('complexity short form keeps compact notation and falls back to 詳細', () => {
+  const cases = [
+    ['O(1)', 'O(1)'],
+    ['O(n)', 'O(n)'],
+    ['O(log n)', 'O(log n)'],
+    ['O(n log n)', 'O(n log n)'],
+    ['O(n + k)', 'O(n + k)'],
+    ['O(n × m)', 'O(mn)'],
+    ['O(m*n)', 'O(mn)'],
+    ['O(h × w)', 'O(hw)'],
+    ['O(n × n!)', '詳細'],
+    ['O(r × C(n,r))', '詳細'],
+    ['O(log min(a, b))', '詳細'],
+    ['入力長に依存', '詳細'],
+    ['', ''],
+    [undefined, '']
+  ];
+  for (const [time, expected] of cases) {
+    assert.equal(getComplexityShortForm(time), expected, String(time));
+  }
+
+  for (const snippet of INPUT_SNIPPETS) {
+    const short = getComplexityShortForm(snippet.complexity?.time);
+    assert.ok(short === '詳細' || /^O\(.{1,8}\)$/.test(short), `${snippet.id}: ${short}`);
+    assert.doesNotMatch(short, /最悪|平均|償却/);
+  }
+});
+
+test('grouped rows carry short complexity and badges for every variant', () => {
+  const html = getWebviewHtml({ snippets: INPUT_SNIPPETS });
+  const unescape = (value) => value.replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  const variants = Array.from(html.matchAll(/data-snippet-variants="([^"]*)"/g))
+    .flatMap((match) => JSON.parse(unescape(match[1])));
+  const byId = new Map(variants.map((variant) => [variant.id, variant]));
+  for (const snippet of INPUT_SNIPPETS.filter((item) => item.selectorGroup)) {
+    const variant = byId.get(snippet.id);
+    assert.ok(variant, snippet.id);
+    assert.equal(variant.complexity.short, getComplexityShortForm(snippet.complexity.time), snippet.id);
+    assert.equal(variant.complexity.full, `${snippet.complexity.qualifier} ${snippet.complexity.time}`, snippet.id);
+    assert.deepEqual(variant.badges.map((badge) => badge.type), [
+      ...(snippet.helpers.length ? ['helper'] : []),
+      ...(snippet.imports.length ? ['import'] : []),
+      ...(snippet.externalPackages.length ? ['external'] : [])
+    ], snippet.id);
+    variant.badges.forEach((badge) => assert.equal(badge.shortText.length, 1));
+  }
+  assert.match(html, /element\.textContent = split \? badge\.shortText : badge\.text/);
+  assert.match(html, /badgeCell\.classList\.toggle\('isSplit', split\)/);
 });
 
 function errorField(html) {
@@ -598,32 +664,46 @@ function rowHtml(html, id) {
   return html.slice(start, html.indexOf('</div>', start));
 }
 
-test('snippet rows show badges for helpers and imports, but not for built-ins', () => {
+test('snippet rows show a left badge cell for helpers and imports, but not for built-ins', () => {
   const html = getWebviewHtml({ snippets: INPUT_SNIPPETS });
+  const single = INPUT_SNIPPETS.filter((snippet) => !snippet.selectorGroup);
 
-  const helperRow = rowHtml(html, 'string-hamming-distance');
-  assert.match(helperRow, /<span class="snippetBadge snippetBadge-helper" role="img" aria-label="自作関数: [^"]+" title="自作関数: [^"]+">自作<\/span>/);
+  const helperSnippet = single.find((snippet) => snippet.helpers.length > 0 && snippet.imports.length === 0);
+  assert.ok(helperSnippet);
+  const helperRow = rowHtml(html, helperSnippet.id);
+  assert.match(helperRow, /<span class="snippetBadgeCell" data-snippet-badges><span class="snippetBadge snippetBadge-helper" role="img" aria-label="自作関数: [^"]+" title="自作関数: [^"]+">自作<\/span><\/span>/);
   assert.doesNotMatch(helperRow, /snippetBadge-import/);
-  assert.match(helperRow, /data-snippet-helpers="\[&quot;hamming_distance&quot;\]"/);
-  assert.match(helperRow, /data-snippet-label="hamming_distance\(s, t\)"/);
 
-  const importRow = rowHtml(html, 'math-gcd');
-  assert.match(importRow, /<span class="snippetBadge snippetBadge-import" role="img" aria-label="importが必要: [^"]+"[^>]*>import<\/span>/);
+  const importSnippet = single.find((snippet) => snippet.imports.length > 0 && snippet.helpers.length === 0);
+  assert.ok(importSnippet);
+  const importRow = rowHtml(html, importSnippet.id);
+  assert.match(importRow, /<span class="snippetBadge snippetBadge-import" role="img" aria-label="輸入（importが必要）: [^"]+"[^>]*>輸入<\/span>/);
   assert.doesNotMatch(importRow, /snippetBadge-helper/);
+  assert.doesNotMatch(importRow, />import<\/span>/);
 
-  const builtInRow = rowHtml(html, 'output-two-values');
-  assert.match(builtInRow, /<span class="snippetBadges" data-snippet-badges><\/span>/);
-
-  const groupedRow = rowHtml(html, 'binary-search-bisect-bound');
-  assert.match(groupedRow, /snippetBadge-import/);
-  assert.match(groupedRow, /&quot;badges&quot;:\[\{&quot;type&quot;:&quot;import&quot;/);
-  assert.match(html, /badgeList\.replaceChildren\(/);
+  // Badge cell comes first, then summary and code; the empty cell keeps alignment.
+  const builtInSnippet = single.find((snippet) => snippet.imports.length === 0 && snippet.helpers.length === 0);
+  assert.ok(builtInSnippet);
+  const builtInRow = rowHtml(html, builtInSnippet.id);
+  assert.match(builtInRow, /<button[^>]*>\s*<span class="snippetBadgeCell" data-snippet-badges><\/span>\s*<span class="snippetRowSummary">[\s\S]*<\/span>\s*<code class="snippetRowPreview"/);
 
   assert.doesNotMatch(html, /class="snippetBadge snippetBadge-external"/);
+  assert.doesNotMatch(html, /badgeList/);
+  assert.match(html, /badgeCell\.replaceChildren\(/);
+  const helperEntries = getWebviewHtml({ snippets: single });
   assert.equal(
-    (html.match(/role="img" aria-label="自作関数/g) || []).length,
-    INPUT_SNIPPETS.filter((snippet) => snippet.helpers.length > 0).length
+    (helperEntries.match(/role="img" aria-label="自作関数/g) || []).length,
+    single.filter((snippet) => snippet.helpers.length > 0).length
   );
+});
+
+test('a snippet with two badge types splits the cell into one kanji each', () => {
+  const html = getWebviewHtml({ snippets: [{
+    id: 'both-example', category: 'custom', categoryLabel: 'テスト', summary: '両方', label: 'f(A)', body: 'f(${1:A})',
+    imports: ['from math import gcd'], helpers: [{ name: 'f', code: 'def f(A):\n    return A' }]
+  }] });
+  const row = rowHtml(html, 'both-example');
+  assert.match(row, /<span class="snippetBadgeCell isSplit" data-snippet-badges><span class="snippetBadge snippetBadge-helper" role="img" aria-label="自作関数: [^"]+"[^>]*>自<\/span><span class="snippetBadge snippetBadge-import" role="img" aria-label="輸入（importが必要）: [^"]+"[^>]*>輸<\/span><\/span>/);
 });
 
 test('badge legend explains only the badge types in use and is not a snippet entry', () => {
@@ -631,28 +711,46 @@ test('badge legend explains only the badge types in use and is not a snippet ent
   const legend = html.slice(html.indexOf('<details id="snippetBadgeLegend"'), html.indexOf('</details>', html.indexOf('id="snippetBadgeLegend"')));
 
   assert.match(legend, /<summary>アイコンの見方<\/summary>/);
-  assert.match(legend, /snippetBadge-helper" aria-hidden="true">自作<\/span><span>自作関数: /);
-  assert.match(legend, /snippetBadge-import" aria-hidden="true">import<\/span><span>importが必要: /);
+  assert.match(legend, /snippetBadge-helper" aria-hidden="true">自作<\/span><\/span><span>自作関数: /);
+  assert.match(legend, /snippetBadge-import" aria-hidden="true">輸入<\/span><\/span><span>輸入（importが必要）: /);
+  assert.match(legend, /class="snippetBadgeCell isSplit" aria-hidden="true">[^]*?>自<\/span>[^]*?>輸<\/span><\/span><span>2種類に当てはまる項目は/);
+  assert.match(legend, /class="snippetBadgeLegendNote">[^<]*「詳細」/);
+  assert.doesNotMatch(legend, />import<\/span>/);
   assert.doesNotMatch(legend, /snippetBadge-external/);
   assert.doesNotMatch(legend, /data-snippet/);
   assert.ok(html.indexOf('id="snippetBadgeLegend"') < html.indexOf('id="snippetBrowsePanel"'));
 
   const withExternal = getWebviewHtml({ snippets: [{
     id: 'external-example', category: 'custom', categoryLabel: 'テスト', summary: 'np配列', label: 'np.array(A)',
-    body: 'np.array(${1:A})', imports: ['import numpy as np'], externalPackages: ['numpy']
+    body: 'np.array(${1:A})', externalPackages: ['numpy']
   }] });
   assert.match(withExternal, /class="snippetBadge snippetBadge-external" role="img" aria-label="外部ライブラリが必要: [^"]+"[^>]*>外部<\/span>/);
+  assert.doesNotMatch(withExternal, /class="snippetBadgeCell isSplit"/);
 
   assert.doesNotMatch(getWebviewHtml({ snippets: [] }), /id="snippetBadgeLegend"/);
 });
 
-test('badges differ by shape and text, use theme variables, and survive forced colors', () => {
+test('badges differ by color, border style and text, are vertical, and survive forced colors', () => {
   const html = getWebviewHtml({ snippets: INPUT_SNIPPETS });
 
-  assert.match(html, /\.snippetBadge-helper\s*\{(?=[^}]*border-radius:\s*2px)(?=[^}]*background:\s*var\(--vscode-charts-yellow\))[^}]*\}/s);
-  assert.match(html, /\.snippetBadge-import\s*\{(?=[^}]*border-radius:\s*999px)(?=[^}]*background:\s*transparent)(?=[^}]*color:\s*var\(--vscode-charts-blue\))[^}]*\}/s);
+  assert.match(html, /\.snippetBadge\s*\{(?=[^}]*writing-mode:\s*vertical-rl)(?=[^}]*text-orientation:\s*upright)[^}]*\}/s);
+  assert.match(html, /\.snippetBadgeCell\s*\{(?=[^}]*grid-row:\s*1 \/ span 2)(?=[^}]*flex-direction:\s*column)[^}]*\}/s);
+  assert.match(html, /\.snippetBadge-helper\s*\{(?=[^}]*background:\s*var\(--vscode-charts-yellow\))[^}]*\}/s);
+  assert.match(html, /\.snippetBadge-import\s*\{(?=[^}]*border:\s*1px solid var\(--piyoyo-orange\))(?=[^}]*background:\s*transparent)(?=[^}]*color:\s*var\(--piyoyo-orange\))[^}]*\}/s);
   assert.match(html, /\.snippetBadge-external\s*\{[^}]*border:\s*1px dashed var\(--vscode-errorForeground\)/s);
   assert.match(html, /@media \(forced-colors: active\)[\s\S]*\.snippetBadge\s*\{[^}]*border-color:\s*CanvasText/);
+  assert.match(html, /@media \(forced-colors: active\)[\s\S]*\.snippetBadge-helper\s*\{[^}]*background:\s*CanvasText/);
+});
+
+test('snippet row is a two-line card with a fixed complexity column', () => {
+  const html = getWebviewHtml({ snippets: INPUT_SNIPPETS });
+
+  assert.match(html, /\.snippetChoice\s*\{[^}]*grid-template-columns:\s*var\(--snippet-badge-width\) minmax\(0, 1fr\) var\(--snippet-complexity-width\)/s);
+  assert.match(html, /\.snippetRowSummary\s*\{[^}]*grid-column:\s*2 \/ 4/s);
+  assert.match(html, /\.snippetRowPreview\s*\{(?=[^}]*grid-row:\s*2)(?=[^}]*text-align:\s*left)[^}]*\}/s);
+  assert.match(html, /\.snippetComplexity\s*\{(?=[^}]*position:\s*absolute)(?=[^}]*width:\s*var\(--snippet-complexity-width\))[^}]*\}/s);
+  assert.match(html, /\.snippetComplexityPopover\s*\{[^}]*width:\s*min\(260px, calc\(100vw - 16px\)\)/s);
+  assert.doesNotMatch(html, /snippetRowMeta/);
 });
 
 test('webview text is never smaller than 12px and scales with the VS Code font size', () => {
@@ -663,5 +761,6 @@ test('webview text is never smaller than 12px and scales with the VS Code font s
   assert.match(html, /--piyoyo-font-small:\s*max\(12px, calc\(var\(--piyoyo-font-base\) - 1px\)\)/);
   assert.match(html, /\.snippetRowSummary\s*\{[^}]*font-size:\s*var\(--piyoyo-font-base\)/s);
   assert.match(html, /\.snippetRowPreview\s*\{[^}]*font-size:\s*var\(--piyoyo-font-small\)/s);
-  assert.match(html, /@media \(max-width: 420px\)[\s\S]*?\.snippetRowSummary\s*\{\s*grid-column:\s*1 \/ -1;/);
+  assert.match(html, /\.snippetBadge\s*\{[^}]*font-size:\s*var\(--piyoyo-font-small\)/s);
+  assert.match(html, /\.snippetComplexityPopover\s*\{[^}]*font-size:\s*var\(--piyoyo-font-small\)/s);
 });

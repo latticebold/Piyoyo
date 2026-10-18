@@ -47,18 +47,21 @@ const SNIPPET_BADGE_TYPES = Object.freeze([
   Object.freeze({
     type: 'helper',
     text: '自作',
+    shortText: '自',
     label: '自作関数: Pythonの組み込み関数ではありません。挿入すると、Piyoyoが関数の定義（def）をファイルの上の方に1回だけ追加します。',
     applies: (snippet) => Array.isArray(snippet.helpers) && snippet.helpers.length > 0
   }),
   Object.freeze({
     type: 'import',
-    text: 'import',
-    label: 'importが必要: Pythonに付属する標準ライブラリを使います。足りないimportは、挿入するときにファイルの先頭へ自動で追加します。',
+    text: '輸入',
+    shortText: '輸',
+    label: '輸入（importが必要）: Pythonに付属する標準ライブラリを使います。足りないimportは、挿入するときにファイルの先頭へ自動で追加します。',
     applies: (snippet) => Array.isArray(snippet.imports) && snippet.imports.length > 0
   }),
   Object.freeze({
     type: 'external',
     text: '外部',
+    shortText: '外',
     label: '外部ライブラリが必要: Pythonに付属しないパッケージを使います。別にインストールしないと動きません。',
     applies: (snippet) => Array.isArray(snippet.externalPackages) && snippet.externalPackages.length > 0
   })
@@ -67,19 +70,74 @@ const SNIPPET_BADGE_TYPES = Object.freeze([
 function getSnippetBadges(snippet) {
   return SNIPPET_BADGE_TYPES
     .filter((badge) => badge.applies(snippet))
-    .map(({ type, text, label }) => ({ type, text, label }));
+    .map(({ type, text, shortText, label }) => ({ type, text, shortText, label }));
 }
 
-function renderSnippetBadge(badge, { decorative = false } = {}) {
+function renderSnippetBadge(badge, { decorative = false, split = false } = {}) {
   const className = `snippetBadge snippetBadge-${escapeHtml(badge.type)}`;
+  const text = escapeHtml(split ? badge.shortText : badge.text);
   if (decorative) {
-    return `<span class="${className}" aria-hidden="true">${escapeHtml(badge.text)}</span>`;
+    return `<span class="${className}" aria-hidden="true">${text}</span>`;
   }
-  return `<span class="${className}" role="img" aria-label="${escapeHtml(badge.label)}" title="${escapeHtml(badge.label)}">${escapeHtml(badge.text)}</span>`;
+  return `<span class="${className}" role="img" aria-label="${escapeHtml(badge.label)}" title="${escapeHtml(badge.label)}">${text}</span>`;
 }
 
-function renderSnippetBadges(snippet) {
-  return getSnippetBadges(snippet).map(renderSnippetBadge).join('');
+// Two or more types share the cell, one kanji each (top / bottom).
+function renderSnippetBadgeCell(badges, { decorative = false, rowCell = true } = {}) {
+  const split = badges.length > 1;
+  const className = `snippetBadgeCell${split ? ' isSplit' : ''}`;
+  const attributes = rowCell ? ' data-snippet-badges' : ' aria-hidden="true"';
+  return `<span class="${className}"${attributes}>${badges
+    .map((badge) => renderSnippetBadge(badge, { decorative, split }))
+    .join('')}</span>`;
+}
+
+const COMPLEXITY_SHORT_MAX_LENGTH = 10;
+const COMPLEXITY_DETAIL_TEXT = '詳細';
+
+// Display-only short notation, e.g. "O(n × m)" -> "O(mn)". Falls back to 詳細.
+function getComplexityShortForm(time) {
+  const source = String(time ?? '').trim();
+  if (!source) {
+    return '';
+  }
+  const match = /^O\((.+)\)$/.exec(source);
+  if (!match) {
+    return COMPLEXITY_DETAIL_TEXT;
+  }
+  const inner = match[1].trim().replace(/\s+/g, ' ')
+    .split(/\s*\+\s*/)
+    .map((term) => {
+      const factors = term.split(/\s*[×*]\s*/);
+      return factors.length > 1 && factors.every((factor) => /^[A-Za-z]$/.test(factor))
+        ? factors.sort().join('')
+        : term;
+    })
+    .join(' + ');
+  const short = `O(${inner})`;
+  return short.length <= COMPLEXITY_SHORT_MAX_LENGTH && !/[×*]/.test(short)
+    ? short
+    : COMPLEXITY_DETAIL_TEXT;
+}
+
+function getComplexityPresentation(complexity) {
+  if (!complexity || !complexity.time) {
+    return null;
+  }
+  const full = [complexity.qualifier, complexity.time].filter(Boolean).join(' ');
+  return {
+    short: getComplexityShortForm(complexity.time),
+    full,
+    detail: complexity.detail || '',
+    label: `計算量: ${full}（押すと説明を表示）`
+  };
+}
+
+function renderComplexityChip(complexity) {
+  const presentation = getComplexityPresentation(complexity);
+  const hidden = presentation ? '' : ' hidden';
+  const view = presentation || { short: '', full: '', detail: '', label: '' };
+  return `<button type="button" class="snippetComplexity" data-snippet-complexity aria-haspopup="dialog" aria-expanded="false" aria-controls="snippetComplexityPopover" data-complexity-full="${escapeHtml(view.full)}" data-complexity-detail="${escapeHtml(view.detail)}" aria-label="${escapeHtml(view.label)}" title="${escapeHtml(view.label)}"${hidden}>${escapeHtml(view.short)}</button>`;
 }
 
 function renderSnippetBadgeLegend(snippets) {
@@ -89,12 +147,16 @@ function renderSnippetBadgeLegend(snippets) {
     return '';
   }
   const items = usedBadges.map((badge) => `
-          <li class="snippetBadgeLegendItem">${renderSnippetBadge(badge, { decorative: true })}<span>${escapeHtml(badge.label)}</span></li>`).join('');
+          <li class="snippetBadgeLegendItem">${renderSnippetBadgeCell([badge], { decorative: true, rowCell: false })}<span>${escapeHtml(badge.label)}</span></li>`).join('');
+  const splitBadges = usedBadges.slice(0, 2);
+  const splitItem = splitBadges.length > 1 ? `
+          <li class="snippetBadgeLegendItem">${renderSnippetBadgeCell(splitBadges, { decorative: true, rowCell: false })}<span>2種類に当てはまる項目は、上下に1文字ずつ表示します（${splitBadges.map((badge) => `${escapeHtml(badge.shortText)}＝${escapeHtml(badge.text)}`).join('、')}）。</span></li>` : '';
   return `
       <details id="snippetBadgeLegend" class="snippetBadgeLegend">
         <summary>アイコンの見方</summary>
-        <ul class="snippetBadgeLegendList">${items}
+        <ul class="snippetBadgeLegendList">${items}${splitItem}
         </ul>
+        <p class="snippetBadgeLegendNote">右下の計算量（O(n) など）を押すと、最悪・平均・償却の区別と詳しい説明が出ます。短く書けない計算量は「詳細」と表示します。</p>
       </details>`;
 }
 
@@ -245,7 +307,7 @@ function getSnippetVariantData(snippet) {
     imports: snippet.imports || [],
     helpers: getHelperNames(snippet),
     badges: getSnippetBadges(snippet),
-    complexity: snippet.complexity || null
+    complexity: getComplexityPresentation(snippet.complexity)
   };
 }
 
@@ -283,31 +345,29 @@ function renderSnippetRow(row, category) {
     const firstPresentation = getSnippetPresentation(firstSnippet);
     const variants = JSON.stringify(row.snippets.map(getSnippetVariantData));
     const searchText = getSnippetSearchText(row.snippets, groupLabel);
-    const complexity = firstSnippet.complexity;
-    const complexityLabel = complexity ? `${complexity.qualifier} ${complexity.time}` : '';
 
     return `
           <div class="snippetRow snippetVariantRow" data-snippet-row="${escapeHtml(groupId)}" data-snippet-search="${escapeHtml(searchText)}">
             <button type="button" class="snippetChoice" aria-pressed="false" data-snippet-entry="${escapeHtml(firstSnippet.id)}" data-snippet-group="${escapeHtml(groupId)}" data-snippet-variants="${escapeHtml(variants)}" data-snippet-id="${escapeHtml(firstSnippet.id)}" data-snippet-label="${escapeHtml(firstSnippet.label)}" data-snippet-description="${escapeHtml(firstSnippet.description || firstPresentation.summary)}" data-snippet-tooltip="${escapeHtml(tooltip)}" data-snippet-placeholders="${escapeHtml(firstPresentation.placeholders)}" data-snippet-imports="${escapeHtml(JSON.stringify(firstSnippet.imports || []))}" data-snippet-helpers="${escapeHtml(JSON.stringify(getHelperNames(firstSnippet)))}" title="${escapeHtml(tooltip)}">
+              ${renderSnippetBadgeCell(getSnippetBadges(firstSnippet))}
               <span class="snippetRowSummary">${renderAnnotatedParts(getAnnotatedTextParts(groupLabel, getSnippetPlaceholders(firstSnippet.body)))}</span>
               <code class="snippetRowPreview" data-snippet-row-preview>${renderAnnotatedParts(firstPresentation.previewParts)}</code>
-              <span class="snippetRowMeta"><span class="snippetBadges" data-snippet-badges>${renderSnippetBadges(firstSnippet)}</span><span class="snippetComplexity" data-snippet-complexity title="${escapeHtml(complexity?.detail || '')}">${escapeHtml(complexityLabel)}</span></span>
             </button>
+            ${renderComplexityChip(firstSnippet.complexity)}
           </div>`;
   }
 
   const snippet = row.snippets[0];
   const presentation = getSnippetPresentation(snippet);
   const searchText = getSnippetSearchText([snippet]);
-  const complexity = snippet.complexity;
-  const complexityLabel = complexity ? `${complexity.qualifier} ${complexity.time}` : '';
   return `
           <div class="snippetRow" data-snippet-row="${escapeHtml(snippet.id)}" data-snippet-search="${escapeHtml(searchText)}">
             <button type="button" class="snippetChoice" aria-pressed="false" data-snippet-entry="${escapeHtml(snippet.id)}" data-snippet-id="${escapeHtml(snippet.id)}" data-snippet-label="${escapeHtml(snippet.label)}" data-snippet-description="${escapeHtml(snippet.description || presentation.summary)}" data-snippet-tooltip="${escapeHtml(presentation.tooltip)}" data-snippet-placeholders="${escapeHtml(presentation.placeholders)}" data-snippet-code-parts="${escapeHtml(presentation.codeParts)}" data-snippet-preview-parts="${escapeHtml(JSON.stringify(presentation.previewParts))}" data-snippet-precondition="${escapeHtml(snippet.precondition || '')}" data-snippet-imports="${escapeHtml(JSON.stringify(snippet.imports || []))}" data-snippet-helpers="${escapeHtml(JSON.stringify(getHelperNames(snippet)))}" title="${escapeHtml(presentation.tooltip)}">
+              ${renderSnippetBadgeCell(getSnippetBadges(snippet))}
               <span class="snippetRowSummary">${renderAnnotatedParts(getAnnotatedTextParts(presentation.summary, getSnippetPlaceholders(snippet.body)))}</span>
               <code class="snippetRowPreview" data-snippet-row-preview>${renderAnnotatedParts(presentation.previewParts)}</code>
-              <span class="snippetRowMeta"><span class="snippetBadges" data-snippet-badges>${renderSnippetBadges(snippet)}</span><span class="snippetComplexity" data-snippet-complexity title="${escapeHtml(complexity?.detail || '')}">${escapeHtml(complexityLabel)}</span></span>
             </button>
+            ${renderComplexityChip(snippet.complexity)}
           </div>`;
 }
 
@@ -910,19 +970,24 @@ function getWebviewHtml({
     }
 
     .snippetRow {
+      --snippet-badge-width: calc(var(--piyoyo-font-small) + 8px);
+      --snippet-complexity-width: calc(10ch + 10px);
+      position: relative;
       min-width: 0;
       border-top: 1px solid color-mix(in srgb, var(--vscode-panel-border) 55%, transparent);
     }
 
+    /* Two-line card: badge cell | summary / code | complexity chip (sibling). */
     .snippetChoice {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(60px, 39%) auto;
+      grid-template-columns: var(--snippet-badge-width) minmax(0, 1fr) var(--snippet-complexity-width);
+      grid-template-rows: auto auto;
       align-items: center;
-      gap: 6px;
+      gap: 2px 6px;
       width: 100%;
       min-width: 0;
       min-height: 30px;
-      padding: 4px 8px 4px 22px;
+      padding: 4px 8px 4px 8px;
       border: 0;
       border-radius: 0;
       color: var(--vscode-foreground);
@@ -949,80 +1014,127 @@ function getWebviewHtml({
     }
 
     .snippetRowSummary {
+      grid-column: 2 / 4;
+      grid-row: 1;
       min-width: 0;
-      overflow: hidden;
       color: var(--piyoyo-text);
       font-size: var(--piyoyo-font-base);
       font-weight: 500;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      line-height: 1.4;
+      white-space: normal;
+      overflow-wrap: anywhere;
     }
 
     .snippetRowPreview {
       display: block;
+      grid-column: 2;
+      grid-row: 2;
       min-width: 0;
       overflow: hidden;
       color: var(--piyoyo-text);
       font-family: var(--vscode-editor-font-family);
       font-size: var(--piyoyo-font-small);
       font-weight: 400;
-      text-align: right;
+      line-height: 1.5;
+      text-align: left;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
 
     .snippetComplexity {
-      max-width: 105px;
+      position: absolute;
+      right: 8px;
+      bottom: 4px;
+      box-sizing: border-box;
+      width: var(--snippet-complexity-width);
       overflow: hidden;
       padding: 1px 4px;
       border: 1px solid #6c6c6c;
       border-radius: 3px;
       color: var(--piyoyo-text);
+      background: var(--piyoyo-raised);
       font-family: var(--vscode-editor-font-family);
       font-size: var(--piyoyo-font-small);
       line-height: 1.3;
+      text-align: center;
       text-overflow: ellipsis;
       white-space: nowrap;
+      cursor: pointer;
     }
 
-    .snippetComplexity:empty {
+    .snippetComplexity:hover,
+    .snippetComplexity[aria-expanded="true"] {
+      border-color: var(--piyoyo-yellow);
+    }
+
+    .snippetComplexity:focus-visible {
+      outline: 2px solid var(--vscode-focusBorder);
+      outline-offset: 1px;
+    }
+
+    .snippetComplexityPopover {
+      position: fixed;
+      z-index: 20;
+      box-sizing: border-box;
+      width: min(260px, calc(100vw - 16px));
+      padding: 8px 10px;
+      border: 1px solid var(--piyoyo-yellow);
+      border-radius: 4px;
+      color: var(--piyoyo-text);
+      background: var(--piyoyo-raised);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+      font-size: var(--piyoyo-font-small);
+      line-height: 1.6;
+    }
+
+    .snippetComplexityPopover[hidden] {
       display: none;
     }
 
-    .snippetRowMeta {
-      display: inline-flex;
-      align-items: center;
-      justify-content: flex-end;
-      gap: 4px;
-      min-width: 0;
+    .snippetComplexityPopoverTitle {
+      display: block;
+      font-family: var(--vscode-editor-font-family);
+      font-weight: 700;
     }
 
-    .snippetBadges {
-      display: inline-flex;
-      gap: 3px;
+    .snippetComplexityPopoverDetail {
+      margin: 4px 0 0;
+      overflow-wrap: anywhere;
     }
 
-    .snippetBadges:empty {
+    .snippetComplexityPopoverDetail:empty {
       display: none;
+    }
+
+    /* Always present so text and code start at the same x in every row. */
+    .snippetBadgeCell {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      grid-column: 1;
+      grid-row: 1 / span 2;
+      align-self: stretch;
+      min-height: calc(var(--piyoyo-font-small) * 2.6);
     }
 
     .snippetBadge {
-      display: inline-grid;
-      place-items: center;
+      display: flex;
+      flex: 1 1 0;
+      align-items: center;
+      justify-content: center;
       box-sizing: border-box;
-      min-width: 1.9em;
-      height: 1.6em;
-      padding: 0 4px;
+      min-height: 0;
       border: 1px solid transparent;
-      font-family: var(--vscode-editor-font-family);
       font-size: var(--piyoyo-font-small);
       font-weight: 700;
       line-height: 1;
+      writing-mode: vertical-rl;
+      text-orientation: upright;
       white-space: nowrap;
       cursor: help;
     }
 
-    /* Filled square: code that Piyoyo adds itself. */
+    /* Filled: code that Piyoyo adds itself. */
     .snippetBadge-helper {
       border-color: var(--vscode-charts-yellow);
       border-radius: 2px;
@@ -1030,15 +1142,15 @@ function getWebviewHtml({
       background: var(--vscode-charts-yellow);
     }
 
-    /* Outlined pill: standard-library import. */
+    /* Solid outline: standard-library import. */
     .snippetBadge-import {
-      border-color: var(--vscode-charts-blue);
-      border-radius: 999px;
-      color: var(--vscode-charts-blue);
+      border: 1px solid var(--piyoyo-orange);
+      border-radius: 2px;
+      color: var(--piyoyo-orange);
       background: transparent;
     }
 
-    /* Dashed box: third-party package. */
+    /* Dashed outline: third-party package. */
     .snippetBadge-external {
       border: 1px dashed var(--vscode-errorForeground);
       border-radius: 2px;
@@ -1067,16 +1179,25 @@ function getWebviewHtml({
 
     .snippetBadgeLegendItem {
       display: grid;
-      grid-template-columns: 5em minmax(0, 1fr);
+      grid-template-columns: calc(var(--piyoyo-font-small) + 8px) minmax(0, 1fr);
       align-items: start;
-      gap: 6px;
+      gap: 8px;
       color: var(--vscode-foreground);
       line-height: 1.5;
     }
 
+    .snippetBadgeLegendItem .snippetBadgeCell {
+      height: calc(var(--piyoyo-font-small) * 2.6);
+    }
+
     .snippetBadgeLegendItem .snippetBadge {
-      justify-self: start;
       cursor: default;
+    }
+
+    .snippetBadgeLegendNote {
+      margin: 6px 0 2px;
+      color: var(--vscode-foreground);
+      line-height: 1.5;
     }
 
     .snippetNoResults {
@@ -1444,21 +1565,7 @@ function getWebviewHtml({
 
     @media (max-width: 420px) {
       .snippetChoice {
-        grid-template-columns: minmax(0, 1fr) auto;
-        gap: 1px 5px;
-      }
-
-      .snippetRowSummary {
-        grid-column: 1 / -1;
-      }
-
-      .snippetRowPreview {
-        grid-column: 1;
-        text-align: left;
-      }
-
-      .snippetRowMeta {
-        grid-column: 2;
+        column-gap: 5px;
       }
 
       .snippetPreferenceRow {
@@ -1631,6 +1738,12 @@ function getWebviewHtml({
         background: Canvas;
         forced-color-adjust: none;
       }
+
+      /* Keep the filled look so 自作 stays distinct from the 輸入 outline. */
+      .snippetBadge-helper {
+        color: Canvas;
+        background: CanvasText;
+      }
     }
 
   </style>
@@ -1749,6 +1862,10 @@ function getWebviewHtml({
           <span id="snippetStatus" class="snippetStatus" aria-live="polite"></span>
           <button id="snippetInsertButton" class="snippetInsertButton" type="button" disabled>コードを挿入</button>
         </div>
+        <div id="snippetComplexityPopover" class="snippetComplexityPopover" role="dialog" aria-label="計算量の説明" hidden>
+          <span id="snippetComplexityPopoverTitle" class="snippetComplexityPopoverTitle"></span>
+          <p id="snippetComplexityPopoverDetail" class="snippetComplexityPopoverDetail"></p>
+        </div>
       </div>
       <div id="snippetPreferencesPanel" class="snippetPreferencesPanel" hidden>
         <div class="snippetPreferencesIntro">
@@ -1826,6 +1943,11 @@ function getWebviewHtml({
     const snippetDetailsText = document.getElementById('snippetDetailsText');
     const snippetVariantField = document.getElementById('snippetVariantField');
     const snippetVariantOptions = document.getElementById('snippetVariantOptions');
+    const snippetComplexityChips = document.querySelectorAll('[data-snippet-complexity]');
+    const snippetComplexityPopover = document.getElementById('snippetComplexityPopover');
+    const snippetComplexityPopoverTitle = document.getElementById('snippetComplexityPopoverTitle');
+    const snippetComplexityPopoverDetail = document.getElementById('snippetComplexityPopoverDetail');
+    let openComplexityChip = null;
     let selectedSnippetControl = null;
     let snippetInsertionPending = false;
     let snippetPreferencesOpen = false;
@@ -1840,6 +1962,7 @@ function getWebviewHtml({
     }
 
     function setWorkspace(workspace) {
+      closeComplexityPopover();
       workspaceTabs.forEach((tab) => {
         tab.setAttribute('aria-selected', String(tab.dataset.workspace === workspace));
       });
@@ -1969,6 +2092,7 @@ function getWebviewHtml({
     }
 
     function setSnippetPreferencesOpen(open) {
+      closeComplexityPopover();
       snippetPreferencesOpen = Boolean(open);
       snippetBrowsePanel.hidden = snippetPreferencesOpen;
       snippetPreferencesPanel.hidden = !snippetPreferencesOpen;
@@ -2138,25 +2262,67 @@ function getWebviewHtml({
           }
         });
       }
-      const complexityBadge = row.querySelector('[data-snippet-complexity]');
-      if (complexityBadge && source.dataset.snippetComplexity) {
+      const complexityChip = row.querySelector('[data-snippet-complexity]');
+      if (complexityChip && Object.prototype.hasOwnProperty.call(source.dataset, 'snippetComplexity')) {
         const complexity = source.dataset.snippetComplexity;
-        complexityBadge.textContent = complexity.qualifier + ' ' + complexity.time;
-        complexityBadge.title = complexity.detail || '';
+        if (complexityChip === openComplexityChip) {
+          closeComplexityPopover();
+        }
+        complexityChip.hidden = !complexity;
+        complexityChip.textContent = complexity ? complexity.short : '';
+        complexityChip.dataset.complexityFull = complexity ? complexity.full : '';
+        complexityChip.dataset.complexityDetail = complexity ? complexity.detail : '';
+        complexityChip.setAttribute('aria-label', complexity ? complexity.label : '');
+        complexityChip.title = complexity ? complexity.label : '';
       }
-      const badgeList = row.querySelector('[data-snippet-badges]');
-      if (badgeList && Array.isArray(source.dataset.snippetBadges)) {
-        badgeList.replaceChildren(...source.dataset.snippetBadges.map((badge) => {
+      const badgeCell = row.querySelector('[data-snippet-badges]');
+      if (badgeCell && Array.isArray(source.dataset.snippetBadges)) {
+        const badges = source.dataset.snippetBadges;
+        const split = badges.length > 1;
+        badgeCell.classList.toggle('isSplit', split);
+        badgeCell.replaceChildren(...badges.map((badge) => {
           const element = document.createElement('span');
           element.className = 'snippetBadge snippetBadge-' + badge.type;
           element.setAttribute('role', 'img');
           element.setAttribute('aria-label', badge.label);
           element.title = badge.label;
-          element.textContent = badge.text;
+          element.textContent = split ? badge.shortText : badge.text;
           return element;
         }));
       }
       snippetInsertButton.disabled = snippetInsertionPending;
+    }
+
+    function closeComplexityPopover({ restoreFocus = false } = {}) {
+      if (!openComplexityChip) {
+        return;
+      }
+      const chip = openComplexityChip;
+      openComplexityChip = null;
+      chip.setAttribute('aria-expanded', 'false');
+      snippetComplexityPopover.hidden = true;
+      if (restoreFocus) {
+        chip.focus();
+      }
+    }
+
+    function openComplexityPopover(chip) {
+      closeComplexityPopover();
+      openComplexityChip = chip;
+      chip.setAttribute('aria-expanded', 'true');
+      snippetComplexityPopoverTitle.textContent = '計算量: ' + (chip.dataset.complexityFull || '');
+      snippetComplexityPopoverDetail.textContent = chip.dataset.complexityDetail || '';
+      snippetComplexityPopover.hidden = false;
+      const margin = 8;
+      const chipRect = chip.getBoundingClientRect();
+      const popoverRect = snippetComplexityPopover.getBoundingClientRect();
+      const left = Math.max(margin, Math.min(chipRect.right - popoverRect.width, window.innerWidth - popoverRect.width - margin));
+      const below = chipRect.bottom + 4;
+      const top = below + popoverRect.height > window.innerHeight - margin
+        ? Math.max(margin, chipRect.top - popoverRect.height - 4)
+        : below;
+      snippetComplexityPopover.style.left = left + 'px';
+      snippetComplexityPopover.style.top = top + 'px';
     }
 
     function selectSnippet(control) {
@@ -2176,6 +2342,7 @@ function getWebviewHtml({
     }
 
     function filterSnippetRows() {
+      closeComplexityPopover();
       const query = snippetSearchInput.value.trim().toLocaleLowerCase('ja');
       let totalMatches = 0;
 
@@ -2384,6 +2551,36 @@ function getWebviewHtml({
       });
     });
 
+    snippetComplexityChips.forEach((chip) => {
+      chip.addEventListener('click', (event) => {
+        event.stopPropagation();
+        if (openComplexityChip === chip) {
+          closeComplexityPopover();
+        } else {
+          openComplexityPopover(chip);
+        }
+      });
+    });
+    document.addEventListener('click', (event) => {
+      if (openComplexityChip && !snippetComplexityPopover.contains(event.target)) {
+        closeComplexityPopover();
+      }
+    });
+    // Capture phase: an Escape that closes the popover must not also clear the search.
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && openComplexityChip) {
+        event.preventDefault();
+        event.stopPropagation();
+        closeComplexityPopover({ restoreFocus: true });
+      }
+    }, true);
+    snippetCategoryList.addEventListener('scroll', () => {
+      closeComplexityPopover();
+    });
+    window.addEventListener('resize', () => {
+      closeComplexityPopover();
+    });
+
     snippetSearchInput.addEventListener('input', () => {
       filterSnippetRows();
     });
@@ -2552,5 +2749,6 @@ function getWebviewHtml({
 }
 
 module.exports = {
+  getComplexityShortForm,
   getWebviewHtml
 };
