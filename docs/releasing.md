@@ -92,6 +92,7 @@ Dark Modernテーマ、エディタ文字サイズ18、ウィンドウの画像�
 
 | ファイル | 再撮影する画面 |
 | --- | --- |
+| `00-overview.png` | READMEの冒頭用。Piyoyoを補助サイドバーに表示し、複数行の標準入力を与えて実行した全体画面。 |
 | `01-install-vsix.png` | 拡張機能ビューの`...`を開き、Install from VSIX...を表示する。 |
 | `02-installed.png` | Installedの一覧にPiyoyoが表示されている状態。 |
 | `03-run-python.png` | 利用ガイドの`main.py`へ`3 5`を入力し、出力`8`と終了コード`0`を表示する。 |

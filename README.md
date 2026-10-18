@@ -7,7 +7,7 @@
 Piyoyoは、Pythonの標準入力を試す実行パネルと、競技プログラミングでよく使うコードを挿入できるVS Code拡張機能です。
 保存したPythonファイルに入力を渡し、出力、エラー、終了コード、実行時間をVS Codeのサイドバーで確認できます。
 
-![Piyoyoで標準入力を与えてPythonを実行した画面](docs/images/03-run-python.png)
+![エディタの右側にPiyoyoを表示し、3行の標準入力を与えてPythonを実行した画面](docs/images/00-overview.png)
 
 ## 名前の由来
 
