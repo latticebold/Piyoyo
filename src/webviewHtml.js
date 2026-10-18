@@ -1515,7 +1515,7 @@ function getWebviewHtml({
       min-width: 0;
       min-height: 0;
       /* Grow with the explanation, but leave a usable slice of the catalogue. */
-      max-height: 45vh;
+      max-height: min(45vh, max(30vh, 100vh - 300px));
       overflow-y: auto;
       padding: 0 9px 7px;
       border: 1px solid var(--piyoyo-line);

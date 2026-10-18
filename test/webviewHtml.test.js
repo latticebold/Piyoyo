@@ -854,7 +854,7 @@ test('shortcut hint bar sits above the tabs and follows the platform and input f
 test('snippet detail area puts the insert button first and grows before scrolling', () => {
   const html = getWebviewHtml();
   assert.match(html, /<div class="snippetInsertFooter">\s*<div class="snippetInsertActions">\s*<button id="snippetInsertButton"[^>]*>コードを挿入<\/button>\s*<span id="snippetStatus"/);
-  assert.match(html, /\.snippetInsertFooter\s*\{[^}]*max-height:\s*45vh;/s);
+  assert.match(html, /\.snippetInsertFooter\s*\{[^}]*max-height:\s*min\(45vh, max\(30vh, 100vh - 300px\)\);/s);
   assert.match(html, /\.snippetInsertActions\s*\{(?=[^}]*position:\s*sticky;)(?=[^}]*top:\s*0;)[^}]*\}/s);
   assert.doesNotMatch(html, /min\(30vh, 170px\)/);
 });
