@@ -105,7 +105,7 @@ test('101 snippets have complete frozen metadata in the 15-category usage order'
     for (const field of [
       'id', 'category', 'categoryLabel', 'selectorGroup', 'selectorGroupLabel', 'choiceLabel',
       'summary', 'description', 'input',
-      'returns', 'precondition', 'label', 'body', 'imports', 'complexity'
+      'returns', 'precondition', 'label', 'body', 'imports', 'helpers', 'externalPackages', 'complexity'
     ]) {
       assert.ok(Object.hasOwn(snippet, field), `${snippet.id} is missing ${field}`);
     }
@@ -122,6 +122,10 @@ test('101 snippets have complete frozen metadata in the 15-category usage order'
     assert.equal(typeof snippet.body, 'string');
     assert.ok(Object.isFrozen(snippet));
     assert.ok(Object.isFrozen(snippet.imports));
+    assert.ok(Object.isFrozen(snippet.helpers));
+    assert.ok(Object.isFrozen(snippet.externalPackages));
+    // Every current snippet uses only Python and its standard library.
+    assert.deepEqual(snippet.externalPackages, []);
     assert.ok(Object.isFrozen(snippet.complexity));
     assert.ok(snippet.complexity.time);
     assert.ok(['最悪', '平均', '償却'].includes(snippet.complexity.qualifier));

@@ -488,7 +488,8 @@ function createSnippet({
   label,
   body = label,
   imports = [],
-  helpers = []
+  helpers = [],
+  externalPackages = []
 }) {
   const complexityValues = COMPLEXITY_BY_ID[id];
   if (!complexityValues) {
@@ -510,6 +511,7 @@ function createSnippet({
     body,
     imports: Object.freeze([...imports]),
     helpers: Object.freeze(helpers.map((helper) => Object.freeze({ ...helper }))),
+    externalPackages: Object.freeze([...externalPackages]),
     complexity: Object.freeze({
       time: complexityValues[0],
       qualifier: complexityValues[1],
