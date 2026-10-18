@@ -4,6 +4,7 @@ const path = require('node:path');
 const vscode = require('vscode');
 
 const { resolveErrorDisplayMode } = require('./src/errorDisplayMode');
+const { OPEN_SETTINGS_COMMAND, openPiyoyoSettings } = require('./src/piyoyoSettings');
 const { createLauncherAvailabilityCache } = require('./src/pythonLauncherAvailabilityCache');
 const {
   getSavedPythonPathPreference,
@@ -49,6 +50,10 @@ function activate(context) {
   context.subscriptions.push(vscode.commands.registerCommand(OPEN_COMMAND, openRunner));
   // Keep old keybindings working after the namespace rename without exposing the old label.
   context.subscriptions.push(vscode.commands.registerCommand(LEGACY_OPEN_COMMAND, openRunner));
+  context.subscriptions.push(vscode.commands.registerCommand(
+    OPEN_SETTINGS_COMMAND,
+    () => openPiyoyoSettings(vscode.commands, context.extension && context.extension.id)
+  ));
 
   context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor((editor) => {
     provider.handleActiveEditorChange(editor);
@@ -96,6 +101,11 @@ class RunnerViewProvider {
 
     webviewView.webview.onDidReceiveMessage(async (message) => {
       if (!message || typeof message.type !== 'string') {
+        return;
+      }
+
+      if (message.type === 'openSettings') {
+        await vscode.commands.executeCommand(OPEN_SETTINGS_COMMAND);
         return;
       }
 

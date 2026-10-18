@@ -340,6 +340,7 @@ function renderErrorField(mode) {
       + originalBox
       + '</details>';
   }
+  body += '<button type="button" class="settingsLink" data-open-settings title="Piyoyoの設定を開く">エラーの表示方法を設定で変える</button>';
   return `<div id="stderrField" class="outputField" data-error-display-mode="${escapeHtml(mode)}" hidden>${body}</div>`;
 }
 
@@ -438,11 +439,54 @@ function getWebviewHtml({
       max-width: 720px;
     }
 
+    .workspaceHeader {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 4px;
+      border-bottom: 1px solid var(--piyoyo-line);
+    }
+
     .workspaceTabs {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 8px;
-      border-bottom: 1px solid var(--piyoyo-line);
+    }
+
+    .settingsButton {
+      display: inline-grid;
+      place-items: center;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      border-color: transparent;
+      color: var(--piyoyo-muted);
+      background: transparent;
+    }
+
+    .settingsButton:hover {
+      color: var(--piyoyo-text);
+      background: var(--vscode-toolbar-hoverBackground);
+    }
+
+    .settingsButton svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .settingsLink {
+      justify-self: start;
+      padding: 0;
+      border: 0;
+      color: var(--piyoyo-orange);
+      background: transparent;
+      font-size: 11px;
+      text-decoration: underline;
+    }
+
+    .settingsLink:hover {
+      color: var(--piyoyo-yellow);
+      background: transparent;
     }
 
     .workspaceTab {
@@ -1429,10 +1473,13 @@ function getWebviewHtml({
 </head>
 <body>
   <main class="runner">
-    <nav class="workspaceTabs" role="tablist" aria-label="Piyoyoの機能">
-      <button id="runWorkspaceTab" class="workspaceTab" type="button" role="tab" aria-selected="true" aria-controls="runWorkspace" data-workspace="run">実行</button>
-      <button id="snippetWorkspaceTab" class="workspaceTab" type="button" role="tab" aria-selected="false" aria-controls="snippetWorkspace" data-workspace="snippets">コード挿入</button>
-    </nav>
+    <div class="workspaceHeader">
+      <nav class="workspaceTabs" role="tablist" aria-label="Piyoyoの機能">
+        <button id="runWorkspaceTab" class="workspaceTab" type="button" role="tab" aria-selected="true" aria-controls="runWorkspace" data-workspace="run">実行</button>
+        <button id="snippetWorkspaceTab" class="workspaceTab" type="button" role="tab" aria-selected="false" aria-controls="snippetWorkspace" data-workspace="snippets">コード挿入</button>
+      </nav>
+      <button id="openSettingsButton" class="settingsButton" type="button" data-open-settings aria-label="Piyoyoの設定を開く" title="Piyoyoの設定を開く"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="8" cy="8" r="4.6" fill="none" stroke="currentColor" stroke-width="1.4"/></svg></button>
+    </div>
 
     <section id="runWorkspace" class="workspacePanel" role="tabpanel" aria-labelledby="runWorkspaceTab" data-workspace-panel="run">
       <button id="runButton" class="primaryRun" type="button">実行</button>
@@ -1500,6 +1547,7 @@ function getWebviewHtml({
           </select>
           <input id="customPythonPath" type="text" aria-label="カスタムPythonパス" placeholder="例: C:\\Python\\python.exe" disabled>
           <span class="fileLabel" id="launcherProbeStatus">起動時に Python 候補を判定中...</span>
+          <button type="button" class="settingsLink" data-open-settings title="Piyoyoの設定を開く">「設定値」と制限時間を設定で変える</button>
         </div>
       </section>
     </section>
@@ -2117,6 +2165,9 @@ function getWebviewHtml({
 
     workspaceTabs.forEach((tab) => {
       tab.addEventListener('click', () => setWorkspace(tab.dataset.workspace));
+    });
+    document.querySelectorAll('[data-open-settings]').forEach((button) => {
+      button.addEventListener('click', () => vscode.postMessage({ type: 'openSettings' }));
     });
     snippetCategorySummaries.forEach((summary) => {
       summary.addEventListener('click', rememberSnippetCategoryScrollPosition);

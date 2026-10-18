@@ -42,6 +42,11 @@
           "light": "resources/piyoyo.png",
           "dark": "resources/piyoyo.png"
         }
+      },
+      {
+        "command": "piyoyo.openSettings",
+        "title": "Piyoyo: 設定を開く",
+        "icon": "$(gear)"
       }
     ],
     "menus": {
@@ -50,6 +55,13 @@
           "command": "piyoyo.open",
           "when": "resourceLangId == python",
           "group": "navigation@1"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "piyoyo.openSettings",
+          "when": "view == piyoyo.runnerView",
+          "group": "navigation"
         }
       ]
     },
@@ -77,13 +89,13 @@
         "piyoyo.pythonPath": {
           "type": "string",
           "default": "",
-          "description": "Python executable path. When empty, Piyoyo uses python.defaultInterpreterPath, then python on Windows or python3 elsewhere."
+          "description": "Pythonの実行ファイルのパスです。パネルの「実行環境」で選んだ値が優先されます。空の場合は python.defaultInterpreterPath を使い、それも空ならWindowsでは python、それ以外では python3 を使います。"
         },
         "piyoyo.timeoutMs": {
           "type": "number",
           "default": 5000,
           "minimum": 100,
-          "description": "Maximum execution time in milliseconds."
+          "description": "Pythonの最大実行時間をミリ秒で指定します（1000 ミリ秒 = 1 秒）。この時間を超えると実行を止めます。"
         },
         "piyoyo.errorDisplayMode": {
           "type": "string",
@@ -116,6 +128,6 @@
   },
   "scripts": {
     "test": "node --test test/*.test.js",
-    "check": "node --check extension.js && node --check src/webviewHtml.js && node --check src/snippetLibrary.js && node --check src/snippetPreferences.js && node --check src/snippetInsertion.js && node --check src/pythonImportInsertion.js && node --check src/pythonStatements.js && node --check src/runners/pythonRunner.js && node --check src/runners/pythonErrorExplainer.js && node --check src/runners/boundedOutput.js && node --check src/runners/processTermination.js && node --check src/errorDisplayMode.js &&node --check src/targetSelection.js && node --check src/pythonPathSelection.js && node --check src/pythonPathPreference.js && node --check src/pythonLauncherAvailability.js && node --check src/pythonLauncherAvailabilityCache.js && node --check src/ruffImportOrganizer.js"
+    "check": "node --check extension.js && node --check src/webviewHtml.js && node --check src/snippetLibrary.js && node --check src/snippetPreferences.js && node --check src/snippetInsertion.js && node --check src/pythonImportInsertion.js && node --check src/pythonStatements.js && node --check src/runners/pythonRunner.js && node --check src/runners/pythonErrorExplainer.js && node --check src/runners/boundedOutput.js && node --check src/runners/processTermination.js && node --check src/errorDisplayMode.js && node --check src/piyoyoSettings.js && node --check src/targetSelection.js && node --check src/pythonPathSelection.js && node --check src/pythonPathPreference.js && node --check src/pythonLauncherAvailability.js && node --check src/pythonLauncherAvailabilityCache.js && node --check src/ruffImportOrganizer.js"
   }
 }
