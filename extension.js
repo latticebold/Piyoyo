@@ -3,6 +3,7 @@
 const path = require('node:path');
 const vscode = require('vscode');
 
+const { resolveErrorDisplayMode } = require('./src/errorDisplayMode');
 const { createLauncherAvailabilityCache } = require('./src/pythonLauncherAvailabilityCache');
 const {
   getSavedPythonPathPreference,
@@ -54,7 +55,8 @@ function activate(context) {
   }));
 
   context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((event) => {
-    if (event.affectsConfiguration('piyoyo.advanced.showOriginalErrors')) {
+    if (event.affectsConfiguration('piyoyo.errorDisplayMode')
+      || event.affectsConfiguration('piyoyo.advanced.showOriginalErrors')) {
       provider.renderWebview();
     }
   }));
@@ -62,6 +64,15 @@ function activate(context) {
 }
 
 function deactivate() {}
+
+function getConfiguredErrorDisplayMode() {
+  const config = vscode.workspace.getConfiguration('piyoyo');
+  return resolveErrorDisplayMode({
+    inspected: config.inspect('errorDisplayMode'),
+    configuredMode: config.get('errorDisplayMode'),
+    legacyShowOriginalErrors: config.get('advanced.showOriginalErrors', false)
+  });
+}
 
 class RunnerViewProvider {
   constructor(extensionUri, globalState) {
@@ -158,7 +169,7 @@ class RunnerViewProvider {
       preferenceSnippets: orderSnippetsByPreferences(INPUT_SNIPPETS, snippetPreferences),
       snippetPreferences,
       defaultSnippetOrder: INPUT_SNIPPETS.map((snippet) => snippet.id),
-      showOriginalErrors: vscode.workspace.getConfiguration('piyoyo').get('advanced.showOriginalErrors', false)
+      errorDisplayMode: getConfiguredErrorDisplayMode()
     });
   }
 

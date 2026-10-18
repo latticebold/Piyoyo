@@ -101,7 +101,8 @@ Pythonファイルを開き、エディタ右上のPiyoyoアイコンを押す�
 | --- | --- | --- |
 | `piyoyo.pythonPath` | 空 | Python実行ファイルのパスです。実行環境で選んだ値を優先し、空の場合は`python.defaultInterpreterPath`、続いてOSの標準候補を使います。 |
 | `piyoyo.timeoutMs` | `5000` | Pythonの最大実行時間をミリ秒で指定します。初期値は5秒です。 |
-| `piyoyo.advanced.showOriginalErrors` | `false` | 元の英語のエラーとトレースバックを実行結果に表示します。 |
+| `piyoyo.errorDisplayMode` | `friendly` | Pythonのエラーの表示方法です。`friendly`（やさしい表示）は日本語の説明を表示し、元のエラーは「原文を見る」に折りたたみます。`both`（両方表示）は両方を表示し、`original`（原文表示）は元のエラーとトレースバックを中心に表示します。 |
+| `piyoyo.advanced.showOriginalErrors` | `false` | 以前の設定です。`piyoyo.errorDisplayMode`を設定していない場合に限り、`true`で「両方表示」になります。 |
 
 ## 開発者向け
 

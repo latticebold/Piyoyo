@@ -5,6 +5,11 @@ const {
   SNIPPET_CATEGORY_ORDER,
   getSnippetPlaceholders
 } = require('./snippetLibrary');
+const {
+  DEFAULT_ERROR_DISPLAY_MODE,
+  getErrorPresentation,
+  normalizeErrorDisplayMode
+} = require('./errorDisplayMode');
 
 function escapeHtml(value) {
   return String(value)
@@ -312,6 +317,32 @@ function renderSnippetPreferences(snippets, preferences, defaultSnippetOrder) {
   return { categoryPanels };
 }
 
+function renderErrorField(mode) {
+  const explanationLabel = '<span class="fileLabel toneError">エラーの説明</span>';
+  const explanationBox = '<pre id="errorExplanation" class="outputBox stderrBox"></pre>';
+  const originalBox = '<pre id="stderr" class="outputBox stderrBox"></pre>';
+  const originalSection = '<div id="originalErrorSection" class="outputField">'
+    + '<span class="fileLabel toneError">Pythonの原文（エラーとトレースバック）</span>'
+    + originalBox
+    + '</div>';
+
+  let body;
+  if (mode === 'original') {
+    body = originalSection
+      + '<details id="errorExplanationDetails" class="errorDetails"><summary>日本語の説明を見る</summary>'
+      + explanationBox
+      + '</details>';
+  } else if (mode === 'both') {
+    body = explanationLabel + explanationBox + originalSection;
+  } else {
+    body = explanationLabel + explanationBox
+      + '<details id="originalErrorDetails" class="errorDetails"><summary>原文を見る</summary>'
+      + originalBox
+      + '</details>';
+  }
+  return `<div id="stderrField" class="outputField" data-error-display-mode="${escapeHtml(mode)}" hidden>${body}</div>`;
+}
+
 function getWebviewHtml({
   brandName = 'Piyoyo',
   savedPythonPath = '',
@@ -319,9 +350,10 @@ function getWebviewHtml({
   preferenceSnippets = snippets,
   snippetPreferences = { hiddenSnippetIds: [], order: [] },
   defaultSnippetOrder = preferenceSnippets.map((snippet) => snippet.id),
-  showOriginalErrors = false
+  errorDisplayMode = DEFAULT_ERROR_DISPLAY_MODE
 } = {}) {
   const nonce = getNonce();
+  const resolvedErrorDisplayMode = normalizeErrorDisplayMode(errorDisplayMode);
   const escapedBrandName = escapeHtml(brandName);
   const initialPythonPathJson = scriptJson(savedPythonPath);
   const initialSnippetPreferencesJson = scriptJsonData(snippetPreferences);
@@ -1362,6 +1394,17 @@ function getWebviewHtml({
       border-color: #994547;
     }
 
+    .errorDetails {
+      display: grid;
+      gap: 6px;
+    }
+
+    .errorDetails > summary {
+      color: var(--vscode-descriptionForeground);
+      font-size: 11px;
+      cursor: pointer;
+    }
+
     @media (max-height: 560px) {
       body { padding: 10px; }
       .runner { gap: 8px; }
@@ -1402,11 +1445,7 @@ function getWebviewHtml({
       <section class="outputSection" aria-label="実行結果">
         <span class="ioLabel">標準出力</span>
         <pre id="stdout" class="outputBox stdoutBox" data-placeholder="実行結果がここに表示されます"></pre>
-        <div id="stderrField" class="outputField" hidden>
-          <span class="fileLabel toneError">エラーの説明</span>
-          <pre id="errorExplanation" class="outputBox stderrBox"></pre>
-          ${showOriginalErrors ? '<details id="originalErrorDetails"><summary>元のエラーを表示</summary><pre id="stderr" class="outputBox stderrBox"></pre></details>' : ''}
-        </div>
+        ${renderErrorField(resolvedErrorDisplayMode)}
       </section>
 
       <section id="runDetails" class="runDetails runSection" aria-labelledby="runDetailsHeading">
@@ -1535,6 +1574,11 @@ function getWebviewHtml({
     const stderr = document.getElementById('stderr');
     const errorExplanation = document.getElementById('errorExplanation');
     const stderrField = document.getElementById('stderrField');
+    const errorDisplayMode = stderrField.dataset.errorDisplayMode;
+    const originalErrorDetails = document.getElementById('originalErrorDetails');
+    const originalErrorContainer = originalErrorDetails || document.getElementById('originalErrorSection');
+    const errorExplanationDetails = document.getElementById('errorExplanationDetails');
+    ${getErrorPresentation.toString()}
     const runtimeImplementation = document.getElementById('runtimeImplementation');
     const runtimeVersion = document.getElementById('runtimeVersion');
     const runtimeExecutable = document.getElementById('runtimeExecutable');
@@ -2175,7 +2219,7 @@ function getWebviewHtml({
       elapsed.textContent = '';
       stdout.textContent = '';
       errorExplanation.textContent = '';
-      if (stderr) stderr.textContent = '';
+      stderr.textContent = '';
       stderrField.hidden = true;
       savePythonPathPreference();
       vscode.postMessage({
@@ -2231,9 +2275,20 @@ function getWebviewHtml({
         || (typeof message.exitCode === 'number' && message.exitCode !== 0));
       errorExplanation.textContent = message.errorExplanation
         || (failed ? '実行中にエラーが発生しました。コードと入力を確認してください。'
-          : message.stderr ? '実行は完了しましたが、Pythonが注意事項を出力しました。元の内容は詳細設定から表示できます。' : '');
-      stderrField.hidden = !errorExplanation.textContent;
-      if (stderr) stderr.textContent = [message.errorMessage, message.stderr].filter(Boolean).join('\\n');
+          : message.stderr ? '実行は完了しましたが、Pythonが注意事項を出力しました。' : '');
+      stderr.textContent = [message.errorMessage, message.stderr].filter(Boolean).join('\\n');
+      const errorPresentation = getErrorPresentation({
+        mode: errorDisplayMode,
+        explanation: errorExplanation.textContent,
+        originalText: stderr.textContent
+      });
+      stderrField.hidden = !errorPresentation.showField;
+      originalErrorContainer.hidden = !errorPresentation.showOriginal;
+      if (originalErrorDetails) originalErrorDetails.open = errorPresentation.originalExpanded;
+      if (errorExplanationDetails) {
+        errorExplanationDetails.hidden = !errorPresentation.showExplanation;
+        errorExplanationDetails.open = errorPresentation.explanationExpanded;
+      }
       if (message.exitCode === null || message.exitCode === undefined) {
         exitCode.textContent = 'n/a';
         exitCode.className = 'detailValue toneMuted';

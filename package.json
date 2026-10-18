@@ -85,16 +85,37 @@
           "minimum": 100,
           "description": "Maximum execution time in milliseconds."
         },
+        "piyoyo.errorDisplayMode": {
+          "type": "string",
+          "enum": [
+            "friendly",
+            "both",
+            "original"
+          ],
+          "enumItemLabels": [
+            "やさしい表示",
+            "両方表示",
+            "原文表示"
+          ],
+          "enumDescriptions": [
+            "日本語の説明を表示します。Pythonの原文（エラーとトレースバック）は「原文を見る」を開いたときだけ表示します。",
+            "日本語の説明と、Pythonの原文の両方を表示します。",
+            "Pythonの原文を中心に表示します。日本語の説明は「日本語の説明を見る」を開くと表示します。"
+          ],
+          "default": "friendly",
+          "description": "Pythonのエラーが起きたときの表示方法を選びます。"
+        },
         "piyoyo.advanced.showOriginalErrors": {
           "type": "boolean",
           "default": false,
-          "description": "日本語のエラー説明に加え、元のエラーとトレースバックを表示します。"
+          "description": "日本語のエラー説明に加え、元のエラーとトレースバックを表示します。",
+          "deprecationMessage": "代わりに piyoyo.errorDisplayMode を使ってください。piyoyo.errorDisplayMode を設定していない場合に限り、true は「両方表示」として扱います。"
         }
       }
     }
   },
   "scripts": {
     "test": "node --test test/*.test.js",
-    "check": "node --check extension.js && node --check src/webviewHtml.js && node --check src/snippetLibrary.js && node --check src/snippetPreferences.js && node --check src/snippetInsertion.js && node --check src/pythonImportInsertion.js && node --check src/pythonStatements.js && node --check src/runners/pythonRunner.js && node --check src/runners/pythonErrorExplainer.js && node --check src/runners/boundedOutput.js && node --check src/runners/processTermination.js && node --check src/targetSelection.js && node --check src/pythonPathSelection.js && node --check src/pythonPathPreference.js && node --check src/pythonLauncherAvailability.js && node --check src/pythonLauncherAvailabilityCache.js"
+    "check": "node --check extension.js && node --check src/webviewHtml.js && node --check src/snippetLibrary.js && node --check src/snippetPreferences.js && node --check src/snippetInsertion.js && node --check src/pythonImportInsertion.js && node --check src/pythonStatements.js && node --check src/runners/pythonRunner.js && node --check src/runners/pythonErrorExplainer.js && node --check src/runners/boundedOutput.js && node --check src/runners/processTermination.js && node --check src/errorDisplayMode.js &&node --check src/targetSelection.js && node --check src/pythonPathSelection.js && node --check src/pythonPathPreference.js && node --check src/pythonLauncherAvailability.js && node --check src/pythonLauncherAvailabilityCache.js"
   }
 }

@@ -66,8 +66,19 @@ test('manifest keeps code visibility preferences inside Piyoyo instead of VS Cod
   );
 });
 
-test('manifest keeps original Python tracebacks behind an advanced setting', () => {
+test('manifest keeps the legacy original-error setting as a deprecated fallback', () => {
   const setting = manifest.contributes.configuration.properties['piyoyo.advanced.showOriginalErrors'];
   assert.equal(setting.type, 'boolean');
   assert.equal(setting.default, false);
+  assert.match(setting.deprecationMessage, /piyoyo\.errorDisplayMode/);
+});
+
+test('manifest offers three error display modes with Japanese labels', () => {
+  const { ERROR_DISPLAY_MODES, DEFAULT_ERROR_DISPLAY_MODE } = require('../src/errorDisplayMode');
+  const setting = manifest.contributes.configuration.properties['piyoyo.errorDisplayMode'];
+  assert.equal(setting.type, 'string');
+  assert.deepEqual(setting.enum, [...ERROR_DISPLAY_MODES]);
+  assert.equal(setting.default, DEFAULT_ERROR_DISPLAY_MODE);
+  assert.deepEqual(setting.enumItemLabels, ['やさしい表示', '両方表示', '原文表示']);
+  assert.equal(setting.enumDescriptions.length, setting.enum.length);
 });

@@ -26,7 +26,7 @@ test('webview uses white input and yellow output surfaces with dark text', () =>
   assert.match(html, /id="stdin"[^>]*class="stdinBox"/);
   assert.match(html, /id="stdout"[^>]*class="outputBox stdoutBox"/);
   assert.match(html, /id="errorExplanation"[^>]*class="outputBox stderrBox"/);
-  assert.doesNotMatch(html, /id="stderr"/);
+  assert.match(html, /id="stderr"[^>]*class="outputBox stderrBox"/);
   assert.match(html, /\.stdinBox\s*\{(?=[^}]*color:\s*var\(--piyoyo-bg\))(?=[^}]*background:\s*var\(--piyoyo-text\))(?=[^}]*border-color:\s*var\(--piyoyo-text\))[^}]*\}/s);
   assert.match(html, /\.stdoutBox\s*\{(?=[^}]*color:\s*var\(--piyoyo-bg\))(?=[^}]*background:\s*var\(--piyoyo-yellow\))(?=[^}]*border-color:\s*var\(--piyoyo-yellow\))[^}]*\}/s);
   assert.match(html, /\.stderrBox\s*\{[^}]*color:\s*var\(--piyoyo-red\)/s);
@@ -326,15 +326,50 @@ test('webview shows complexity in each row and updates grouped variants', () => 
   assert.doesNotMatch(html, /snippetEditorExpression/);
 });
 
-test('webview displays Japanese errors and gates original stderr', () => {
-  const html = getWebviewHtml();
+function errorField(html) {
+  return html.match(/<div id="stderrField".*$/m)[0];
+}
 
-  assert.match(html, /id="stderrField"[^>]*hidden/);
+test('webview friendly mode shows Japanese errors and folds the original behind 原文を見る', () => {
+  for (const html of [getWebviewHtml(), getWebviewHtml({ errorDisplayMode: 'friendly' })]) {
+    const field = errorField(html);
+    assert.match(field, /id="stderrField"[^>]*data-error-display-mode="friendly"[^>]*hidden/);
+    assert.match(field, /エラーの説明<\/span><pre id="errorExplanation"/);
+    assert.match(field, /<details id="originalErrorDetails"[^>]*><summary>原文を見る<\/summary><pre id="stderr"/);
+    assert.doesNotMatch(field, /<details[^>]*open/);
+    assert.doesNotMatch(field, /originalErrorSection|errorExplanationDetails/);
+  }
+});
+
+test('webview both mode shows the Japanese explanation and the original side by side', () => {
+  const field = errorField(getWebviewHtml({ errorDisplayMode: 'both' }));
+  assert.match(field, /data-error-display-mode="both"/);
+  assert.ok(field.indexOf('id="errorExplanation"') < field.indexOf('id="stderr"'));
+  assert.match(field, /<div id="originalErrorSection"[^>]*>.*<pre id="stderr"/);
+  assert.doesNotMatch(field, /<details/);
+});
+
+test('webview original mode shows the original first and folds the explanation', () => {
+  const field = errorField(getWebviewHtml({ errorDisplayMode: 'original' }));
+  assert.match(field, /data-error-display-mode="original"/);
+  assert.ok(field.indexOf('id="stderr"') < field.indexOf('id="errorExplanation"'));
+  assert.match(field, /<details id="errorExplanationDetails"[^>]*><summary>日本語の説明を見る<\/summary><pre id="errorExplanation"/);
+  assert.doesNotMatch(field, /originalErrorDetails/);
+});
+
+test('webview falls back to friendly mode for unknown display modes', () => {
+  assert.match(getWebviewHtml({ errorDisplayMode: '<bad>' }), /data-error-display-mode="friendly"/);
+});
+
+test('webview always keeps the original stderr and applies the shared presentation rule', () => {
+  const html = getWebviewHtml();
   assert.match(html, /stderrField\.hidden = true/);
-  assert.match(html, /stderrField\.hidden = !errorExplanation\.textContent/);
   assert.match(html, /errorExplanation\.textContent = message\.errorExplanation/);
-  assert.doesNotMatch(html, /id="stderr"/);
-  assert.match(getWebviewHtml({ showOriginalErrors: true }), /<details id="originalErrorDetails">.*id="stderr"/);
+  assert.match(html, /stderr\.textContent = \[message\.errorMessage, message\.stderr\]\.filter\(Boolean\)\.join/);
+  assert.match(html, /function getErrorPresentation\(/);
+  assert.match(html, /stderrField\.hidden = !errorPresentation\.showField/);
+  assert.match(html, /originalErrorContainer\.hidden = !errorPresentation\.showOriginal/);
+  assert.match(html, /stdout\.textContent = message\.stdout \|\| ''/);
 });
 
 test('webview clears stale runtime details when a result has no runtime', () => {
@@ -499,9 +534,11 @@ test('local black theme has semantic yellow, orange and red accents', () => {
 });
 
 test('generated webview script remains valid JavaScript', () => {
-  const html = getWebviewHtml({ snippets: INPUT_SNIPPETS });
-  const script = html.match(/<script nonce="[^"]+">([\s\S]*?)<\/script>/)[1];
-  assert.doesNotThrow(() => new Script(script));
+  for (const errorDisplayMode of ['friendly', 'both', 'original']) {
+    const html = getWebviewHtml({ snippets: INPUT_SNIPPETS, errorDisplayMode });
+    const script = html.match(/<script nonce="[^"]+">([\s\S]*?)<\/script>/)[1];
+    assert.doesNotThrow(() => new Script(script));
+  }
 });
 
 test('editable tokens stay distinct from fixed code and longer identifiers in prose', () => {
