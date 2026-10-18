@@ -1,6 +1,7 @@
 'use strict';
 
 const { getImportInsertion } = require('./pythonImportInsertion');
+const { organizeImportsWithRuff } = require('./ruffImportOrganizer');
 const { applySnippetPlaceholderValues } = require('./snippetLibrary');
 
 async function insertInputSnippet({ vscodeApi, editor, snippet, placeholderValues }) {
@@ -47,6 +48,9 @@ async function insertInputSnippet({ vscodeApi, editor, snippet, placeholderValue
         addedImports
       );
     }
+
+    // Before insertSnippet so a whole-document edit cannot break tab stops.
+    await organizeImportsWithRuff(createRuffDependencies(vscodeApi, editor.document));
   }
 
   try {
@@ -85,6 +89,34 @@ async function insertInputSnippet({ vscodeApi, editor, snippet, placeholderValue
       addedImports
     );
   }
+}
+
+function createRuffDependencies(vscodeApi, document) {
+  const extensions = vscodeApi && vscodeApi.extensions;
+  const commands = vscodeApi && vscodeApi.commands;
+  const workspace = vscodeApi && vscodeApi.workspace;
+  const lineCount = document && Number.isInteger(document.lineCount) ? document.lineCount : 0;
+  return {
+    getExtension: extensions && typeof extensions.getExtension === 'function'
+      ? (id) => extensions.getExtension(id)
+      : undefined,
+    executeCommand: commands && typeof commands.executeCommand === 'function'
+      ? (...args) => commands.executeCommand(...args)
+      : undefined,
+    applyEdit: workspace && typeof workspace.applyEdit === 'function'
+      ? (edit) => workspace.applyEdit(edit)
+      : undefined,
+    document,
+    range: vscodeApi && typeof vscodeApi.Range === 'function'
+      ? validateRange(document, new vscodeApi.Range(0, 0, lineCount, 0))
+      : undefined
+  };
+}
+
+function validateRange(document, range) {
+  return document && typeof document.validateRange === 'function'
+    ? document.validateRange(range)
+    : range;
 }
 
 function createSuccessMessage(addedImports) {
