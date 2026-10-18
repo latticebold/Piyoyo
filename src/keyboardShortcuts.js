@@ -28,22 +28,41 @@ function isInputFocusShortcut(event) {
   return event.code === 'KeyI';
 }
 
-// Returns 'run', 'snippets', or '' for Alt+1 / Alt+2 (macOS Option+1 / Option+2).
-function getWorkspaceShortcutTarget(event) {
+// Returns 'run', 'snippets', or '' for Alt+Left / Alt+Right and the Alt+1 / Alt+2 aliases
+// (macOS Option). allowArrows is false where Option+Arrow must keep moving by word.
+function getWorkspaceShortcutTarget(event, { allowArrows = true } = {}) {
   if (!event || !event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
     return '';
   }
   if (event.isComposing || event.keyCode === 229) {
     return '';
   }
-  // event.code keeps the physical digit on macOS and AZERTY; numpad stays free for Alt codes.
-  if (event.code === 'Digit1') {
+  // event.code keeps the physical key on macOS and AZERTY; numpad stays free for Alt codes.
+  if (event.code === 'Digit1' || (allowArrows && event.code === 'ArrowLeft')) {
     return 'run';
   }
-  if (event.code === 'Digit2') {
+  if (event.code === 'Digit2' || (allowArrows && event.code === 'ArrowRight')) {
     return 'snippets';
   }
   return '';
+}
+
+function isTextEntryTarget(element) {
+  if (!element) {
+    return false;
+  }
+  if (element.isContentEditable) {
+    return true;
+  }
+  const tagName = String(element.tagName || '').toLowerCase();
+  if (tagName === 'textarea') {
+    return true;
+  }
+  if (tagName !== 'input') {
+    return false;
+  }
+  const type = String(element.type || 'text').toLowerCase();
+  return !['checkbox', 'radio', 'button', 'submit', 'reset', 'range', 'color', 'file'].includes(type);
 }
 
 // Detects two clean Shift taps (no other key in between) within intervalMs.
@@ -170,7 +189,13 @@ const WORKSPACE_SHORTCUT_COMMAND = 'piyoyo.workspaceShortcut';
 
 function getWorkspaceShortcutLabels(platform) {
   const modifier = platform === 'darwin' ? 'Option' : 'Alt';
-  return { run: `${modifier}+1`, snippets: `${modifier}+2` };
+  return {
+    run: `${modifier}+←`,
+    snippets: `${modifier}+→`,
+    switch: `${modifier}+←→`,
+    runAlias: `${modifier}+1`,
+    snippetsAlias: `${modifier}+2`
+  };
 }
 
 module.exports = {
@@ -189,5 +214,6 @@ module.exports = {
   isInputFocusShortcut,
   isRunShortcut,
   isSearchShortcut,
+  isTextEntryTarget,
   normalizeInputFocusShortcut
 };

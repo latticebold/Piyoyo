@@ -115,6 +115,18 @@
         "key": "alt+2",
         "mac": "alt+2",
         "when": "piyoyo.runnerFocused && !editorTextFocus"
+      },
+      {
+        "command": "piyoyo.workspaceShortcut",
+        "key": "alt+left",
+        "mac": "alt+left",
+        "when": "piyoyo.runnerFocused && !editorTextFocus"
+      },
+      {
+        "command": "piyoyo.workspaceShortcut",
+        "key": "alt+right",
+        "mac": "alt+right",
+        "when": "piyoyo.runnerFocused && !editorTextFocus"
       }
     ],
     "menus": {

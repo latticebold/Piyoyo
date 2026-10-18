@@ -217,7 +217,7 @@ test('webview uses compact clickable rows, search, and bottom variant choice', (
 
   assert.match(html, /\.snippetCategoryDropdown\s*\{[^}]*border:/s);
   assert.match(html, /\.snippetCategoryDropdown\[open\] > summary \.snippetCategoryChevron/);
-  assert.match(html, /\.runner\s*\{[^}]*grid-template-rows:\s*auto minmax\(0, 1fr\);/s);
+  assert.match(html, /\.runner\s*\{[^}]*grid-template-rows:\s*auto auto minmax\(0, 1fr\);/s);
   assert.match(html, /\.snippetLibrary\s*\{[^}]*grid-template-rows:\s*auto minmax\(0, 1fr\);/s);
   assert.match(html, /\.snippetBrowsePanel,\s*\.snippetPreferencesPanel\s*\{[^}]*grid-template-rows:\s*auto minmax\(0, 1fr\) auto;/s);
   assert.match(html, /\.snippetChoice\s*\{[^}]*grid-template-columns:/s);
@@ -804,24 +804,59 @@ test('workspace tabs follow the tablist pattern with arrow keys', () => {
   assert.match(html, /setWorkspace\(tabs\[nextIndex\]\.dataset\.workspace\);\s*tabs\[nextIndex\]\.focus\(\);/);
 });
 
-test('workspace tabs show their Alt+1 / Alt+2 shortcut and use the platform label', () => {
+test('workspace tabs advertise Alt+Left / Alt+Right with the digit aliases and platform labels', () => {
   const html = getWebviewHtml();
-  assert.match(html, /id="runWorkspaceTab"[^>]*title="実行 \(Alt\+1\)"[^>]*aria-keyshortcuts="Alt\+1"/);
-  assert.match(html, /id="snippetWorkspaceTab"[^>]*title="コード挿入 \(Alt\+2\)"[^>]*aria-keyshortcuts="Alt\+2"/);
+  assert.match(html, /id="runWorkspaceTab"[^>]*title="実行 \(Alt\+← \/ Alt\+1\)"[^>]*aria-keyshortcuts="Alt\+ArrowLeft Alt\+1"/);
+  assert.match(html, /id="snippetWorkspaceTab"[^>]*title="コード挿入 \(Alt\+→ \/ Alt\+2\)"[^>]*aria-keyshortcuts="Alt\+ArrowRight Alt\+2"/);
+  assert.match(html, /const isMacPlatform = false;/);
 
-  const mac = getWebviewHtml({ workspaceShortcutLabels: { run: 'Option+1', snippets: 'Option+2' } });
-  assert.match(mac, /id="runWorkspaceTab"[^>]*title="実行 \(Option\+1\)"/);
-  assert.match(mac, /id="snippetWorkspaceTab"[^>]*title="コード挿入 \(Option\+2\)"/);
+  const mac = getWebviewHtml({ platform: 'darwin' });
+  assert.match(mac, /id="runWorkspaceTab"[^>]*title="実行 \(Option\+← \/ Option\+1\)。文字の入力欄では数字のほうを使います"/);
+  assert.match(mac, /id="snippetWorkspaceTab"[^>]*title="コード挿入 \(Option\+→ \/ Option\+2\)。/);
+  assert.match(mac, /const isMacPlatform = true;/);
 });
 
-test('Alt+1 / Alt+2 switch workspaces from anywhere and move focus into the shown panel', () => {
+test('Alt+Left / Alt+Right and Alt+1 / Alt+2 switch workspaces from anywhere and move focus into the shown panel', () => {
   const html = getWebviewHtml();
-  assert.match(html, /function getWorkspaceShortcutTarget\(event\)/);
-  assert.match(html, /const shortcutWorkspace = getWorkspaceShortcutTarget\(event\);\s*if \(shortcutWorkspace\) \{[\s\S]*?event\.preventDefault\(\);\s*setWorkspace\(shortcutWorkspace, \{ focusPanel: true \}\);/);
+  assert.match(html, /function getWorkspaceShortcutTarget\(event, \{ allowArrows = true \} = \{\}\)/);
+  assert.match(html, /function isTextEntryTarget\(element\)/);
+  // macOS Option+Arrow keeps moving by word inside text fields.
+  assert.match(html, /const shortcutWorkspace = getWorkspaceShortcutTarget\(event, \{\s*allowArrows: !\(isMacPlatform && isTextEntryTarget\(event\.target\)\)\s*\}\);\s*if \(shortcutWorkspace\) \{[\s\S]*?event\.preventDefault\(\);\s*setWorkspace\(shortcutWorkspace, \{ focusPanel: true \}\);/);
   // Same as Alt+I: stopping the event would leave VS Code with a lone Alt press.
   assert.doesNotMatch(html, /if \(shortcutWorkspace\) \{[^}]*stopPropagation/);
   // Mouse clicks keep focus on the tab.
   assert.match(html, /tab\.addEventListener\('click', \(\) => setWorkspace\(tab\.dataset\.workspace\)\);/);
+});
+
+test('shortcut hint bar sits above the tabs and follows the platform and input focus setting', () => {
+  const html = getWebviewHtml();
+  assert.match(html, /<main class="runner">\s*<div class="shortcutHintBar"[\s\S]*?<\/div>\s*<div class="workspaceHeader">/);
+  assert.match(html, /<kbd id="inputFocusHintKey">Alt\+I<\/kbd>: エディタ⇄入力/);
+  assert.match(html, /<kbd>Alt\+←→<\/kbd>: タブ切替/);
+  assert.match(html, /<kbd>Ctrl\+Enter<\/kbd>: 保存して実行/);
+  assert.match(html, /\.shortcutHintBar\s*\{(?=[^}]*flex-wrap:\s*wrap;)(?=[^}]*font-size:\s*var\(--piyoyo-font-small\);)[^}]*\}/s);
+  assert.match(html, /\.shortcutHintItem\s*\{[^}]*white-space:\s*nowrap;/s);
+
+  const mac = getWebviewHtml({
+    platform: 'darwin',
+    runShortcutLabel: 'Cmd+Enter',
+    inputFocusShortcut: { mode: 'both', label: 'Option+I / Shift 2回' }
+  });
+  assert.match(mac, /<kbd id="inputFocusHintKey">Option\+I \/ Shift 2回<\/kbd>/);
+  assert.match(mac, /<kbd>Option\+←→<\/kbd>: タブ切替/);
+  assert.match(mac, /<kbd>Cmd\+Enter<\/kbd>: 保存して実行/);
+
+  const shift = getWebviewHtml({ inputFocusShortcut: { mode: 'shiftShift', label: 'Shift 2回' } });
+  assert.match(shift, /<kbd id="inputFocusHintKey">Shift 2回<\/kbd>/);
+  assert.match(html, /stdin\.title = getStdinTitle\(message\.label\);\s*inputFocusHintKey\.textContent = message\.label;/);
+});
+
+test('snippet detail area puts the insert button first and grows before scrolling', () => {
+  const html = getWebviewHtml();
+  assert.match(html, /<div class="snippetInsertFooter">\s*<div class="snippetInsertActions">\s*<button id="snippetInsertButton"[^>]*>コードを挿入<\/button>\s*<span id="snippetStatus"/);
+  assert.match(html, /\.snippetInsertFooter\s*\{[^}]*max-height:\s*45vh;/s);
+  assert.match(html, /\.snippetInsertActions\s*\{(?=[^}]*position:\s*sticky;)(?=[^}]*top:\s*0;)[^}]*\}/s);
+  assert.doesNotMatch(html, /min\(30vh, 170px\)/);
 });
 
 test('hiding a workspace that holds focus moves focus into the shown panel', () => {

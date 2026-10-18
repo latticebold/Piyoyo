@@ -260,6 +260,7 @@ class RunnerViewProvider {
       defaultSnippetOrder: INPUT_SNIPPETS.map((snippet) => snippet.id),
       errorDisplayMode: getConfiguredErrorDisplayMode(),
       inputFocusShortcut: getConfiguredInputFocusShortcut(),
+      platform: process.platform,
       workspaceShortcutLabels: getWorkspaceShortcutLabels(process.platform)
     });
   }

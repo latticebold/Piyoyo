@@ -151,7 +151,7 @@ test('manifest contributes the input focus toggle with Alt+I and Shift double-ta
   assert.equal(RUNNER_FOCUSED_CONTEXT, 'piyoyo.runnerFocused');
 });
 
-test('manifest keeps Alt+1 / Alt+2 inside the Piyoyo panel away from openEditorAtIndex', () => {
+test('manifest keeps the tab keys inside the Piyoyo panel away from openEditorAtIndex and Go Back', () => {
   const { WORKSPACE_SHORTCUT_COMMAND } = require('../src/keyboardShortcuts');
   const command = manifest.contributes.commands.find((item) => item.command === WORKSPACE_SHORTCUT_COMMAND);
   assert.ok(command);
@@ -163,7 +163,9 @@ test('manifest keeps Alt+1 / Alt+2 inside the Piyoyo panel away from openEditorA
     .map((item) => ({ key: item.key, mac: item.mac, args: item.args, when: item.when }));
   assert.deepEqual(bindings, [
     { key: 'alt+1', mac: 'alt+1', args: undefined, when: 'piyoyo.runnerFocused && !editorTextFocus' },
-    { key: 'alt+2', mac: 'alt+2', args: undefined, when: 'piyoyo.runnerFocused && !editorTextFocus' }
+    { key: 'alt+2', mac: 'alt+2', args: undefined, when: 'piyoyo.runnerFocused && !editorTextFocus' },
+    { key: 'alt+left', mac: 'alt+left', args: undefined, when: 'piyoyo.runnerFocused && !editorTextFocus' },
+    { key: 'alt+right', mac: 'alt+right', args: undefined, when: 'piyoyo.runnerFocused && !editorTextFocus' }
   ]);
 });
 

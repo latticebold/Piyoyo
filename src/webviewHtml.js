@@ -22,6 +22,7 @@ const {
   isInputFocusShortcut,
   isRunShortcut,
   isSearchShortcut,
+  isTextEntryTarget,
   normalizeInputFocusShortcut
 } = require('./keyboardShortcuts');
 
@@ -500,11 +501,16 @@ function getWebviewHtml({
   errorDisplayMode = DEFAULT_ERROR_DISPLAY_MODE,
   runShortcutLabel = 'Ctrl+Enter',
   inputFocusShortcut = { mode: DEFAULT_INPUT_FOCUS_SHORTCUT, label: 'Alt+I' },
-  workspaceShortcutLabels = getWorkspaceShortcutLabels()
+  platform = '',
+  workspaceShortcutLabels = getWorkspaceShortcutLabels(platform)
 } = {}) {
   const nonce = getNonce();
-  const runTabShortcut = escapeHtml(workspaceShortcutLabels.run);
-  const snippetTabShortcut = escapeHtml(workspaceShortcutLabels.snippets);
+  const isMacPlatform = platform === 'darwin';
+  const runTabShortcut = escapeHtml(`${workspaceShortcutLabels.run} / ${workspaceShortcutLabels.runAlias}`);
+  const snippetTabShortcut = escapeHtml(`${workspaceShortcutLabels.snippets} / ${workspaceShortcutLabels.snippetsAlias}`);
+  const tabSwitchLabel = escapeHtml(workspaceShortcutLabels.switch);
+  // Option+Arrow keeps moving by word inside macOS text fields, so only the digits work there.
+  const tabTitleSuffix = isMacPlatform ? '。文字の入力欄では数字のほうを使います' : '';
   const inputFocusMode = normalizeInputFocusShortcut(inputFocusShortcut && inputFocusShortcut.mode);
   const inputFocusLabel = String((inputFocusShortcut && inputFocusShortcut.label) || 'Alt+I');
   const escapedRunShortcutLabel = escapeHtml(runShortcutLabel);
@@ -593,10 +599,31 @@ function getWebviewHtml({
 
     .runner {
       display: grid;
-      grid-template-rows: auto minmax(0, 1fr);
+      grid-template-rows: auto auto minmax(0, 1fr);
       gap: 8px;
       height: 100%;
       max-width: 720px;
+    }
+
+    .shortcutHintBar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 2px 12px;
+      margin: 0 0 -4px;
+      padding: 0 2px;
+      color: var(--vscode-descriptionForeground);
+      font-size: var(--piyoyo-font-small);
+      line-height: 1.4;
+    }
+
+    .shortcutHintItem {
+      white-space: nowrap;
+    }
+
+    .shortcutHintItem kbd {
+      color: var(--piyoyo-text);
+      font: inherit;
+      font-weight: 600;
     }
 
     .workspaceHeader {
@@ -1487,10 +1514,10 @@ function getWebviewHtml({
       gap: 5px;
       min-width: 0;
       min-height: 0;
-      /* Leave a usable slice of the catalogue even with long code/warnings. */
-      max-height: min(30vh, 170px);
+      /* Grow with the explanation, but leave a usable slice of the catalogue. */
+      max-height: 45vh;
       overflow-y: auto;
-      padding: 7px 9px;
+      padding: 0 9px 7px;
       border: 1px solid var(--piyoyo-line);
       border-radius: 5px;
       background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
@@ -1592,6 +1619,17 @@ function getWebviewHtml({
       line-height: 1.8;
       white-space: pre-line;
       overflow-wrap: anywhere;
+    }
+
+    .snippetInsertActions {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      display: grid;
+      gap: 3px;
+      margin: 0 -9px;
+      padding: 7px 9px 2px;
+      background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
     }
 
     .snippetInsertButton {
@@ -1765,7 +1803,6 @@ function getWebviewHtml({
     @media (max-height: 560px) {
       body { padding: 10px; }
       .runner { gap: 8px; }
-      .snippetInsertFooter { padding: 10px; }
       .snippetInsertSelection { gap: 6px; }
     }
 
@@ -1799,10 +1836,15 @@ function getWebviewHtml({
 </head>
 <body>
   <main class="runner">
+    <div class="shortcutHintBar" aria-label="主なショートカット">
+      <span class="shortcutHintItem"><kbd id="inputFocusHintKey">${escapeHtml(inputFocusLabel)}</kbd>: エディタ⇄入力</span>
+      <span class="shortcutHintItem"><kbd>${tabSwitchLabel}</kbd>: タブ切替</span>
+      <span class="shortcutHintItem"><kbd>${escapedRunShortcutLabel}</kbd>: 保存して実行</span>
+    </div>
     <div class="workspaceHeader">
       <nav class="workspaceTabs" role="tablist" aria-label="Piyoyoの機能">
-        <button id="runWorkspaceTab" class="workspaceTab" type="button" role="tab" aria-selected="true" aria-controls="runWorkspace" tabindex="0" data-workspace="run" title="実行 (${runTabShortcut})" aria-keyshortcuts="Alt+1">実行</button>
-        <button id="snippetWorkspaceTab" class="workspaceTab" type="button" role="tab" aria-selected="false" aria-controls="snippetWorkspace" tabindex="-1" data-workspace="snippets" title="コード挿入 (${snippetTabShortcut})" aria-keyshortcuts="Alt+2">コード挿入</button>
+        <button id="runWorkspaceTab" class="workspaceTab" type="button" role="tab" aria-selected="true" aria-controls="runWorkspace" tabindex="0" data-workspace="run" title="実行 (${runTabShortcut})${tabTitleSuffix}" aria-keyshortcuts="Alt+ArrowLeft Alt+1">実行</button>
+        <button id="snippetWorkspaceTab" class="workspaceTab" type="button" role="tab" aria-selected="false" aria-controls="snippetWorkspace" tabindex="-1" data-workspace="snippets" title="コード挿入 (${snippetTabShortcut})${tabTitleSuffix}" aria-keyshortcuts="Alt+ArrowRight Alt+2">コード挿入</button>
       </nav>
       <button id="openSettingsButton" class="settingsButton" type="button" data-open-settings aria-label="Piyoyoの設定を開く" title="Piyoyoの設定を開く"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="8" cy="8" r="4.6" fill="none" stroke="currentColor" stroke-width="1.4"/></svg></button>
     </div>
@@ -1895,6 +1937,10 @@ function getWebviewHtml({
           <div id="snippetNoResults" class="snippetNoResults"${snippetLibrary.categoryCount > 0 ? ' hidden' : ''}>表示するコードがありません。「コード整理」から表示できます。</div>
         </div>
         <div class="snippetInsertFooter">
+          <div class="snippetInsertActions">
+            <button id="snippetInsertButton" class="snippetInsertButton" type="button" disabled>コードを挿入</button>
+            <span id="snippetStatus" class="snippetStatus" aria-live="polite"></span>
+          </div>
           <div id="snippetInsertSelection" class="snippetInsertSelection" aria-live="polite">
             <span id="snippetSelectedSummary">スニペットを選択してください</span>
             <div id="snippetVariantField" class="snippetVariantField" hidden>
@@ -1908,8 +1954,6 @@ function getWebviewHtml({
               <div id="snippetDetailsText" class="snippetDetailsText"></div>
             </details>
           </div>
-          <span id="snippetStatus" class="snippetStatus" aria-live="polite"></span>
-          <button id="snippetInsertButton" class="snippetInsertButton" type="button" disabled>コードを挿入</button>
         </div>
         <div id="snippetComplexityPopover" class="snippetComplexityPopover" role="dialog" aria-label="計算量の説明" hidden>
           <span id="snippetComplexityPopoverTitle" class="snippetComplexityPopoverTitle"></span>
@@ -1964,10 +2008,13 @@ function getWebviewHtml({
     ${getNextIndex.toString()}
     ${isInputFocusShortcut.toString()}
     ${getWorkspaceShortcutTarget.toString()}
+    ${isTextEntryTarget.toString()}
     ${createShiftDoubleTapDetector.toString()}
     ${getStdinPlaceholder.toString()}
     ${getStdinTitle.toString()}
     let inputFocusMode = ${scriptJson(inputFocusMode)};
+    const isMacPlatform = ${scriptJsonData(isMacPlatform)};
+    const inputFocusHintKey = document.getElementById('inputFocusHintKey');
     const shiftDoubleTap = createShiftDoubleTapDetector(${SHIFT_DOUBLE_TAP_INTERVAL_MS});
     const emptySelectionHelp = ${scriptJson(EMPTY_SELECTION_HELP)};
     const runtimeImplementation = document.getElementById('runtimeImplementation');
@@ -2922,7 +2969,9 @@ function getWebviewHtml({
         vscode.postMessage({ type: 'focusEditor' });
         return;
       }
-      const shortcutWorkspace = getWorkspaceShortcutTarget(event);
+      const shortcutWorkspace = getWorkspaceShortcutTarget(event, {
+        allowArrows: !(isMacPlatform && isTextEntryTarget(event.target))
+      });
       if (shortcutWorkspace) {
         // Let it bubble: VS Code must still see the Alt key combo (see Alt+I).
         event.preventDefault();
@@ -2983,6 +3032,7 @@ function getWebviewHtml({
         inputFocusMode = message.mode;
         stdin.placeholder = getStdinPlaceholder(message.label);
         stdin.title = getStdinTitle(message.label);
+        inputFocusHintKey.textContent = message.label;
         return;
       }
 

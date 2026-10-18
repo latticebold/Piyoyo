@@ -10,7 +10,8 @@ const {
   isEditableTarget,
   isImeComposing,
   isRunShortcut,
-  isSearchShortcut
+  isSearchShortcut,
+  isTextEntryTarget
 } = require('../src/keyboardShortcuts');
 
 test('getWorkspaceShortcutTarget maps Alt+1 / Alt+2 by physical key', () => {
@@ -35,11 +36,51 @@ test('getWorkspaceShortcutTarget ignores other keys, modifiers, numpad and IME',
   assert.equal(getWorkspaceShortcutTarget(undefined), '');
 });
 
+test('getWorkspaceShortcutTarget maps Alt+Left / Alt+Right to the left and right tab', () => {
+  assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'ArrowLeft', key: 'ArrowLeft' }), 'run');
+  assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'ArrowRight', key: 'ArrowRight' }), 'snippets');
+  assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'ArrowRight', key: 'ArrowRight', repeat: true }), 'snippets');
+  // NumLock-off numpad reports ArrowLeft as key but must stay free for Alt codes.
+  assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'Numpad4', key: 'ArrowLeft' }), '');
+  assert.equal(getWorkspaceShortcutTarget({ code: 'ArrowLeft', key: 'ArrowLeft' }), '');
+  assert.equal(getWorkspaceShortcutTarget({ altKey: true, shiftKey: true, code: 'ArrowLeft', key: 'ArrowLeft' }), '');
+  assert.equal(getWorkspaceShortcutTarget({ altKey: true, ctrlKey: true, code: 'ArrowRight', key: 'ArrowRight' }), '');
+  assert.equal(getWorkspaceShortcutTarget({ altKey: true, metaKey: true, code: 'ArrowRight', key: 'ArrowRight' }), '');
+  assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'ArrowUp', key: 'ArrowUp' }), '');
+});
+
+test('getWorkspaceShortcutTarget can leave arrows alone while keeping the digit aliases', () => {
+  const options = { allowArrows: false };
+  assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'ArrowLeft', key: 'ArrowLeft' }, options), '');
+  assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'ArrowRight', key: 'ArrowRight' }, options), '');
+  assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'Digit1', key: '¡' }, options), 'run');
+  assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'Digit2', key: '™' }, options), 'snippets');
+});
+
+test('isTextEntryTarget only matches fields where arrows move the caret', () => {
+  assert.equal(isTextEntryTarget({ tagName: 'TEXTAREA' }), true);
+  assert.equal(isTextEntryTarget({ tagName: 'INPUT', type: 'search' }), true);
+  assert.equal(isTextEntryTarget({ tagName: 'INPUT', type: 'text' }), true);
+  assert.equal(isTextEntryTarget({ tagName: 'INPUT' }), true);
+  assert.equal(isTextEntryTarget({ tagName: 'DIV', isContentEditable: true }), true);
+  assert.equal(isTextEntryTarget({ tagName: 'INPUT', type: 'checkbox' }), false);
+  assert.equal(isTextEntryTarget({ tagName: 'SELECT' }), false);
+  assert.equal(isTextEntryTarget({ tagName: 'BUTTON' }), false);
+  assert.equal(isTextEntryTarget(null), false);
+});
+
 test('workspace shortcut labels follow the platform', () => {
-  assert.deepEqual(getWorkspaceShortcutLabels('win32'), { run: 'Alt+1', snippets: 'Alt+2' });
-  assert.deepEqual(getWorkspaceShortcutLabels('linux'), { run: 'Alt+1', snippets: 'Alt+2' });
-  assert.deepEqual(getWorkspaceShortcutLabels('darwin'), { run: 'Option+1', snippets: 'Option+2' });
-  assert.deepEqual(getWorkspaceShortcutLabels(), { run: 'Alt+1', snippets: 'Alt+2' });
+  const alt = { run: 'Alt+←', snippets: 'Alt+→', switch: 'Alt+←→', runAlias: 'Alt+1', snippetsAlias: 'Alt+2' };
+  assert.deepEqual(getWorkspaceShortcutLabels('win32'), alt);
+  assert.deepEqual(getWorkspaceShortcutLabels('linux'), alt);
+  assert.deepEqual(getWorkspaceShortcutLabels(), alt);
+  assert.deepEqual(getWorkspaceShortcutLabels('darwin'), {
+    run: 'Option+←',
+    snippets: 'Option+→',
+    switch: 'Option+←→',
+    runAlias: 'Option+1',
+    snippetsAlias: 'Option+2'
+  });
   assert.equal(WORKSPACE_SHORTCUT_COMMAND, 'piyoyo.workspaceShortcut');
 });
 
