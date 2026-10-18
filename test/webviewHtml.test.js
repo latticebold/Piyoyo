@@ -567,3 +567,27 @@ test('variant switching carries annotated preview data for every alternative', (
   assert.match(html, /parameter\.className = 'snippetParameter'/);
   assert.doesNotMatch(html, /rowPreview\.textContent = source\.dataset\.snippetLabel/);
 });
+
+test('webview header has a gear button outside the tab list that opens settings', () => {
+  const html = getWebviewHtml();
+  const tablistEnd = html.indexOf('</nav>');
+  const gearIndex = html.indexOf('id="openSettingsButton"');
+
+  assert.ok(gearIndex > tablistEnd);
+  assert.ok(gearIndex < html.indexOf('id="runWorkspace"'));
+  assert.match(html, /id="openSettingsButton"[^>]*data-open-settings[^>]*aria-label="Piyoyoの設定を開く"/);
+  assert.doesNotMatch(html, /id="openSettingsButton"[^>]*(?:role="tab"|data-workspace)/);
+  assert.match(html, /querySelectorAll\('\[data-open-settings\]'\)/);
+  assert.match(html, /vscode\.postMessage\(\{ type: 'openSettings' \}\)/);
+});
+
+test('webview links the error display and launcher settings to the settings page', () => {
+  for (const mode of ['friendly', 'both', 'original']) {
+    const html = getWebviewHtml({ errorDisplayMode: mode });
+    const field = html.slice(html.indexOf('id="stderrField"'), html.indexOf('id="runDetails"'));
+    assert.match(field, /<button[^>]*data-open-settings[^>]*>エラーの表示方法を設定で変える<\/button>/, mode);
+  }
+  const html = getWebviewHtml();
+  const launcher = html.slice(html.indexOf('class="launcher runSection"'));
+  assert.match(launcher, /<button[^>]*data-open-settings[^>]*>「設定値」と制限時間を設定で変える<\/button>/);
+});

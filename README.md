@@ -97,6 +97,9 @@ Pythonファイルを開き、エディタ右上のPiyoyoアイコンを押す�
 
 ## 設定
 
+Piyoyoパネル上部の歯車ボタン（または`Piyoyo Runner`の見出しの歯車アイコン）を押すと、Piyoyoの設定だけを表示した設定画面が開きます。
+詳しくは[利用ガイド](docs/user-guide.md#設定を変える)の「設定を変える」を参照してください。
+
 | 設定 | 初期値 | 内容 |
 | --- | --- | --- |
 | `piyoyo.pythonPath` | 空 | Python実行ファイルのパスです。実行環境で選んだ値を優先し、空の場合は`python.defaultInterpreterPath`、続いてOSの標準候補を使います。 |

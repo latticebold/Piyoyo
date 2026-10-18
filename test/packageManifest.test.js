@@ -30,6 +30,28 @@ test('manifest contributes Piyoyo to the editor title for Python files', () => {
   ]);
 });
 
+test('manifest contributes a gear command to the Piyoyo view title', () => {
+  const command = manifest.contributes.commands.find((item) => item.command === 'piyoyo.openSettings');
+  assert.ok(command);
+  assert.equal(command.icon, '$(gear)');
+  assert.match(command.title, /設定/);
+  assert.deepEqual(manifest.contributes.menus['view/title'], [
+    {
+      command: 'piyoyo.openSettings',
+      when: 'view == piyoyo.runnerView',
+      group: 'navigation'
+    }
+  ]);
+});
+
+test('manifest describes every setting in Japanese', () => {
+  const properties = manifest.contributes.configuration.properties;
+  for (const [key, setting] of Object.entries(properties)) {
+    assert.match(setting.description, /[぀-ヿ一-鿿]/, key);
+    assert.doesNotMatch(setting.description, /\b(?:Maximum|executable|When empty)\b/, key);
+  }
+});
+
 test('manifest keeps the former open command as a hidden activation compatibility alias', () => {
   assert.ok(manifest.activationEvents.includes('onCommand:ioSprint.open'));
   assert.equal(
