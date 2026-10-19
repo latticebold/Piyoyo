@@ -95,6 +95,16 @@ test('manifest identifies the Piyoyo release as version 0.3.1', () => {
   assert.equal(manifest.version, '0.3.1');
 });
 
+test('manifest defaults the time limit to 2 seconds like AtCoder ABC', () => {
+  assert.equal(manifest.contributes.configuration.properties['piyoyo.timeoutMs'].default, 2000);
+});
+
+test('manifest lets users turn off the PyPy install hint', () => {
+  const setting = manifest.contributes.configuration.properties['piyoyo.showPyPyInstallHint'];
+  assert.equal(setting.type, 'boolean');
+  assert.equal(setting.default, true);
+});
+
 test('manifest keeps code visibility preferences inside Piyoyo instead of VS Code settings', () => {
   assert.equal(
     Object.hasOwn(

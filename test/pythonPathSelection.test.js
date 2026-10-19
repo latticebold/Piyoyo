@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { resolvePythonPath } = require('../src/pythonPathSelection');
+const { isPyPyFallback, resolvePythonPath } = require('../src/pythonPathSelection');
 
 test('resolvePythonPath uses selected launcher before settings', () => {
   const result = resolvePythonPath({
@@ -53,4 +53,43 @@ test('resolvePythonPath falls back to configured and default launchers', () => {
     defaultInterpreterPath: '',
     platform: 'linux'
   }), 'python3');
+});
+
+test('resolvePythonPath prefers available PyPy over the default interpreter', () => {
+  assert.equal(resolvePythonPath({
+    availableLaunchers: ['python', 'pypy', 'pypy3'],
+    defaultInterpreterPath: 'C:\\Python\\python.exe',
+    platform: 'win32'
+  }), 'pypy3');
+
+  assert.equal(resolvePythonPath({
+    availableLaunchers: ['python', 'pypy'],
+    platform: 'linux'
+  }), 'pypy');
+});
+
+test('resolvePythonPath keeps explicit choices ahead of PyPy', () => {
+  assert.equal(resolvePythonPath({
+    selectedPythonPath: 'python',
+    availableLaunchers: ['pypy3'],
+    platform: 'win32'
+  }), 'python');
+
+  assert.equal(resolvePythonPath({
+    configPythonPath: 'py',
+    availableLaunchers: ['pypy3'],
+    platform: 'win32'
+  }), 'py');
+});
+
+test('resolvePythonPath falls back to Python when PyPy is unavailable', () => {
+  const options = { availableLaunchers: ['python'], platform: 'win32' };
+  assert.equal(resolvePythonPath(options), 'python');
+  assert.equal(isPyPyFallback(options), true);
+});
+
+test('isPyPyFallback is false when PyPy runs or a launcher is chosen', () => {
+  assert.equal(isPyPyFallback({ availableLaunchers: ['pypy3'] }), false);
+  assert.equal(isPyPyFallback({ selectedPythonPath: 'python', availableLaunchers: [] }), false);
+  assert.equal(isPyPyFallback({ legacyPythonPath: 'python3', availableLaunchers: [] }), false);
 });

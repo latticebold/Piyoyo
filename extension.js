@@ -10,7 +10,7 @@ const {
   getSavedPythonPathPreference,
   savePythonPathPreference
 } = require('./src/pythonPathPreference');
-const { resolvePythonPath } = require('./src/pythonPathSelection');
+const { isPyPyFallback, resolvePythonPath } = require('./src/pythonPathSelection');
 const { runPythonFile } = require('./src/runners/pythonRunner');
 const { insertInputSnippet } = require('./src/snippetInsertion');
 const { INPUT_SNIPPETS, getInputSnippet } = require('./src/snippetLibrary');
@@ -43,6 +43,8 @@ const BRAND_NAME = 'Piyoyo';
 const OPEN_COMMAND = 'piyoyo.open';
 const LEGACY_OPEN_COMMAND = 'ioSprint.open';
 const SAVE_AND_RUN_COMMAND = 'piyoyo.saveAndRun';
+const DEFAULT_TIMEOUT_MS = 2000;
+const PYPY_DOWNLOAD_URL = 'https://pypy.org/download.html';
 
 function activate(context) {
   const provider = new RunnerViewProvider(context.extensionUri, context.globalState);
@@ -127,6 +129,7 @@ class RunnerViewProvider {
     this.lastPythonEditor = undefined;
     this.activeFile = getRunnablePythonFileFromDocument(undefined);
     this.launcherAvailabilityCache = createLauncherAvailabilityCache();
+    this.pyPyHintShown = false;
   }
 
   resolveWebviewView(webviewView) {
@@ -393,6 +396,30 @@ class RunnerViewProvider {
     return savePythonPathPreference(this.globalState, selectedPythonPath);
   }
 
+  showPyPyInstallHint() {
+    const config = vscode.workspace.getConfiguration('piyoyo');
+    // Once per session so repeated runs do not stack the same notice.
+    if (this.pyPyHintShown || !config.get('showPyPyInstallHint', true)) {
+      return;
+    }
+    this.pyPyHintShown = true;
+
+    const installAction = 'PyPy の入れ方を見る';
+    const hideAction = '今後表示しない';
+    // Not awaited: the run must not wait for the user to close the notice.
+    vscode.window.showInformationMessage(
+      'PyPy が見つからないので Python で実行しました。PyPy を入れると、AtCoder の提出に近い速さで試せます。',
+      installAction,
+      hideAction
+    ).then(async (choice) => {
+      if (choice === installAction) {
+        await vscode.env.openExternal(vscode.Uri.parse(PYPY_DOWNLOAD_URL));
+      } else if (choice === hideAction) {
+        await config.update('showPyPyInstallHint', false, vscode.ConfigurationTarget.Global);
+      }
+    });
+  }
+
   async runSelectedPythonFile(input, selectedPythonPath = '') {
     this.refreshActiveFile(vscode.window.activeTextEditor);
     const activeFile = this.activeFile;
@@ -414,18 +441,26 @@ class RunnerViewProvider {
     const legacyConfig = vscode.workspace.getConfiguration('ioSprint');
     const olderLegacyConfig = vscode.workspace.getConfiguration('stdioRunner');
     const pythonConfig = vscode.workspace.getConfiguration('python');
-    const pythonPath = resolvePythonPath({
+    const launchers = await this.launcherAvailabilityCache.get();
+    const pathOptions = {
       selectedPythonPath,
       configPythonPath: config.get('pythonPath'),
       legacyPythonPath: legacyConfig.get('pythonPath'),
       olderLegacyPythonPath: olderLegacyConfig.get('pythonPath'),
+      availableLaunchers: launchers
+        .filter((launcher) => launcher.available)
+        .map((launcher) => launcher.launcher),
       defaultInterpreterPath: pythonConfig.get('defaultInterpreterPath'),
       platform: process.platform
-    });
+    };
+    const pythonPath = resolvePythonPath(pathOptions);
+    if (isPyPyFallback(pathOptions)) {
+      this.showPyPyInstallHint();
+    }
     const timeoutMs = config.get('timeoutMs')
       || legacyConfig.get('timeoutMs')
       || olderLegacyConfig.get('timeoutMs')
-      || 5000;
+      || DEFAULT_TIMEOUT_MS;
     const cwd = path.dirname(activeFile.filePath);
     const workspaceFolders = (vscode.workspace.workspaceFolders || [])
       .map((folder) => folder && folder.uri && folder.uri.fsPath)

@@ -76,7 +76,7 @@ Pythonの元のエラーとトレースバック（原文）は、説明の下�
 | 原文表示 | `original` | 原文を中心に表示し、日本語の説明は「日本語の説明を見る」に折りたたみます。 |
 
 以前の設定`piyoyo.advanced.showOriginalErrors`を`true`にしている場合は、`piyoyo.errorDisplayMode`を設定するまで「両方表示」になります。
-初期状態では、実行が5秒を超えるとタイムアウトします。
+初期状態では、実行が2秒（AtCoderのABCの時間制限）を超えるとタイムアウトします。
 標準出力と標準エラーは合計1 MiBまで保持します。
 上限を超えた場合は実行を停止し、それまでの出力と、省略した理由を表示します。
 大量のデバッグ出力がある場合は、表示する件数を減らしてから再実行してください。
@@ -88,8 +88,19 @@ Windowsで親のPythonが先に終了した場合など、子プロセスの停�
 「実行環境」の選択欄では、`python`、`py`、`python3`、`pypy`、`pypy3`を選べます。
 起動できる候補はPiyoyoが表示時に判定します。
 
-「設定値を使う」を選んだ場合、Piyoyoは`piyoyo.pythonPath`、`python.defaultInterpreterPath`、OSの標準候補の順でPythonを探します。
+「設定値を使う」を選んだ場合、Piyoyoは次の順でPythonを探します。
+
+1. `piyoyo.pythonPath`
+2. PyPy（`pypy3`、`pypy`の順。起動できる場合だけ）
+3. `python.defaultInterpreterPath`
+4. OSの標準候補（Windowsは`python`、それ以外は`python3`）
+
 選択欄で指定した実行環境は、これらの設定より優先されます。
+
+競技プログラミングでは、同じコードでもPyPyで動かすほうがずっと速いことが多いため、何も選んでいなければPyPyを使います。
+PyPyが入っていない場合はPythonで実行し、「PyPy が見つからないので Python で実行しました」という案内を出します。
+案内の「PyPy の入れ方を見る」を押すと、PyPyのダウンロードページが開きます。
+Pythonのままでよい場合は「今後表示しない」を押すか、設定`piyoyo.showPyPyInstallHint`を`false`にします。
 
 候補にない実行ファイルを使う場合は、選択欄で「カスタム...」を選び、`C:\Python\python.exe`のようなパスを入力します。
 ワークスペース設定で固定する場合は、設定JSONへ次を追加します。
@@ -97,11 +108,11 @@ Windowsで親のPythonが先に終了した場合など、子プロセスの停�
 ```json
 {
   "piyoyo.pythonPath": "C:\\Python\\python.exe",
-  "piyoyo.timeoutMs": 5000
+  "piyoyo.timeoutMs": 3000
 }
 ```
 
-`piyoyo.timeoutMs`はミリ秒です。
+`piyoyo.timeoutMs`はミリ秒です。初期値は`2000`（2秒）です。
 長い処理だけに必要な値を設定してください。
 
 ## スニペットを検索して挿入する
@@ -301,8 +312,9 @@ Piyoyoの設定は、VS Codeの設定画面で変えます。
 
 | 設定 | 初期値 | 内容 |
 | --- | --- | --- |
-| `piyoyo.pythonPath` | 空 | Python実行ファイルのパスです。「実行環境」で選んだ値を優先し、空の場合は`python.defaultInterpreterPath`、続いてOSの標準候補（Windowsは`python`、それ以外は`python3`）を使います。 |
-| `piyoyo.timeoutMs` | `5000` | Pythonの最大実行時間をミリ秒で指定します。`1000`で1秒です。 |
+| `piyoyo.pythonPath` | 空 | Python実行ファイルのパスです。「実行環境」で選んだ値を優先し、空の場合は起動できるPyPy（`pypy3`、`pypy`）、`python.defaultInterpreterPath`、OSの標準候補（Windowsは`python`、それ以外は`python3`）の順に使います。 |
+| `piyoyo.timeoutMs` | `2000` | Pythonの最大実行時間をミリ秒で指定します。`1000`で1秒です。初期値はAtCoderのABCに合わせた2秒です。 |
+| `piyoyo.showPyPyInstallHint` | `true` | PyPyが見つからずPythonで実行したときに、PyPyの入れ方の案内を出します。案内の「今後表示しない」を押すと`false`になります。 |
 | `piyoyo.errorDisplayMode` | `friendly` | Pythonのエラーの表示方法です。「やさしい表示」「両方表示」「原文表示」から選びます（[最初のPython実行](#最初のpython実行)の表を参照）。 |
 | `piyoyo.inputFocusShortcut` | `altI` | PythonのエディタとPiyoyoパネルを行き来するキーです。`altI`（`Alt+I`）、`shiftShift`（`Shift`を2回）、`both`（両方）から選びます（[エディタとPiyoyoパネルを行き来する](#エディタとpiyoyoパネルを行き来する)を参照）。 |
 | `piyoyo.advanced.showOriginalErrors` | `false` | 以前の設定です。`piyoyo.errorDisplayMode`を設定していない場合に限り、`true`で「両方表示」になります。新しく設定する場合は`piyoyo.errorDisplayMode`を使ってください。 |
@@ -326,7 +338,7 @@ VS Codeを再読み込みして更新を反映します。
 | Piyoyoを開けない | `.py`ファイルを開き、コマンドパレットから`Piyoyo: Open`を実行します。拡張機能ビューでPiyoyoが有効かも確認します。 |
 | Pythonが見つからない | 「実行環境」で利用できる候補を選びます。候補にない場合は「カスタム...」でPython実行ファイルのパスを指定するか、`piyoyo.pythonPath`を設定します。PATHへPythonを追加した場合は、VS Codeを再起動してから確認します。 |
 | 変更したコードで実行されない | ファイルを保存してから再実行します。Piyoyoはディスクに保存されたファイルを実行します。 |
-| 実行が止まる | 入力待ちのコードには必要な標準入力をすべて入れます。Piyoyoには手動停止ボタンがありません。処理が5秒を超える場合は`piyoyo.timeoutMs`を見直します。 |
+| 実行が止まる | 入力待ちのコードには必要な標準入力をすべて入れます。Piyoyoには手動停止ボタンがありません。処理が2秒を超える場合は`piyoyo.timeoutMs`を見直します。 |
 | スニペットを挿入できない | 編集できるPythonファイルをアクティブにし、カーソル位置を確認します。Piyoyoに表示されたエラーも確認します。 |
 | スニペットが一覧にない | 「コード整理」で非表示になっていないか確認し、「初期状態に戻す」で標準表示に戻します。 |
 

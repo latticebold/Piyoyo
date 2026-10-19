@@ -163,13 +163,18 @@
         "piyoyo.pythonPath": {
           "type": "string",
           "default": "",
-          "description": "Pythonの実行ファイルのパスです。パネルの「実行環境」で選んだ値が優先されます。空の場合は python.defaultInterpreterPath を使い、それも空ならWindowsでは python、それ以外では python3 を使います。"
+          "description": "Pythonの実行ファイルのパスです。パネルの「実行環境」で選んだ値が優先されます。空の場合は pypy3、pypy の順に起動できるものを使います。PyPy が無ければ python.defaultInterpreterPath を使い、それも空ならWindowsでは python、それ以外では python3 を使います。"
+        },
+        "piyoyo.showPyPyInstallHint": {
+          "type": "boolean",
+          "default": true,
+          "description": "PyPy が見つからず Python で実行したときに、PyPy の入れ方の案内を出します。"
         },
         "piyoyo.timeoutMs": {
           "type": "number",
-          "default": 5000,
+          "default": 2000,
           "minimum": 100,
-          "description": "Pythonの最大実行時間をミリ秒で指定します（1000 ミリ秒 = 1 秒）。この時間を超えると実行を止めます。"
+          "description": "Pythonの最大実行時間をミリ秒で指定します（1000 ミリ秒 = 1 秒）。この時間を超えると実行を止めます。初期値は AtCoder の ABC に合わせた 2 秒です。"
         },
         "piyoyo.errorDisplayMode": {
           "type": "string",
