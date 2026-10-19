@@ -28,11 +28,12 @@ function isInputFocusShortcut(event) {
   return event.code === 'KeyI';
 }
 
-// Returns 'run', 'snippets', or '' for Shift+Left / Shift+Right and the Alt+1 / Alt+2 aliases
-// (macOS Option). allowArrows is false in text fields, where Shift+Arrow selects text
-// (see getTextFieldEdgeWorkspaceTarget).
-// Repeats are allowed: each key always picks the same tab, so holding it is harmless.
-function getWorkspaceShortcutTarget(event, { allowArrows = true } = {}) {
+// Returns 'run', 'snippets', 'verify', or '' for Shift+Left / Shift+Right (the neighbouring tab
+// of currentWorkspace) and the Alt+1 / Alt+2 / Alt+3 aliases (macOS Option). allowArrows is
+// false in text fields, where Shift+Arrow selects text (see getTextFieldEdgeWorkspaceTarget).
+// Repeats are allowed: the arrows stop at the first and last tab, so holding one is harmless.
+function getWorkspaceShortcutTarget(event, { allowArrows = true, currentWorkspace = 'run' } = {}) {
+  const workspaces = ['run', 'snippets', 'verify'];
   if (!event || event.ctrlKey || event.metaKey) {
     return '';
   }
@@ -43,25 +44,25 @@ function getWorkspaceShortcutTarget(event, { allowArrows = true } = {}) {
     if (!allowArrows) {
       return '';
     }
+    const index = Math.max(0, workspaces.indexOf(currentWorkspace));
     if (event.code === 'ArrowLeft') {
-      return 'run';
+      return workspaces[Math.max(index - 1, 0)];
     }
-    return event.code === 'ArrowRight' ? 'snippets' : '';
+    return event.code === 'ArrowRight' ? workspaces[Math.min(index + 1, workspaces.length - 1)] : '';
   }
   if (!event.altKey || event.shiftKey) {
     return '';
   }
   // event.code keeps the physical key on macOS and AZERTY; numpad stays free for Alt codes.
-  if (event.code === 'Digit1') {
-    return 'run';
-  }
-  return event.code === 'Digit2' ? 'snippets' : '';
+  const digitTargets = { Digit1: 'run', Digit2: 'snippets', Digit3: 'verify' };
+  return digitTargets[event.code] || '';
 }
 
 // Shift+Left / Shift+Right inside a text field: switches only when nothing is selected and the
 // caret is at the edge the arrow points to, so selecting text is never interrupted.
-// field is { value, selectionStart, selectionEnd }; returns 'run', 'snippets', or ''.
+// field is { value, selectionStart, selectionEnd }; returns the neighbouring tab or ''.
 function getTextFieldEdgeWorkspaceTarget(event, field, currentWorkspace) {
+  const workspaces = ['run', 'snippets', 'verify'];
   if (!event || !event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) {
     return '';
   }
@@ -73,11 +74,15 @@ function getTextFieldEdgeWorkspaceTarget(event, field, currentWorkspace) {
     || selectionStart !== selectionEnd) {
     return '';
   }
+  const index = workspaces.indexOf(currentWorkspace);
+  if (index < 0) {
+    return '';
+  }
   if (event.code === 'ArrowLeft') {
-    return currentWorkspace === 'snippets' && selectionStart === 0 ? 'run' : '';
+    return index > 0 && selectionStart === 0 ? workspaces[index - 1] : '';
   }
   if (event.code === 'ArrowRight') {
-    return currentWorkspace === 'run' && selectionEnd === value.length ? 'snippets' : '';
+    return index < workspaces.length - 1 && selectionEnd === value.length ? workspaces[index + 1] : '';
   }
   return '';
 }
@@ -235,7 +240,7 @@ function getInputFocusShortcutLabel(mode, platform) {
   return altLabel;
 }
 
-// The webview handles Alt+1 / Alt+2 itself; this command only keeps the forwarded key
+// The webview handles Alt+1 / Alt+2 / Alt+3 itself; this command only keeps the forwarded key
 // away from VS Code's openEditorAtIndex binding.
 const WORKSPACE_SHORTCUT_COMMAND = 'piyoyo.workspaceShortcut';
 
@@ -246,7 +251,8 @@ function getWorkspaceShortcutLabels(platform) {
     snippets: 'Shift+→',
     switch: 'Shift+←→',
     runAlias: `${modifier}+1`,
-    snippetsAlias: `${modifier}+2`
+    snippetsAlias: `${modifier}+2`,
+    verifyAlias: `${modifier}+3`
   };
 }
 

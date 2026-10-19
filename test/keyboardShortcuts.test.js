@@ -16,22 +16,41 @@ const {
   isTextEntryTarget
 } = require('../src/keyboardShortcuts');
 
-test('getWorkspaceShortcutTarget maps Alt+1 / Alt+2 by physical key', () => {
+test('getWorkspaceShortcutTarget maps Alt+1 / Alt+2 / Alt+3 by physical key', () => {
   assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'Digit1', key: '1' }), 'run');
   assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'Digit2', key: '2' }), 'snippets');
-  // macOS Option+1 types a symbol and AZERTY puts & on the digit key.
+  assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'Digit3', key: '3' }), 'verify');
+  // macOS Option+digit types a symbol and AZERTY puts &, é, " on the digit keys.
   assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'Digit1', key: '¡' }), 'run');
   assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'Digit2', key: 'é' }), 'snippets');
+  assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'Digit3', key: '£' }), 'verify');
+  assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'Digit3', key: '"' }), 'verify');
   assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'Digit1', key: '1', repeat: true }), 'run');
+});
+
+test('getWorkspaceShortcutTarget digit aliases jump to the same tab from any tab', () => {
+  for (const currentWorkspace of ['run', 'snippets', 'verify']) {
+    assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'Digit1', key: '1' }, { currentWorkspace }), 'run', currentWorkspace);
+    assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'Digit2', key: '2' }, { currentWorkspace }), 'snippets', currentWorkspace);
+    assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'Digit3', key: '3' }, { currentWorkspace }), 'verify', currentWorkspace);
+  }
 });
 
 test('getWorkspaceShortcutTarget ignores other keys, modifiers, numpad and IME', () => {
   assert.equal(getWorkspaceShortcutTarget({ code: 'Digit1', key: '1' }), '');
-  assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'Digit3', key: '3' }), '');
+  assert.equal(getWorkspaceShortcutTarget({ code: 'Digit3', key: '3' }), '');
+  assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'Digit4', key: '4' }), '');
+  assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'Digit0', key: '0' }), '');
   assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'Numpad1', key: '1' }), '');
+  assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'Numpad3', key: '3' }), '');
   // AltGr reports Ctrl+Alt on Windows.
   assert.equal(getWorkspaceShortcutTarget({ altKey: true, ctrlKey: true, code: 'Digit2', key: '@' }), '');
+  assert.equal(getWorkspaceShortcutTarget({ altKey: true, ctrlKey: true, code: 'Digit3', key: '#' }), '');
   assert.equal(getWorkspaceShortcutTarget({ altKey: true, shiftKey: true, code: 'Digit1', key: '!' }), '');
+  assert.equal(getWorkspaceShortcutTarget({ altKey: true, shiftKey: true, code: 'Digit3', key: '#' }), '');
+  assert.equal(getWorkspaceShortcutTarget({ altKey: true, metaKey: true, code: 'Digit3', key: '3' }), '');
+  assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'Digit3', key: '3', isComposing: true }), '');
+  assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'Digit3', key: 'Process', keyCode: 229 }), '');
   assert.equal(getWorkspaceShortcutTarget({ altKey: true, metaKey: true, code: 'Digit1', key: '1' }), '');
   assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'Digit1', key: '1', isComposing: true }), '');
   assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'Digit1', key: 'Process', keyCode: 229 }), '');
@@ -52,17 +71,44 @@ test('getWorkspaceShortcutTarget maps Shift+Left / Shift+Right to the left and r
   assert.equal(getWorkspaceShortcutTarget({ shiftKey: true, code: 'ArrowLeft', key: 'Process', keyCode: 229 }), '');
 });
 
+test('getWorkspaceShortcutTarget moves Shift+Arrow to the neighbour of the current tab and stops at both ends', () => {
+  const left = { shiftKey: true, code: 'ArrowLeft', key: 'ArrowLeft' };
+  const right = { shiftKey: true, code: 'ArrowRight', key: 'ArrowRight' };
+  const cases = [
+    ['run', 'run', 'snippets'],
+    ['snippets', 'run', 'verify'],
+    ['verify', 'snippets', 'verify']
+  ];
+  for (const [currentWorkspace, expectedLeft, expectedRight] of cases) {
+    assert.equal(getWorkspaceShortcutTarget(left, { currentWorkspace }), expectedLeft, currentWorkspace);
+    assert.equal(getWorkspaceShortcutTarget(right, { currentWorkspace }), expectedRight, currentWorkspace);
+    assert.equal(getWorkspaceShortcutTarget({ ...right, repeat: true }, { currentWorkspace }), expectedRight, currentWorkspace);
+  }
+  // Unknown or missing current tab behaves like the run tab.
+  for (const options of [{ currentWorkspace: 'bogus' }, { currentWorkspace: undefined }, {}, undefined]) {
+    assert.equal(getWorkspaceShortcutTarget(left, options), 'run');
+    assert.equal(getWorkspaceShortcutTarget(right, options), 'snippets');
+  }
+  assert.equal(getWorkspaceShortcutTarget({ shiftKey: true, code: 'ArrowUp', key: 'ArrowUp' }, { currentWorkspace: 'snippets' }), '');
+  assert.equal(getWorkspaceShortcutTarget({ ...right, ctrlKey: true }, { currentWorkspace: 'snippets' }), '');
+  assert.equal(getWorkspaceShortcutTarget({ ...left, altKey: true }, { currentWorkspace: 'verify' }), '');
+  assert.equal(getWorkspaceShortcutTarget({ ...left, isComposing: true }, { currentWorkspace: 'verify' }), '');
+});
+
 test('getWorkspaceShortcutTarget no longer uses Alt+Left / Alt+Right', () => {
   assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'ArrowLeft', key: 'ArrowLeft' }), '');
   assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'ArrowRight', key: 'ArrowRight' }), '');
+  assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'ArrowLeft', key: 'ArrowLeft' }, { currentWorkspace: 'verify' }), '');
 });
 
 test('getWorkspaceShortcutTarget leaves Shift+Arrow to text fields while keeping the digit aliases', () => {
-  const options = { allowArrows: false };
-  assert.equal(getWorkspaceShortcutTarget({ shiftKey: true, code: 'ArrowLeft', key: 'ArrowLeft' }, options), '');
-  assert.equal(getWorkspaceShortcutTarget({ shiftKey: true, code: 'ArrowRight', key: 'ArrowRight' }, options), '');
-  assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'Digit1', key: '¡' }, options), 'run');
-  assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'Digit2', key: '™' }, options), 'snippets');
+  for (const options of [{ allowArrows: false }, { allowArrows: false, currentWorkspace: 'snippets' }]) {
+    assert.equal(getWorkspaceShortcutTarget({ shiftKey: true, code: 'ArrowLeft', key: 'ArrowLeft' }, options), '');
+    assert.equal(getWorkspaceShortcutTarget({ shiftKey: true, code: 'ArrowRight', key: 'ArrowRight' }, options), '');
+    assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'Digit1', key: '¡' }, options), 'run');
+    assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'Digit2', key: '™' }, options), 'snippets');
+    assert.equal(getWorkspaceShortcutTarget({ altKey: true, code: 'Digit3', key: '£' }, options), 'verify');
+  }
 });
 
 test('isTextEntryTarget only matches fields where arrows move the caret', () => {
@@ -78,7 +124,14 @@ test('isTextEntryTarget only matches fields where arrows move the caret', () => 
 });
 
 test('workspace shortcut labels use Shift arrows and platform digit aliases', () => {
-  const alt = { run: 'Shift+←', snippets: 'Shift+→', switch: 'Shift+←→', runAlias: 'Alt+1', snippetsAlias: 'Alt+2' };
+  const alt = {
+    run: 'Shift+←',
+    snippets: 'Shift+→',
+    switch: 'Shift+←→',
+    runAlias: 'Alt+1',
+    snippetsAlias: 'Alt+2',
+    verifyAlias: 'Alt+3'
+  };
   assert.deepEqual(getWorkspaceShortcutLabels('win32'), alt);
   assert.deepEqual(getWorkspaceShortcutLabels('linux'), alt);
   assert.deepEqual(getWorkspaceShortcutLabels(), alt);
@@ -87,7 +140,8 @@ test('workspace shortcut labels use Shift arrows and platform digit aliases', ()
     snippets: 'Shift+→',
     switch: 'Shift+←→',
     runAlias: 'Option+1',
-    snippetsAlias: 'Option+2'
+    snippetsAlias: 'Option+2',
+    verifyAlias: 'Option+3'
   });
   assert.equal(WORKSPACE_SHORTCUT_COMMAND, 'piyoyo.workspaceShortcut');
 });
@@ -258,14 +312,19 @@ test('getTextFieldEdgeWorkspaceTarget switches right only from the end with noth
   assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_RIGHT, caret('1 2\n3', 0), 'run'), '');
   // A selection that already reaches the end keeps normal selection behavior.
   assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_RIGHT, caret('1 2\n3', 2, 5), 'run'), '');
-  // No tab to the right of the snippet tab.
-  assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_RIGHT, caret('abc', 3), 'snippets'), '');
+  assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_RIGHT, caret('abc', 3), 'snippets'), 'verify');
+  assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_RIGHT, caret('abc', 2), 'snippets'), '');
+  assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_RIGHT, caret('abc', 1, 3), 'snippets'), '');
+  // No tab to the right of the verify tab.
+  assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_RIGHT, caret('abc', 3), 'verify'), '');
 });
 
 test('getTextFieldEdgeWorkspaceTarget switches left only from the start with nothing selected', () => {
   assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_LEFT, caret('abc', 0), 'snippets'), 'run');
   assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_LEFT, caret('abc', 1), 'snippets'), '');
   assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_LEFT, caret('abc', 0, 2), 'snippets'), '');
+  assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_LEFT, caret('abc', 0), 'verify'), 'snippets');
+  assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_LEFT, caret('abc', 2), 'verify'), '');
   // No tab to the left of the run tab.
   assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_LEFT, caret('abc', 0), 'run'), '');
 });
@@ -274,7 +333,16 @@ test('getTextFieldEdgeWorkspaceTarget treats an empty field as both edges', () =
   assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_RIGHT, caret('', 0), 'run'), 'snippets');
   assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_LEFT, caret('', 0), 'run'), '');
   assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_LEFT, caret('', 0), 'snippets'), 'run');
-  assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_RIGHT, caret('', 0), 'snippets'), '');
+  assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_RIGHT, caret('', 0), 'snippets'), 'verify');
+  assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_LEFT, caret('', 0), 'verify'), 'snippets');
+  assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_RIGHT, caret('', 0), 'verify'), '');
+});
+
+test('getTextFieldEdgeWorkspaceTarget does nothing for an unknown current tab', () => {
+  for (const currentWorkspace of ['bogus', undefined, '']) {
+    assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_RIGHT, caret('', 0), currentWorkspace), '', String(currentWorkspace));
+    assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_LEFT, caret('', 0), currentWorkspace), '', String(currentWorkspace));
+  }
 });
 
 test('getTextFieldEdgeWorkspaceTarget ignores other keys, modifiers, IME and fields without a caret', () => {

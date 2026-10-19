@@ -27,6 +27,7 @@ const {
   isTextEntryTarget,
   normalizeInputFocusShortcut
 } = require('./keyboardShortcuts');
+const { VERIFY_MARKUP, VERIFY_STYLES, initVerifyWorkspace } = require('./verify/verifyWebview');
 
 function getStdinPlaceholder(shortcutLabel) {
   return `ここに複数行の入力を貼り付け（${shortcutLabel} でエディタと行き来）`;
@@ -507,11 +508,12 @@ function getWebviewHtml({
   workspaceShortcutLabels = getWorkspaceShortcutLabels(platform)
 } = {}) {
   const nonce = getNonce();
-  const runTabShortcut = escapeHtml(`${workspaceShortcutLabels.run} / ${workspaceShortcutLabels.runAlias}`);
-  const snippetTabShortcut = escapeHtml(`${workspaceShortcutLabels.snippets} / ${workspaceShortcutLabels.snippetsAlias}`);
+  const runTabShortcut = escapeHtml(workspaceShortcutLabels.runAlias);
+  const snippetTabShortcut = escapeHtml(workspaceShortcutLabels.snippetsAlias);
+  const verifyTabShortcut = escapeHtml(workspaceShortcutLabels.verifyAlias);
   const tabSwitchLabel = escapeHtml(workspaceShortcutLabels.switch);
   // Inside text fields Shift+Arrow only switches at the caret edge (getTextFieldEdgeWorkspaceTarget).
-  const tabTitleSuffix = '。文字の入力欄の中では、文字を選んでおらずカーソルが端にあるときに切り替わります';
+  const tabTitleSuffix = `。${tabSwitchLabel}で隣のタブへ移ります。文字の入力欄の中では、文字を選んでおらずカーソルが端にあるときに切り替わります`;
   const tabSwitchHelp = 'Shift+←→でタブを切り替えます。文字の入力欄の中では、文字を選んでいないときに、'
     + 'カーソルが左端ならShift+←、右端ならShift+→で切り替わります。それ以外は文字の選択になります。'
     + '標準入力の欄ではEscでタブへ移動できます';
@@ -640,7 +642,7 @@ function getWebviewHtml({
 
     .workspaceTabs {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: repeat(3, 1fr);
       gap: 8px;
     }
 
@@ -1825,6 +1827,7 @@ function getWebviewHtml({
       .snippetInsertSelection { gap: 6px; }
     }
 
+${VERIFY_STYLES}
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { transition: none !important; }
     }
@@ -1862,8 +1865,9 @@ function getWebviewHtml({
     </div>
     <div class="workspaceHeader">
       <nav class="workspaceTabs" role="tablist" aria-label="Piyoyoの機能">
-        <button id="runWorkspaceTab" class="workspaceTab" type="button" role="tab" aria-selected="true" aria-controls="runWorkspace" tabindex="0" data-workspace="run" title="実行 (${runTabShortcut})${tabTitleSuffix}" aria-keyshortcuts="Shift+ArrowLeft Alt+1">実行</button>
-        <button id="snippetWorkspaceTab" class="workspaceTab" type="button" role="tab" aria-selected="false" aria-controls="snippetWorkspace" tabindex="-1" data-workspace="snippets" title="コード挿入 (${snippetTabShortcut})${tabTitleSuffix}" aria-keyshortcuts="Shift+ArrowRight Alt+2">コード挿入</button>
+        <button id="runWorkspaceTab" class="workspaceTab" type="button" role="tab" aria-selected="true" aria-controls="runWorkspace" tabindex="0" data-workspace="run" title="実行 (${runTabShortcut})${tabTitleSuffix}" aria-keyshortcuts="Alt+1">実行</button>
+        <button id="snippetWorkspaceTab" class="workspaceTab" type="button" role="tab" aria-selected="false" aria-controls="snippetWorkspace" tabindex="-1" data-workspace="snippets" title="コード挿入 (${snippetTabShortcut})${tabTitleSuffix}" aria-keyshortcuts="Alt+2">コード挿入</button>
+        <button id="verifyWorkspaceTab" class="workspaceTab" type="button" role="tab" aria-selected="false" aria-controls="verifyWorkspace" tabindex="-1" data-workspace="verify" title="検証 (${verifyTabShortcut})${tabTitleSuffix}" aria-keyshortcuts="Alt+3">検証</button>
       </nav>
       <button id="openSettingsButton" class="settingsButton" type="button" data-open-settings aria-label="Piyoyoの設定を開く" title="Piyoyoの設定を開く"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="8" cy="8" r="4.6" fill="none" stroke="currentColor" stroke-width="1.4"/></svg></button>
     </div>
@@ -1999,6 +2003,8 @@ function getWebviewHtml({
         </div>
       </div>
     </section>
+
+    <section id="verifyWorkspace" class="workspacePanel verifyWorkspace" role="tabpanel" aria-labelledby="verifyWorkspaceTab" data-workspace-panel="verify" hidden>${VERIFY_MARKUP}    </section>
   </main>
 
   <script nonce="${nonce}">
@@ -2033,6 +2039,7 @@ function getWebviewHtml({
     ${createShiftDoubleTapDetector.toString()}
     ${getStdinPlaceholder.toString()}
     ${getStdinTitle.toString()}
+    ${initVerifyWorkspace.toString()}
     let inputFocusMode = ${scriptJson(inputFocusMode)};
     const inputFocusHintKey = document.getElementById('inputFocusHintKey');
     const shiftDoubleTap = createShiftDoubleTapDetector(${SHIFT_DOUBLE_TAP_INTERVAL_MS});
@@ -2105,6 +2112,9 @@ function getWebviewHtml({
     function getDefaultWorkspaceFocusTarget(workspace) {
       if (workspace === 'snippets') {
         return snippetPreferencesOpen ? snippetPreferencesSearchInput : snippetSearchInput;
+      }
+      if (workspace === 'verify') {
+        return document.getElementById('verifyProblemUrl');
       }
       return stdin;
     }
@@ -2820,7 +2830,7 @@ function getWebviewHtml({
         updateSnippetRovingTabStop();
       });
     });
-    setWorkspace(viewState.workspace === 'snippets' ? 'snippets' : 'run');
+    setWorkspace(['snippets', 'verify'].includes(viewState.workspace) ? viewState.workspace : 'run');
     const defaultSnippetCategory = snippetCategoryPanels[0]?.dataset.snippetCategoryPanel || '';
     const storedSnippetCategory = Array.from(snippetCategoryPanels).some(
       (panel) => panel.dataset.snippetCategoryPanel === viewState.snippetCategory
@@ -3066,8 +3076,8 @@ function getWebviewHtml({
     }
     // Returns to the tab that was last open; the run tab always lands on stdin.
     function focusLastWorkspace() {
-      if (viewState.workspace === 'snippets') {
-        setWorkspace('snippets', { focusPanel: true });
+      if (viewState.workspace === 'snippets' || viewState.workspace === 'verify') {
+        setWorkspace(viewState.workspace, { focusPanel: true });
         return;
       }
       setWorkspace('run');
@@ -3096,7 +3106,10 @@ function getWebviewHtml({
         return;
       }
       const inTextField = isTextEntryTarget(event.target);
-      const shortcutWorkspace = getWorkspaceShortcutTarget(event, { allowArrows: !inTextField })
+      const shortcutWorkspace = getWorkspaceShortcutTarget(event, {
+        allowArrows: !inTextField,
+        currentWorkspace: viewState.workspace
+      })
         || (inTextField ? getTextFieldEdgeWorkspaceTarget(event, event.target, viewState.workspace) : '');
       if (shortcutWorkspace) {
         // Let it bubble: VS Code must still see the Alt key combo (see Alt+I).
@@ -3217,6 +3230,15 @@ function getWebviewHtml({
       } else {
         status.textContent = '完了';
         status.className = 'summaryValue toneState';
+      }
+    });
+
+    initVerifyWorkspace({
+      vscode,
+      sendInputToRun(input) {
+        stdin.value = input;
+        setWorkspace('run');
+        stdin.focus();
       }
     });
 

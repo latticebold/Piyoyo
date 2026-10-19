@@ -33,13 +33,14 @@ test('webview uses white input and yellow output surfaces with dark text', () =>
   assert.match(html, /\.stderrBox\s*\{[^}]*background:\s*#251112/s);
 });
 
-test('webview separates execution and snippet insertion into two workspaces', () => {
+test('webview separates execution, snippet insertion and verification into three workspaces', () => {
   const html = getWebviewHtml({
     brandName: 'Piyoyo'
   });
   const tabsIndex = html.indexOf('class="workspaceTabs"');
   const runWorkspaceIndex = html.indexOf('id="runWorkspace"');
   const snippetWorkspaceIndex = html.indexOf('id="snippetWorkspace"');
+  const verifyWorkspaceIndex = html.indexOf('id="verifyWorkspace"');
   const runIndex = html.indexOf('id="runButton"');
   const stdinIndex = html.indexOf('id="stdin"');
   const stdoutIndex = html.indexOf('id="stdout"');
@@ -49,13 +50,21 @@ test('webview separates execution and snippet insertion into two workspaces', ()
   assert.ok(tabsIndex > -1);
   assert.ok(runWorkspaceIndex > tabsIndex);
   assert.ok(snippetWorkspaceIndex > runWorkspaceIndex);
+  assert.ok(verifyWorkspaceIndex > snippetWorkspaceIndex);
   assert.ok(runIndex < stdinIndex);
   assert.ok(stdinIndex < stdoutIndex);
   assert.ok(stdoutIndex < detailsIndex);
   assert.ok(detailsIndex < launcherIndex);
+  assert.deepEqual(
+    Array.from(html.matchAll(/<button\b[^>]*role="tab"[^>]*data-workspace="([^"]+)"/g), (match) => match[1]),
+    ['run', 'snippets', 'verify']
+  );
   assert.match(html, /data-workspace="run"[^>]*>実行</);
   assert.match(html, /data-workspace="snippets"[^>]*>コード挿入</);
+  assert.match(html, /data-workspace="verify"[^>]*>検証</);
   assert.match(html, /id="snippetWorkspace"[^>]*hidden/);
+  assert.match(html, /<section id="verifyWorkspace"[^>]*role="tabpanel"[^>]*aria-labelledby="verifyWorkspaceTab"[^>]*data-workspace-panel="verify"[^>]*hidden>/);
+  assert.match(html, /\.workspaceTabs\s*\{[^}]*grid-template-columns:\s*repeat\(3, 1fr\)/s);
   assert.doesNotMatch(html, /id="targetFile"/);
   assert.doesNotMatch(html, /id="activeFile"/);
   assert.doesNotMatch(html, /id="useActiveButton"/);
@@ -460,7 +469,7 @@ test('webview restores the selected workspace and snippet category', () => {
 
   assert.match(html, /const viewState = vscode\.getState\(\) \|\| \{\}/);
   assert.match(html, /vscode\.setState\(viewState\)/);
-  assert.match(html, /setWorkspace\(viewState\.workspace === 'snippets'/);
+  assert.match(html, /setWorkspace\(\['snippets', 'verify'\]\.includes\(viewState\.workspace\) \? viewState\.workspace : 'run'\);/);
   assert.match(html, /const defaultSnippetCategory = snippetCategoryPanels\[0\]\?\.dataset\.snippetCategoryPanel \|\| ''/);
   assert.match(html, /panel\.dataset\.snippetCategoryPanel === viewState\.snippetCategory/);
   assert.match(html, /setSnippetCategory\(storedSnippetCategory\)/);
@@ -799,30 +808,45 @@ test('workspace tabs follow the tablist pattern with arrow keys', () => {
   const html = getWebviewHtml();
   assert.match(html, /id="runWorkspaceTab"[^>]*role="tab"[^>]*tabindex="0"/);
   assert.match(html, /id="snippetWorkspaceTab"[^>]*role="tab"[^>]*tabindex="-1"/);
+  assert.match(html, /id="verifyWorkspaceTab"[^>]*role="tab"[^>]*aria-selected="false"[^>]*aria-controls="verifyWorkspace"[^>]*tabindex="-1"/);
   assert.match(html, /tab\.tabIndex = isSelected \? 0 : -1;/);
   assert.match(html, /getNextIndex\(tabs\.indexOf\(tab\), tabs\.length, event\.key, 'horizontal'\)/);
   assert.match(html, /setWorkspace\(tabs\[nextIndex\]\.dataset\.workspace\);\s*tabs\[nextIndex\]\.focus\(\);/);
 });
 
-test('workspace tabs advertise Shift+Left / Shift+Right with the digit aliases and platform labels', () => {
+test('workspace tabs advertise their digit alias, and the titles explain the relative Shift+←→ switch', () => {
+  const tabs = [
+    ['runWorkspaceTab', '実行', '1'],
+    ['snippetWorkspaceTab', 'コード挿入', '2'],
+    ['verifyWorkspaceTab', '検証', '3']
+  ];
   const html = getWebviewHtml();
-  assert.match(html, /id="runWorkspaceTab"[^>]*title="実行 \(Shift\+← \/ Alt\+1\)。文字の入力欄の中では、文字を選んでおらずカーソルが端にあるときに切り替わります"[^>]*aria-keyshortcuts="Shift\+ArrowLeft Alt\+1"/);
-  assert.match(html, /id="snippetWorkspaceTab"[^>]*title="コード挿入 \(Shift\+→ \/ Alt\+2\)。/);
-  assert.match(html, /id="snippetWorkspaceTab"[^>]*aria-keyshortcuts="Shift\+ArrowRight Alt\+2"/);
-  assert.doesNotMatch(html, /Alt\+Arrow|Alt\+←|isMacPlatform/);
-
   const mac = getWebviewHtml({ platform: 'darwin' });
-  assert.match(mac, /id="runWorkspaceTab"[^>]*title="実行 \(Shift\+← \/ Option\+1\)。/);
-  assert.match(mac, /id="snippetWorkspaceTab"[^>]*title="コード挿入 \(Shift\+→ \/ Option\+2\)。/);
+  for (const [id, label, digit] of tabs) {
+    assert.match(
+      html,
+      new RegExp(`id="${id}"[^>]*title="${label} \\(Alt\\+${digit}\\)。Shift\\+←→で隣のタブへ移ります。文字の入力欄の中では、文字を選んでおらずカーソルが端にあるときに切り替わります"[^>]*aria-keyshortcuts="Alt\\+${digit}"`),
+      id
+    );
+    // macOS shows Option in the title; aria-keyshortcuts keeps the DOM key name Alt.
+    assert.match(
+      mac,
+      new RegExp(`id="${id}"[^>]*title="${label} \\(Option\\+${digit}\\)。Shift\\+←→で隣のタブへ移ります。[^"]*"[^>]*aria-keyshortcuts="Alt\\+${digit}"`),
+      id
+    );
+  }
+  // Shift+Arrow depends on the current tab, so no tab advertises it as its own shortcut.
+  assert.doesNotMatch(html, /aria-keyshortcuts="[^"]*Shift/);
+  assert.doesNotMatch(html, /Alt\+Arrow|Alt\+←|isMacPlatform/);
 });
 
-test('Shift+Left / Shift+Right switch workspaces outside text fields and Alt+1 / Alt+2 from anywhere', () => {
+test('Shift+Left / Shift+Right switch to the neighbouring workspace and Alt+1 / Alt+2 / Alt+3 jump from anywhere', () => {
   const html = getWebviewHtml();
-  assert.match(html, /function getWorkspaceShortcutTarget\(event, \{ allowArrows = true \} = \{\}\)/);
+  assert.match(html, /function getWorkspaceShortcutTarget\(event, \{ allowArrows = true, currentWorkspace = 'run' \} = \{\}\)/);
   assert.match(html, /function isTextEntryTarget\(element\)/);
   // Inside text fields Shift+Arrow only switches at the caret edge; otherwise it selects text.
   assert.match(html, /function getTextFieldEdgeWorkspaceTarget\(event, field, currentWorkspace\)/);
-  assert.match(html, /const inTextField = isTextEntryTarget\(event\.target\);\s*const shortcutWorkspace = getWorkspaceShortcutTarget\(event, \{ allowArrows: !inTextField \}\)\s*\|\| \(inTextField \? getTextFieldEdgeWorkspaceTarget\(event, event\.target, viewState\.workspace\) : ''\);\s*if \(shortcutWorkspace\) \{[\s\S]*?event\.preventDefault\(\);[\s\S]*?setWorkspace\(shortcutWorkspace, \{ focusPanel: true, avoidTextEntry: event\.shiftKey \}\);/);
+  assert.match(html, /const inTextField = isTextEntryTarget\(event\.target\);\s*const shortcutWorkspace = getWorkspaceShortcutTarget\(event, \{\s*allowArrows: !inTextField,\s*currentWorkspace: viewState\.workspace\s*\}\)\s*\|\| \(inTextField \? getTextFieldEdgeWorkspaceTarget\(event, event\.target, viewState\.workspace\) : ''\);\s*if \(shortcutWorkspace\) \{[\s\S]*?event\.preventDefault\(\);[\s\S]*?setWorkspace\(shortcutWorkspace, \{ focusPanel: true, avoidTextEntry: event\.shiftKey \}\);/);
   // Esc in stdin moves to the run tab without stopping the event for VS Code.
   assert.match(html, /stdin\.addEventListener\('keydown', \(event\) => \{\s*if \(event\.key !== 'Escape' \|\| isImeComposing\(event\)[\s\S]*?event\.preventDefault\(\);\s*document\.getElementById\('runWorkspaceTab'\)\.focus\(\);\s*\}\);/);
   assert.doesNotMatch(html, /stdin\.addEventListener\('keydown'[^}]*stopPropagation/);
@@ -872,7 +896,7 @@ test('hiding a workspace that holds focus moves focus into the shown panel', () 
   const html = getWebviewHtml();
   assert.match(html, /panel\.addEventListener\('focusin', \(event\) => \{\s*lastFocusedInWorkspace\[panel\.dataset\.workspacePanel\] = event\.target;/);
   assert.match(html, /element\.isConnected && !element\.disabled\s*&& element\.getClientRects\(\)\.length > 0/);
-  assert.match(html, /return snippetPreferencesOpen \? snippetPreferencesSearchInput : snippetSearchInput;\s*\}\s*return stdin;/);
+  assert.match(html, /return snippetPreferencesOpen \? snippetPreferencesSearchInput : snippetSearchInput;\s*\}\s*if \(workspace === 'verify'\) \{\s*return document\.getElementById\('verifyProblemUrl'\);\s*\}\s*return stdin;/);
   assert.match(html, /const target = canRestoreFocus\(remembered\) \? remembered : getDefaultWorkspaceFocusTarget\(workspace\);/);
   // Focus is checked before the panel is hidden, and only while the webview itself has focus.
   assert.match(html, /const focusWillBeHidden = document\.hasFocus\(\) && Array\.from\(workspacePanels\)\.some\(\s*\(panel\) => panel\.dataset\.workspacePanel !== workspace && panel\.contains\(activeElement\)\s*\);[\s\S]*?panel\.hidden = panel\.dataset\.workspacePanel !== workspace;[\s\S]*?if \(focusPanel \|\| focusWillBeHidden\) \{\s*getWorkspaceFocusTarget\(workspace, \{ avoidTextEntry \}\)\.focus\(\);/);
@@ -963,7 +987,7 @@ test('webview restores the last open tab on request and returns to the editor wi
   assert.match(html, /function isInputFocusShortcut\(event\)/);
   assert.match(html, /function createShiftDoubleTapDetector\(intervalMs\)/);
   assert.match(html, /const shiftDoubleTap = createShiftDoubleTapDetector\(400\);/);
-  assert.match(html, /function focusLastWorkspace\(\) \{\s*if \(viewState\.workspace === 'snippets'\) \{\s*setWorkspace\('snippets', \{ focusPanel: true \}\);\s*return;\s*\}\s*setWorkspace\('run'\);\s*stdin\.focus\(\);/);
+  assert.match(html, /function focusLastWorkspace\(\) \{\s*if \(viewState\.workspace === 'snippets' \|\| viewState\.workspace === 'verify'\) \{\s*setWorkspace\(viewState\.workspace, \{ focusPanel: true \}\);\s*return;\s*\}\s*setWorkspace\('run'\);\s*stdin\.focus\(\);/);
   assert.match(html, /message\.type === 'focusStdin'\) \{\s*focusLastWorkspace\(\);/);
   // Save-and-run still switches to the run tab.
   assert.match(html, /function startRun\(\{ saveFirst = false \} = \{\}\) \{[\s\S]*?setWorkspace\('run'\);/);
@@ -976,4 +1000,80 @@ test('webview restores the last open tab on request and returns to the editor wi
   assert.match(html, /return inputFocusMode !== 'altI';/);
   assert.match(html, /window\.addEventListener\('focus', postFocusState\);\s*window\.addEventListener\('blur', postFocusState\);/);
   assert.match(html, /vscode\.postMessage\(\{ type: 'focusState', focused: document\.hasFocus\(\) \}\);/);
+});
+
+const { initVerifyWorkspace } = require('../src/verify/verifyWebview');
+
+function verifyPanelHtml(html) {
+  const start = html.indexOf('<section id="verifyWorkspace"');
+  assert.ok(start > -1);
+  return html.slice(start, html.indexOf('</section>', start));
+}
+
+function openingTag(html, id) {
+  const match = html.match(new RegExp(`<[a-z]+\\b[^>]*\\bid="${id}"[^>]*>`));
+  assert.ok(match, id);
+  return match[0];
+}
+
+test('webview has no inline style attributes, which the CSP would block', () => {
+  for (const errorDisplayMode of ['friendly', 'both', 'original']) {
+    const html = getWebviewHtml({ snippets: INPUT_SNIPPETS, errorDisplayMode });
+    assert.doesNotMatch(html, /\sstyle\s*=/i, errorDisplayMode);
+  }
+});
+
+test('verify workspace controls exist with accessible names', () => {
+  const panel = verifyPanelHtml(getWebviewHtml());
+
+  for (const id of ['verifyProblemUrl', 'verifyIterations', 'verifyCompareMode', 'verifySeed']) {
+    openingTag(panel, id);
+    assert.match(panel, new RegExp(`<label for="${id}">[^<]+</label>`), id);
+  }
+  assert.match(openingTag(panel, 'verifyProblemUrl'), /<input\b[^>]*type="url"/);
+  assert.match(openingTag(panel, 'verifyProblemText'), /<textarea\b[^>]*aria-label="[^"]+"/);
+  assert.match(openingTag(panel, 'verifyAddRowKind'), /<select\b[^>]*aria-label="[^"]+"/);
+  for (const id of ['verifyFetchProblem', 'verifyAddRow', 'verifyStart', 'verifyCancel', 'verifyRecheck', 'verifyRegenerate']) {
+    assert.match(panel, new RegExp(`<button\\b[^>]*\\bid="${id}"[^>]*type="button"[^>]*>[^<]*\\S[^<]*</button>`), id);
+  }
+
+  const compareMode = panel.match(/<select id="verifyCompareMode"[^>]*>([\s\S]*?)<\/select>/)[1];
+  assert.deepEqual(
+    Array.from(compareMode.matchAll(/<option value="([^"]+)">[^<]+<\/option>/g), (match) => match[1]),
+    ['tokens', 'exact', 'float']
+  );
+
+  const sections = panel.match(/<details\b[^>]*class="verifySection"[^>]*>/g) || [];
+  assert.deepEqual(
+    sections.map((tag) => tag.match(/id="([^"]+)"/)[1]),
+    ['verifyFormatSection', 'verifyStressSection', 'verifyCounterSection']
+  );
+  sections.forEach((tag) => assert.match(tag, / open>$/, tag));
+});
+
+test('verify workspace is initialised in the webview and can send an input to the run tab', () => {
+  const html = getWebviewHtml();
+  assert.ok(html.includes(initVerifyWorkspace.toString()));
+  assert.match(html, /function initVerifyWorkspace\(\{ vscode, sendInputToRun \}\)/);
+  assert.match(html, /initVerifyWorkspace\(\{\s*vscode,\s*sendInputToRun\(input\) \{\s*stdin\.value = input;\s*setWorkspace\('run'\);\s*stdin\.focus\(\);\s*\}\s*\}\);/);
+});
+
+test('generated webview inline script parses as a function body', () => {
+  for (const errorDisplayMode of ['friendly', 'both', 'original']) {
+    const html = getWebviewHtml({ snippets: INPUT_SNIPPETS, errorDisplayMode });
+    // A single script tag, so the non-greedy capture covers the whole script.
+    assert.equal((html.match(/<script\b/g) || []).length, 1);
+    const source = html.match(/<script nonce="[^"]+">([\s\S]*?)<\/script>/)[1];
+    assert.doesNotThrow(() => new Function(source), errorDisplayMode);
+  }
+});
+
+test('initVerifyWorkspace is self-contained so it can be injected with toString()', () => {
+  const source = initVerifyWorkspace.toString();
+  assert.doesNotThrow(() => new Function(source));
+  assert.doesNotMatch(source, /\bVERIFY_MARKUP\b/);
+  assert.doesNotMatch(source, /\bVERIFY_STYLES\b/);
+  assert.doesNotMatch(source, /\brequire\(/);
+  // option() is a module-level markup helper, not available in the webview.
+  assert.doesNotMatch(source, /\boption\(/);
 });

@@ -36,6 +36,7 @@ const {
 } = require('./src/keyboardShortcuts');
 const { getRunnablePythonFileFromDocument, saveDocumentBeforeRun } = require('./src/targetSelection');
 const { getWebviewHtml } = require('./src/webviewHtml');
+const { VerifyController } = require('./src/verify/verifyController');
 
 const VIEW_CONTAINER_ID = 'piyoyo';
 const VIEW_TYPE = 'piyoyo.runnerView';
@@ -130,6 +131,13 @@ class RunnerViewProvider {
     this.activeFile = getRunnablePythonFileFromDocument(undefined);
     this.launcherAvailabilityCache = createLauncherAvailabilityCache();
     this.pyPyHintShown = false;
+    this.verifyController = new VerifyController({
+      vscodeApi: vscode,
+      postMessage: (message) => this.postMessage(message),
+      // The 検証 tab has no launcher picker; it follows the choice saved by the 実行 tab.
+      getRunSettings: () => this.getRunSettings(getSavedPythonPathPreference(this.globalState)),
+      runPythonFile
+    });
   }
 
   resolveWebviewView(webviewView) {
@@ -165,6 +173,12 @@ class RunnerViewProvider {
         this.webviewReady = true;
         this.flushPendingRunRequest();
         this.flushPendingFocusInputRequest();
+        this.verifyController.postLoaded();
+        return;
+      }
+
+      if (message.type.startsWith('verify')) {
+        await this.verifyController.handleMessage(message);
         return;
       }
 
@@ -369,6 +383,10 @@ class RunnerViewProvider {
 
   refreshActiveFile(editor) {
     this.activeFile = getRunnablePythonFileFromDocument(editor && editor.document);
+    // Other editors (settings, output) keep the last Python file as the 検証 target.
+    if (this.activeFile.filePath) {
+      this.verifyController.setTargetFile(this.activeFile.filePath);
+    }
   }
 
   async postLauncherAvailability() {
@@ -437,6 +455,21 @@ class RunnerViewProvider {
       };
     }
 
+    const { pythonPath, timeoutMs, workspaceFolders } = await this.getRunSettings(selectedPythonPath);
+    const cwd = path.dirname(activeFile.filePath);
+
+    return runPythonFile({
+      filePath: activeFile.filePath,
+      cwd,
+      input,
+      pythonPath,
+      timeoutMs,
+      workspaceFolders
+    });
+  }
+
+  // Shared by the 実行 and 検証 tabs so both pick the same interpreter and time limit.
+  async getRunSettings(selectedPythonPath = '') {
     const config = vscode.workspace.getConfiguration('piyoyo');
     const legacyConfig = vscode.workspace.getConfiguration('ioSprint');
     const olderLegacyConfig = vscode.workspace.getConfiguration('stdioRunner');
@@ -461,19 +494,11 @@ class RunnerViewProvider {
       || legacyConfig.get('timeoutMs')
       || olderLegacyConfig.get('timeoutMs')
       || DEFAULT_TIMEOUT_MS;
-    const cwd = path.dirname(activeFile.filePath);
     const workspaceFolders = (vscode.workspace.workspaceFolders || [])
       .map((folder) => folder && folder.uri && folder.uri.fsPath)
       .filter((folderPath) => typeof folderPath === 'string' && folderPath.length > 0);
 
-    return runPythonFile({
-      filePath: activeFile.filePath,
-      cwd,
-      input,
-      pythonPath,
-      timeoutMs,
-      workspaceFolders
-    });
+    return { pythonPath, timeoutMs, workspaceFolders };
   }
 }
 

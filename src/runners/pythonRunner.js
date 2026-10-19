@@ -148,7 +148,9 @@ async function runPythonFile({
   pythonPath,
   timeoutMs = 5000,
   outputLimitBytes = DEFAULT_OUTPUT_LIMIT_BYTES,
-  workspaceFolders = []
+  workspaceFolders = [],
+  // Stress tests run many times in a row; skipping the probe halves the process starts.
+  inspectRuntime = true
 }) {
   const baseRuntime = makePythonRuntime({ launcher: pythonPath || '' });
   const safeTimeoutMs = Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 5000;
@@ -188,7 +190,9 @@ async function runPythonFile({
     });
   }
 
-  const pythonRuntime = await inspectPythonRuntime({ pythonPath, cwd, outputLimitBytes });
+  const pythonRuntime = inspectRuntime
+    ? await inspectPythonRuntime({ pythonPath, cwd, outputLimitBytes })
+    : baseRuntime;
 
   return new Promise((resolve) => {
     const child = spawn(pythonPath, [filePath], {

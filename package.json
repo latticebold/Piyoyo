@@ -115,6 +115,12 @@
         "key": "alt+2",
         "mac": "alt+2",
         "when": "piyoyo.runnerFocused && !editorTextFocus"
+      },
+      {
+        "command": "piyoyo.workspaceShortcut",
+        "key": "alt+3",
+        "mac": "alt+3",
+        "when": "piyoyo.runnerFocused && !editorTextFocus"
       }
     ],
     "menus": {
@@ -227,6 +233,6 @@
   },
   "scripts": {
     "test": "node --test test/*.test.js",
-    "check": "node --check extension.js && node --check src/webviewHtml.js && node --check src/snippetLibrary.js && node --check src/snippetPreferences.js && node --check src/snippetInsertion.js && node --check src/pythonImportInsertion.js && node --check src/pythonHelperInsertion.js &&node --check src/pythonStatements.js && node --check src/runners/pythonRunner.js && node --check src/runners/pythonErrorExplainer.js && node --check src/runners/boundedOutput.js && node --check src/runners/processTermination.js && node --check src/errorDisplayMode.js && node --check src/piyoyoSettings.js && node --check src/targetSelection.js && node --check src/keyboardShortcuts.js && node --check src/inputFocus.js && node --check src/pythonPathSelection.js && node --check src/pythonPathPreference.js && node --check src/pythonLauncherAvailability.js && node --check src/pythonLauncherAvailabilityCache.js && node --check src/ruffImportOrganizer.js"
+    "check": "node --check extension.js && node --check src/webviewHtml.js && node --check src/snippetLibrary.js && node --check src/snippetPreferences.js && node --check src/snippetInsertion.js && node --check src/pythonImportInsertion.js && node --check src/pythonHelperInsertion.js &&node --check src/pythonStatements.js && node --check src/runners/pythonRunner.js && node --check src/runners/pythonErrorExplainer.js && node --check src/runners/boundedOutput.js && node --check src/runners/processTermination.js && node --check src/errorDisplayMode.js && node --check src/piyoyoSettings.js && node --check src/targetSelection.js && node --check src/keyboardShortcuts.js && node --check src/inputFocus.js && node --check src/pythonPathSelection.js && node --check src/pythonPathPreference.js && node --check src/pythonLauncherAvailability.js && node --check src/pythonLauncherAvailabilityCache.js && node --check src/ruffImportOrganizer.js && node --check src/verify/expression.js && node --check src/verify/inputFormat.js && node --check src/verify/inputGenerator.js && node --check src/verify/outputCompare.js && node --check src/verify/verifyFile.js && node --check src/verify/stressRunner.js && node --check src/verify/problemParser.js && node --check src/verify/verifyWebview.js && node --check src/verify/verifyController.js"
   }
 }
