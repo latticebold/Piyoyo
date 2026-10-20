@@ -369,7 +369,7 @@ const VERIFY_MARKUP = `
               ${option('intList', '整数の列')}
               ${option('matrix', '行列（H×W）')}
               ${option('string', '文字列')}
-              ${option('grid', 'グリッド（H 行の文字列）')}
+              ${option('grid', 'H 行の文字列')}
             </select>
             <button id="verifyAddRow" type="button">+ 行を足す</button>
           </div>
@@ -440,7 +440,7 @@ function initVerifyWorkspace({ vscode, sendInputToRun }) {
     intList: '整数の列',
     matrix: '行列（H×W）',
     string: '文字列',
-    grid: 'グリッド（H 行の文字列）'
+    grid: 'H 行の文字列'
   };
   const ORDER_LABELS = {
     none: '並びなし',
@@ -901,6 +901,9 @@ function initVerifyWorkspace({ vscode, sendInputToRun }) {
     cancelButton.disabled = !value;
     recheckButton.disabled = value || !hasTarget || counterexamples.length === 0;
     regenerateButton.disabled = value || !hasTarget || counterexamples.length === 0;
+    counterList.querySelectorAll('[data-delete-counterexample]').forEach((button) => {
+      button.disabled = value;
+    });
   }
 
   function readIterations() {
@@ -990,14 +993,22 @@ function initVerifyWorkspace({ vscode, sendInputToRun }) {
           text: recheck.message
         }));
       }
-      const deleteButton = el('button', { type: 'button', className: 'verifySmallButton verifySecondary', 'aria-label': '#' + (index + 1) + ' の反例を消す', text: '消す' });
+      const deleteButton = el('button', {
+        type: 'button',
+        className: 'verifySmallButton verifySecondary',
+        'aria-label': '#' + (index + 1) + ' の反例を消す',
+        'data-delete-counterexample': counterexample.id,
+        text: '消す'
+      });
       deleteButton.addEventListener('click', () => {
         vscode.postMessage({ type: 'verifyDeleteCounterexample', id: counterexample.id });
       });
       const details = el('details', {}, [
         el('summary', { text: '入力と出力を見る' }),
         block('入力', counterexample.input),
-        block('期待する出力（愚直解）', counterexample.expected === null ? '（なし）' : counterexample.expected, {
+        block('期待する出力（愚直解）', counterexample.expected === null
+          ? '（まだありません。愚直解を用意して「期待する出力を作り直す」を押すと入ります）'
+          : counterexample.expected, {
           markedLines: recheck && recheck.comparison ? recheck.comparison.expectedDiffLines : []
         })
       ]);
@@ -1025,7 +1036,9 @@ function initVerifyWorkspace({ vscode, sendInputToRun }) {
     const target = message.target;
     hasTarget = Boolean(target);
     mainFileLabel.textContent = target ? target.mainFile : 'Python ファイルを開いてください';
-    naiveFileLabel.textContent = target ? target.naiveFile + (target.naiveExists ? '' : '（まだありません）') : '-';
+    naiveFileLabel.textContent = target
+      ? target.naiveFile + (target.naiveExists ? '' : '（まだありません。なくても、本番の解の実行時エラーと時間切れは確かめられます）')
+      : '-';
     createNaiveButton.hidden = !target || target.naiveExists;
     const data = message.data || {};
     format = data.format && Array.isArray(data.format.rows) ? data.format : { rows: [] };

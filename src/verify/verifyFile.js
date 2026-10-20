@@ -104,7 +104,8 @@ function normalizeCounterexample(raw) {
     id: isNonEmptyString(raw.id) ? raw.id : '',
     kind: raw.kind,
     input: raw.input,
-    expected: typeof raw.expected === 'string' ? raw.expected : '',
+    // null means no expected output yet (found before a naive solution existed).
+    expected: typeof raw.expected === 'string' ? raw.expected : null,
     seed: normalizeSeed(raw.seed),
     createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : ''
   };

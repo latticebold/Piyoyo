@@ -126,6 +126,7 @@ ab
 - `naivePath`：本番のファイルのフォルダから見た相対パス（区切りは `/`）。空なら `<名前>_naive.py` です。
 - `compareMode`：`'tokens'`（空白区切り、既定）、`'exact'`（完全一致）、`'float'`（小数の誤差を許す）。
 - `counterexamples[].kind`：`'mismatch'`（出力が違う）、`'mainError'`（本番の実行時エラー）、`'mainTimeout'`（本番の時間切れ）。
+- `counterexamples[].expected`：愚直解の出力。愚直解がまだないときに見つけた実行時エラー・時間切れの反例では `null` です。「期待する出力を作り直す」で後から入ります。
 - 反例として保存するのは、愚直解と比べる回（小さい入力）で見つけたものだけです。最大サイズの回の失敗は、シード値を画面に出すだけにします（入力が大きく、ファイルが膨らむため）。
 
 ## 関数の約束
@@ -232,6 +233,7 @@ runStressTest({
 }) // => Promise<StressResult>
 ```
 
+- `runNaive` は省略できます（`null`）。そのときはすべての回で本番の解だけを動かし、`'mainError'` と `'mainTimeout'` だけで止まります。愚直解をすぐに書けないときでも、まず本番の解のエラーと時間切れを確かめられるようにするためです。
 - `RunResult` は `runPythonFile` の結果の一部です：`{ stdout, stderr, exitCode, timedOut, outputLimitExceeded, errorMessage, elapsedMs }`。
 - 回ごとの計画：
   - 10 回に 1 回（`iteration % 10 === 9`）は `max`。本番の解だけを動かします。

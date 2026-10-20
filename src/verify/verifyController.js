@@ -119,6 +119,7 @@ class VerifyController {
     this.pendingTarget = null;
     this.saveTimer = null;
     this.fileExistedOnLoad = false;
+    this.saveLocked = false;
     this.targetToken = 0;
   }
 
@@ -161,6 +162,7 @@ class VerifyController {
     this.data = loaded.data;
     this.warnings = loaded.warnings;
     this.fileExistedOnLoad = loaded.existed;
+    this.saveLocked = Boolean(loaded.locked);
     await this.postLoaded();
   }
 
@@ -173,7 +175,13 @@ class VerifyController {
     }
     const parsed = parseVerifyFile(text);
     if (!parsed.ok) {
-      return { data: createEmptyVerifyData(), warnings: [parsed.message], existed: true };
+      // Never overwrite a file we could not read (broken JSON or a newer Piyoyo's format).
+      return {
+        data: createEmptyVerifyData(),
+        warnings: [parsed.message + ' このファイルは上書きしません。'],
+        existed: true,
+        locked: true
+      };
     }
     const normalized = normalizeFormat(parsed.data.format);
     return {
@@ -231,6 +239,14 @@ class VerifyController {
       return false;
     }
     const filePath = getVerifyFilePath(this.target);
+    if (this.saveLocked) {
+      this.postMessage({
+        type: 'verifySaved',
+        message: path.basename(filePath) + ' を読み込めなかったため、上書きしないようにしています（変更は保存されません）。',
+        failed: true
+      });
+      return false;
+    }
     try {
       await this.fs.writeFile(filePath, serializeVerifyFile(this.data), 'utf8');
       this.fileExistedOnLoad = true;
@@ -387,13 +403,15 @@ class VerifyController {
     }
   }
 
-  async prepareRun({ needNaive }) {
+  // naive: 'required' fails without the naive file, 'optional' runs main only, 'none' never uses it.
+  async prepareRun({ naive }) {
     if (!this.target) {
       return { ok: false, message: 'Python ファイルを開いてください。' };
     }
     const mainPath = this.target;
     const naivePath = resolveNaivePath(mainPath, this.data.naivePath);
-    if (needNaive && !(await fileExists(this.fs, naivePath))) {
+    const naiveExists = naive !== 'none' && await fileExists(this.fs, naivePath);
+    if (naive === 'required' && !naiveExists) {
       return {
         ok: false,
         message: `愚直解 ${toRelativeNaivePath(mainPath, naivePath)} が見つかりません。「愚直解の雛形を作る」で作れます。`,
@@ -401,7 +419,7 @@ class VerifyController {
       };
     }
     await this.saveOpenDocument(mainPath);
-    if (needNaive) {
+    if (naiveExists) {
       await this.saveOpenDocument(naivePath);
     }
     const settings = await this.getRunSettings();
@@ -422,7 +440,7 @@ class VerifyController {
       ok: true,
       mainPath,
       runMain: (input) => run(mainPath, input, settings.timeoutMs),
-      runNaive: (input) => run(naivePath, input, naiveTimeoutMs)
+      runNaive: naiveExists ? (input) => run(naivePath, input, naiveTimeoutMs) : null
     };
   }
 
@@ -471,11 +489,12 @@ class VerifyController {
     this.cancelRequested = false;
     try {
       await this.flushSave();
-      const prepared = await this.prepareRun({ needNaive: true });
+      const prepared = await this.prepareRun({ naive: 'optional' });
       if (!prepared.ok) {
         stop(prepared.message, { showCreateNaive: prepared.showCreateNaive });
         return;
       }
+      const compareLabel = prepared.runNaive ? '愚直解と比較' : 'エラーと時間切れを確認（愚直解なし）';
       let lastProgressAt = 0;
       const result = await runStressTest({
         format,
@@ -495,7 +514,7 @@ class VerifyController {
             type: 'verifyProgress',
             iteration,
             total,
-            text: `${iteration + 1} / ${total} 回目（${planMode === 'max' ? '最大サイズで時間を確認' : '愚直解と比較'}）`
+            text: `${iteration + 1} / ${total} 回目（${planMode === 'max' ? '最大サイズで時間を確認' : compareLabel}）`
           });
         }
       });
@@ -536,15 +555,18 @@ class VerifyController {
       errorText
     });
 
-    const canSave = COUNTEREXAMPLE_STATUSES.has(result.status) && result.mode === 'compare'
-      && input && result.naiveResult && !isFailedRun(result.naiveResult);
+    // Small-input failures are kept. Without a usable naive output the expected output stays
+    // null until 「期待する出力を作り直す」 fills it in.
+    const hasExpected = Boolean(result.naiveResult) && !isFailedRun(result.naiveResult);
+    const canSave = COUNTEREXAMPLE_STATUSES.has(result.status) && result.mode === 'compare' && input
+      && (hasExpected || result.status !== 'mismatch');
     if (!canSave || this.target !== mainPath) {
       return;
     }
     this.data = addCounterexample(this.data, {
       kind: result.status,
       input,
-      expected: result.naiveResult.stdout,
+      expected: hasExpected ? result.naiveResult.stdout : null,
       seed: result.caseSeed,
       createdAt: this.now().toISOString()
     });
@@ -559,7 +581,7 @@ class VerifyController {
     const mode = COMPARE_MODES.includes(compareMode) ? compareMode : this.data.compareMode;
     this.setBusy(true);
     try {
-      const prepared = await this.prepareRun({ needNaive: false });
+      const prepared = await this.prepareRun({ naive: 'none' });
       if (!prepared.ok) {
         this.postMessage({ type: 'verifyNotice', message: prepared.message });
         return;
@@ -581,21 +603,24 @@ class VerifyController {
         results.push({
           id: counterexample.id,
           status,
-          message: messages[status],
+          // Without an expected output, "ok" only means the run finished without errors.
+          message: status === 'ok' && !comparison ? '✔ エラーなし（期待する出力はまだありません）' : messages[status],
           output: clip(run.stdout, MAX_OUTPUT_SENT_TO_VIEW),
           comparison,
           errorText: status === 'error' || status === 'timeout' ? runErrorText(run) : ''
         });
       }
       const failed = results.filter((result) => result.status !== 'ok').length;
-      this.postMessage({
-        type: 'verifyRecheckResult',
-        results,
-        allPassed: failed === 0,
-        message: results.length === 0
-          ? '保存した反例はありません。'
-          : failed === 0 ? `${results.length} 件すべての反例で一致しました。` : `${results.length} 件中 ${failed} 件が一致しませんでした。`
-      });
+      const withoutExpected = results.filter((result) => result.status === 'ok' && !result.comparison).length;
+      let message = `${results.length} 件中 ${failed} 件で問題が見つかりました。`;
+      if (results.length === 0) {
+        message = '保存した反例はありません。';
+      } else if (failed === 0) {
+        message = withoutExpected === 0
+          ? `${results.length} 件すべての反例で一致しました。`
+          : `${results.length} 件すべての反例で問題ありませんでした（期待する出力がない ${withoutExpected} 件は、エラーなく動くことだけを確かめました）。`;
+      }
+      this.postMessage({ type: 'verifyRecheckResult', results, allPassed: failed === 0, message });
     } catch (error) {
       this.postMessage({ type: 'verifyNotice', message: '反例を確かめられませんでした: ' + error.message });
     } finally {
@@ -609,22 +634,27 @@ class VerifyController {
     }
     this.setBusy(true);
     try {
-      const prepared = await this.prepareRun({ needNaive: true });
+      const prepared = await this.prepareRun({ naive: 'required' });
       if (!prepared.ok) {
         this.postMessage({ type: 'verifyNotice', message: prepared.message });
         return;
       }
       let failed = 0;
-      const counterexamples = [];
-      for (const counterexample of this.data.counterexamples) {
+      const expectedById = new Map();
+      for (const counterexample of [...this.data.counterexamples]) {
         const run = await prepared.runNaive(counterexample.input);
         if (isFailedRun(run)) {
           failed += 1;
-          counterexamples.push(counterexample);
         } else {
-          counterexamples.push({ ...counterexample, expected: run.stdout });
+          expectedById.set(counterexample.id, run.stdout);
         }
       }
+      // Merge into the current list: counterexamples deleted meanwhile must stay deleted.
+      const counterexamples = this.data.counterexamples.map((counterexample) => (
+        expectedById.has(counterexample.id)
+          ? { ...counterexample, expected: expectedById.get(counterexample.id) }
+          : counterexample
+      ));
       this.data = { ...this.data, counterexamples };
       await this.save({ force: true });
       this.postMessage({

@@ -578,14 +578,99 @@ test('runStressTest survives throwing callbacks', async () => {
   assert.equal(result.status, 'passed');
 });
 
-test('runStressTest returns ok false for missing runners', async () => {
+test('runStressTest returns ok false when runMain is missing', async () => {
   const harness = makeHarness();
-  for (const options of [undefined, null, {}, { runMain: harness.runMain }, { runNaive: harness.runNaive }]) {
+  const cases = [undefined, null, {}, { runNaive: harness.runNaive }, { runMain: 'main.py', runNaive: harness.runNaive }];
+  for (const options of cases) {
     const result = await runStressTest(options);
     assert.equal(result.ok, false);
+    assert.equal('status' in result, false);
     assert.equal(typeof result.message, 'string');
     assert.ok(result.message.length > 0);
   }
+  assert.equal(harness.calls.naive.length, 0);
+});
+
+test('runStressTest without runNaive runs only main and never compares', async () => {
+  for (const runNaive of [undefined, null]) {
+    const harness = makeHarness({ mainFor: (input) => okRun(`${iterationOf(input)}\n`) });
+    let compareCalls = 0;
+    let checks = 0;
+    const result = await runWithHarness(harness, {
+      runNaive,
+      compare() {
+        compareCalls += 1;
+        return { equal: false, expectedDiffLines: [0], actualDiffLines: [0] };
+      },
+      isCancelled: () => {
+        checks += 1;
+        return false;
+      }
+    });
+    const where = String(runNaive);
+    assert.equal(result.status, 'passed', where);
+    assert.equal(result.iterationsRun, 20, where);
+    assert.equal(result.naiveResult, null, where);
+    assert.equal(result.comparison, null, where);
+    assert.match(result.message, /20 回/, where);
+    assert.match(result.message, /エラー/, where);
+    assert.match(result.message, /時間切れ/, where);
+    assert.match(result.message, /愚直解がない/, where);
+    assert.notEqual(result.message, '20 回すべて通りました。', where);
+    assert.equal(harness.calls.main.length, 20, where);
+    assert.equal(harness.calls.naive.length, 0, where);
+    assert.equal(compareCalls, 0, where);
+    assert.equal(checks, 20 + 20, where);
+  }
+});
+
+test('runStressTest without runNaive still uses the plan for every iteration', async () => {
+  const harness = makeHarness();
+  const progress = [];
+  await runWithHarness(harness, { runNaive: null, onProgress: (update) => progress.push(update.mode) });
+  assert.equal(progress.length, 20);
+  assert.deepEqual(harness.calls.main.map(modeOf), progress);
+  assert.deepEqual(harness.calls.main.filter((input) => modeOf(input) === 'max').map(iterationOf), [9, 19]);
+});
+
+test('runStressTest without runNaive stops on main errors and timeouts at compare iterations', async () => {
+  const cases = [
+    [{ exitCode: 1 }, 'mainError', /本番の解がエラー/],
+    [{ errorMessage: '起動できません', exitCode: null }, 'mainError', /本番の解がエラー/],
+    [{ outputLimitExceeded: true }, 'mainError', /出力が多すぎて/],
+    [{ timedOut: true, exitCode: null }, 'mainTimeout', /本番の解が時間切れ/]
+  ];
+  for (const [failure, status, message] of cases) {
+    const harness = makeHarness({
+      mainFor: (input) => (iterationOf(input) === 2 ? { ...okRun(''), ...failure } : okRun())
+    });
+    const result = await runWithHarness(harness, { runNaive: undefined });
+    const where = JSON.stringify(failure);
+    assert.equal(result.status, status, where);
+    assert.equal(result.iteration, 2, where);
+    assert.equal(result.iterationsRun, 3, where);
+    assert.equal(result.mode, 'compare', where);
+    assert.equal(result.caseSeed, deriveCaseSeed(42, 2), where);
+    assert.equal(result.input, `2 compare ${deriveCaseSeed(42, 2)}\n`, where);
+    assert.equal(result.naiveResult, null, where);
+    assert.equal(result.comparison, null, where);
+    assert.match(result.message, /^3 回目で/, where);
+    assert.match(result.message, message, where);
+    assert.equal(harness.calls.main.length, 3, where);
+    assert.equal(harness.calls.naive.length, 0, where);
+  }
+});
+
+test('runStressTest without runNaive reports max-size failures too', async () => {
+  const harness = makeHarness({
+    mainFor: (input) => (modeOf(input) === 'max' ? { ...okRun(''), timedOut: true, exitCode: null } : okRun())
+  });
+  const result = await runWithHarness(harness, { runNaive: null });
+  assert.equal(result.status, 'mainTimeout');
+  assert.equal(result.iteration, 9);
+  assert.equal(result.mode, 'max');
+  assert.match(result.message, /最大サイズ/);
+  assert.equal(harness.calls.naive.length, 0);
 });
 
 test('every stress result has the documented fields', async () => {

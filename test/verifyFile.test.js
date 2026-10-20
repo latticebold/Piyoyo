@@ -383,11 +383,11 @@ test('parseVerifyFile fills optional counterexample fields', () => {
   assert.deepEqual(result.warnings, []);
   const [first, second, third, fourth, fifth] = result.data.counterexamples;
   assert.match(first.id, /^ce-\d+-\d+$/);
-  assert.equal(first.expected, '');
+  assert.equal(first.expected, null);
   assert.equal(first.seed, null);
   assert.equal(first.createdAt, '');
   assert.match(second.id, /^ce-\d+-\d+$/);
-  assert.equal(second.expected, '');
+  assert.equal(second.expected, null);
   assert.equal(second.seed, null);
   assert.equal(second.createdAt, '');
   assert.equal(third.seed, null);
@@ -455,9 +455,74 @@ test('addCounterexample generates missing ids and createdAt', () => {
   const [entry] = next.counterexamples;
   assert.match(entry.id, /^ce-\d+-\d+$/);
   assert.equal(entry.kind, 'mainTimeout');
-  assert.equal(entry.expected, '');
+  assert.equal(entry.expected, null);
   assert.equal(entry.seed, 7);
   assert.ok(!Number.isNaN(Date.parse(entry.createdAt)));
+});
+
+test('parseVerifyFile reads a missing or non-string expected output as null', () => {
+  const result = parseObject({
+    ...makeData(),
+    counterexamples: [
+      { kind: 'mainError', input: '1\n' },
+      { kind: 'mainTimeout', input: '2\n', expected: null },
+      { kind: 'mismatch', input: '3\n', expected: 10 },
+      { kind: 'mismatch', input: '4\n', expected: ['10\n'] },
+      { kind: 'mismatch', input: '5\n', expected: '' },
+      { kind: 'mismatch', input: '6\n', expected: '10\n' }
+    ]
+  });
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.warnings, []);
+  assert.deepEqual(result.data.counterexamples.map((item) => item.expected), [null, null, null, null, '', '10\n']);
+});
+
+test('a null expected output round trips through serialize and parse', () => {
+  const data = makeData({
+    counterexamples: [
+      makeCounterexample({ id: 'ce-1', kind: 'mainError', input: '1\n', expected: null }),
+      makeCounterexample({ id: 'ce-2', kind: 'mismatch', input: '2\n', expected: '' })
+    ]
+  });
+  const text = serializeVerifyFile(data);
+  const raw = JSON.parse(text);
+  assert.equal(raw.counterexamples[0].expected, null);
+  assert.ok('expected' in raw.counterexamples[0]);
+  assert.match(text, /"expected": null/);
+  assert.equal(raw.counterexamples[1].expected, '');
+
+  const result = parseVerifyFile(text);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.warnings, []);
+  assert.deepEqual(result.data, data);
+  assert.equal(result.data.counterexamples[0].expected, null);
+  assert.equal(result.data.counterexamples[1].expected, '');
+  assert.equal(serializeVerifyFile(result.data), text);
+});
+
+test('a missing expected output is written back as null', () => {
+  const text = JSON.stringify({ ...makeData(), counterexamples: [{ id: 'ce-1', kind: 'mainTimeout', input: '1\n' }] });
+  const parsed = parseVerifyFile(text);
+  const again = JSON.parse(serializeVerifyFile(parsed.data));
+  assert.equal(again.counterexamples[0].expected, null);
+  assert.deepEqual(Object.keys(again.counterexamples[0]), ['id', 'kind', 'input', 'expected', 'seed', 'createdAt']);
+});
+
+test('addCounterexample keeps a null expected output', () => {
+  const data = deepFreeze(createEmptyVerifyData());
+  const cases = [
+    [{ kind: 'mainError', input: '1\n', expected: null }, null],
+    [{ kind: 'mainTimeout', input: '2\n' }, null],
+    [{ kind: 'mainError', input: '3\n', expected: 42 }, null],
+    [{ kind: 'mismatch', input: '4\n', expected: '' }, ''],
+    [{ kind: 'mismatch', input: '5\n', expected: '7\n' }, '7\n']
+  ];
+  for (const [counterexample, expected] of cases) {
+    const next = addCounterexample(data, deepFreeze(counterexample));
+    assert.equal(next.counterexamples.length, 1, counterexample.input);
+    assert.equal(next.counterexamples[0].expected, expected, counterexample.input);
+    assert.equal(next.counterexamples[0].kind, counterexample.kind, counterexample.input);
+  }
 });
 
 test('addCounterexample keeps ids unique when many are added at once', () => {

@@ -212,9 +212,11 @@ async function runStressTest(options) {
     onProgress = () => {}
   } = isPlainObject(options) ? options : {};
 
-  if (typeof runMain !== 'function' || typeof runNaive !== 'function') {
-    return { ok: false, message: '本番の解と愚直解を動かす方法が渡されていません。' };
+  if (typeof runMain !== 'function') {
+    return { ok: false, message: '本番の解を動かす方法が渡されていません。' };
   }
+  // Without a naive solution only runtime errors and timeouts of the main solution are checked.
+  const hasNaive = typeof runNaive === 'function';
 
   const total = normalizeIterations(iterations);
   const baseSeed = seed === undefined || seed === null
@@ -304,7 +306,7 @@ async function runStressTest(options) {
     const mainFailure = classifyRun(mainResult);
     const mainStatus = mainFailure === 'timeout' ? 'mainTimeout' : 'mainError';
 
-    if (plan.mode === 'max') {
+    if (plan.mode === 'max' || !hasNaive) {
       if (mainFailure) {
         return buildResult(mainStatus, {
           ...caseFields,
@@ -370,7 +372,9 @@ async function runStressTest(options) {
   return buildResult('passed', {
     iterationsRun: total,
     seed: baseSeed,
-    message: `${total} 回すべて通りました。`
+    message: hasNaive
+      ? `${total} 回すべて通りました。`
+      : `${total} 回とも、実行時エラーも時間切れもありませんでした（愚直解がないので、出力が正しいかは比べていません）。`
   });
 }
 
