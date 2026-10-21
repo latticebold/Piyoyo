@@ -1036,6 +1036,130 @@ test('the warning for a list that never stops growing points at its loop', () =>
   assert.deepEqual(result.warnings.map((warning) => warning.line), [3]);
 });
 
+function callEntries(result) {
+  return new Map(result.lines.filter((entry) => entry.kind === 'call').map((entry) => [entry.line, entry]));
+}
+
+test('correct answer: costly single operations get a call entry on their own line', () => {
+  const result = analyze([
+    'N,M=map(int,input().split())',
+    'S=[input() for i in range(N)]',
+    'T=[input() for j in range(M)]',
+    'ans_lst=[0]*N',
+    'for j in range(M):',
+    '    if T[j] in S:',
+    '        ans_lst[S.index(T[j])]+=1',
+    '    else:',
+    '        I=[]',
+    '        for i in range(N):',
+    '            if len(S[i])==len(T[j]) and sum(s!=t for s,t in zip(S[i],T[j]))==1:',
+    '                I.append(i)',
+    '        if len(I)==1:',
+    '            ans_lst[I[0]]+=1',
+    '',
+    'print(*ans_lst,sep="\\n")'
+  ]);
+  assert.equal(result.ok, true);
+  const calls = callEntries(result);
+  assert.equal(calls.get(6).label, 'O(N)');
+  assert.match(calls.get(6).note, /in/);
+  assert.equal(calls.get(7).label, 'O(N)');
+  assert.match(calls.get(7).note, /\.index\(\)/);
+  for (const line of [4, 8, 9, 12, 13, 14]) {
+    assert.equal(calls.has(line), false, `line ${line}`);
+  }
+  assert.deepEqual(
+    result.lines.filter((entry) => entry.kind === 'loop').map((entry) => entry.line),
+    [5, 10, 11]
+  );
+  assert.equal(calls.get(16).label, 'O(N)');
+  assert.equal(formatComplexity(result.time), 'O(N²·M)');
+  assert.equal(result.confidence, 'medium');
+});
+
+test('call entries name each costly operation and skip constant ones', () => {
+  const result = analyze([
+    'import heapq',
+    'from bisect import bisect_left',
+    'n = int(input())',
+    'a = [int(input()) for _ in range(n)]',
+    's = input()',
+    'd = {}',
+    'st = set(a)',
+    'h = []',
+    'for i in range(n):',
+    '    b = a[i:]',
+    '    c = sorted(a)',
+    '    heapq.heappush(h, i)',
+    '    k = bisect_left(a, i)',
+    '    if i in d or i in st or i in range(n):',
+    '        pass',
+    '    if "x" in s:',
+    '        pass',
+    '    a.count(i)',
+    '    a.remove(i)',
+    '    a.insert(0, i)',
+    '    a.pop(0)',
+    '    a.copy()',
+    '    a.reverse()',
+    '    t = list(a)',
+    '    u = set(a)',
+    '    w = "".join(s)',
+    '    m = max(a)',
+    '    total = sum(x for x in a)',
+    '    a.append(i)',
+    '    if i not in a and len(a) > 0:',
+    '        h.append(d.get(i, 0))'
+  ]);
+  assert.equal(result.ok, true);
+  const calls = callEntries(result);
+  const expected = {
+    10: ['O(N)', 'スライス'],
+    11: ['O(N log N)', 'sorted'],
+    12: ['O(log N)', 'heappush'],
+    13: ['O(log N)', 'bisect_left'],
+    16: ['O(|s|)', 'in（文字列）'],
+    18: ['O(N)', '.count()'],
+    19: ['O(N)', '.remove()'],
+    20: ['O(N)', '.insert()'],
+    21: ['O(N)', '.pop(0)'],
+    22: ['O(N)', '.copy()'],
+    23: ['O(N)', '.reverse()'],
+    24: ['O(N)', 'list'],
+    25: ['O(N)', 'set'],
+    26: ['O(|s|)', '.join()'],
+    27: ['O(N)', 'max'],
+    30: ['O(N)', 'not in（リスト）']
+  };
+  for (const [line, [label, note]] of Object.entries(expected)) {
+    const entry = calls.get(Number(line));
+    assert.ok(entry, `line ${line}`);
+    assert.deepEqual([entry.label, entry.note], [label, note], `line ${line}`);
+  }
+  for (const line of [9, 14, 28, 29, 31]) {
+    assert.equal(calls.has(line), false, `line ${line}`);
+  }
+  assert.deepEqual(result.lines.find((entry) => entry.line === 28), {
+    line: 28, kind: 'loop', label: '× N', complexity: n, note: '内包表記'
+  });
+});
+
+test('several costly operations on one line are summed into one call entry', () => {
+  const result = analyze([
+    'n = int(input())',
+    'a = [int(input()) for _ in range(n)]',
+    'for i in range(n):',
+    '    x = sorted(a[i:]) if i in a else []'
+  ]);
+  assert.equal(result.ok, true);
+  const entries = result.lines.filter((entry) => entry.line === 4);
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].kind, 'call');
+  assert.equal(entries[0].label, 'O(N log N)');
+  assert.equal(entries[0].note, 'in（リスト）、スライス、sorted');
+  assert.equal(formatComplexity(result.time), 'O(N² log N)');
+});
+
 test('lines marks recursion and amortized loops', () => {
   const result = analyze([
     'from functools import lru_cache',

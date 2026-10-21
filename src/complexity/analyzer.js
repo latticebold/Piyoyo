@@ -1739,9 +1739,16 @@ function exprCost(ctx, node) {
 
 function compareCost(ctx, node) {
   let cost = sumCosts(ctx, [node.left, ...node.comparators]);
+  const line = lineOf(node);
   node.ops.forEach((op, index) => {
     if (op._type === 'In' || op._type === 'NotIn') {
-      cost = C.add(cost, membershipCost(ctx, node.comparators[index], lineOf(node)));
+      const container = node.comparators[index];
+      const lookupCost = membershipCost(ctx, container, line);
+      cost = C.add(cost, lookupCost);
+      if (!C.isConstant(lookupCost)) {
+        const word = op._type === 'NotIn' ? 'not in' : 'in';
+        addLine(ctx, line, 'call', lookupCost, `${word}（${kindOf(ctx, container) === 'str' ? '文字列' : 'リスト'}）`);
+      }
     }
   });
   return cost;
@@ -1783,9 +1790,36 @@ function membershipCost(ctx, container, line) {
 function subscriptCost(ctx, node) {
   let cost = C.add(exprCost(ctx, node.value), exprCost(ctx, node.slice));
   if (node.slice._type === 'Slice') {
-    cost = C.add(cost, sizeOrAssume(ctx, node.value, lineOf(node)));
+    const copyCost = sizeOrAssume(ctx, node.value, lineOf(node));
+    cost = C.add(cost, copyCost);
+    if (!C.isConstant(copyCost)) {
+      addLine(ctx, lineOf(node), 'call', copyCost, 'スライス');
+    }
   }
   return cost;
+}
+
+// Work done while locating an assignment target, e.g. the S.index(x) in ans[S.index(x)] += 1.
+function targetCost(ctx, target) {
+  if (!isNode(target)) {
+    return C.constant();
+  }
+  switch (target._type) {
+    case 'Subscript':
+      return C.add(
+        exprCost(ctx, target.value),
+        target.slice._type === 'Slice' ? sumCosts(ctx, childNodes(target.slice)) : exprCost(ctx, target.slice)
+      );
+    case 'Attribute':
+      return exprCost(ctx, target.value);
+    case 'Tuple':
+    case 'List':
+      return target.elts.reduce((total, element) => C.add(total, targetCost(ctx, element)), C.constant());
+    case 'Starred':
+      return targetCost(ctx, target.value);
+    default:
+      return C.constant();
+  }
 }
 
 function binOpCost(ctx, node) {
@@ -1880,7 +1914,8 @@ function callOwnCost(ctx, node) {
     note = target.name;
   } else if (target.kind === 'method') {
     own = methodCost(ctx, target.name, target.obj, node);
-    note = `.${target.name}()`;
+    const popIndex = target.name === 'pop' && node.args.length ? constNumber(node.args[0]) : null;
+    note = target.name === 'pop' && node.args.length ? `.pop(${popIndex === null ? 'i' : popIndex})` : `.${target.name}()`;
   }
   if (!C.isConstant(own)) {
     addLine(ctx, lineOf(node), 'call', own, note);
@@ -2065,15 +2100,16 @@ function exprStmtCost(ctx, node) {
 }
 
 function assignCost(ctx, node, targets) {
+  const locate = targets.reduce((total, target) => C.add(total, targetCost(ctx, target)), C.constant());
   const read = classifyInputRead(ctx, node.value, targets[0]);
   if (read) {
-    return applyInputRead(ctx, node, targets, read);
+    return C.add(locate, applyInputRead(ctx, node, targets, read));
   }
   const cost = exprCost(ctx, node.value);
   for (const target of targets) {
     bindAssign(ctx, target, node.value);
   }
-  return cost;
+  return C.add(locate, cost);
 }
 
 function applyInputRead(ctx, node, targets, read) {
@@ -2161,7 +2197,7 @@ function bindAssign(ctx, target, valueNode) {
 }
 
 function augAssignCost(ctx, node) {
-  const cost = exprCost(ctx, node.value);
+  const cost = C.add(exprCost(ctx, node.value), targetCost(ctx, node.target));
   const target = node.target;
   const op = node.op._type;
   if (isName(target)) {

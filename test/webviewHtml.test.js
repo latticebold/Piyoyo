@@ -1004,10 +1004,27 @@ test('webview restores the last open tab on request and returns to the editor wi
 
 const { initVerifyWorkspace } = require('../src/verify/verifyWebview');
 
+// The element with the id, up to its matching closing tag (same-name tags may nest).
+function elementHtml(html, id) {
+  const open = html.match(new RegExp(`<([a-z][a-z0-9]*)\\b[^>]*\\sid="${id}"[^>]*>`));
+  assert.ok(open, id);
+  const pattern = new RegExp(`<(/?)${open[1]}\\b[^>]*>`, 'g');
+  pattern.lastIndex = open.index;
+  let depth = 0;
+  let match;
+  while ((match = pattern.exec(html))) {
+    depth += match[1] ? -1 : 1;
+    if (depth === 0) {
+      return html.slice(open.index, match.index + match[0].length);
+    }
+  }
+  return assert.fail(`${id} is not closed`);
+}
+
 function verifyPanelHtml(html) {
-  const start = html.indexOf('<section id="verifyWorkspace"');
-  assert.ok(start > -1);
-  return html.slice(start, html.indexOf('</section>', start));
+  assert.ok(html.includes('<section id="verifyWorkspace"'));
+  // The panel contains the nested 計算量 <section>, so cut at its own closing tag.
+  return elementHtml(html, 'verifyWorkspace');
 }
 
 function openingTag(html, id) {
@@ -1043,12 +1060,17 @@ test('verify workspace controls exist with accessible names', () => {
     ['tokens', 'exact', 'float']
   );
 
-  const sections = panel.match(/<details\b[^>]*class="verifySection(?: [^"]*)?"[^>]*>/g) || [];
+  const sections = panel.match(/<(?:details|section)\b[^>]*class="verifySection(?: [^"]*)?"[^>]*>/g) || [];
+  const idOf = (tag) => tag.match(/id="([^"]+)"/)[1];
   assert.deepEqual(
-    sections.map((tag) => tag.match(/id="([^"]+)"/)[1]),
+    sections.map(idOf),
     ['verifyFormatSection', 'complexitySection', 'verifyStressSection', 'verifyCounterSection']
   );
-  sections.forEach((tag) => assert.match(tag, / open>$/, tag));
+  // 計算量 is a plain section; the other three stay open collapsible sections.
+  assert.match(sections[1], /^<section\b/);
+  const collapsible = sections.filter((tag) => tag.startsWith('<details'));
+  assert.deepEqual(collapsible.map(idOf), ['verifyFormatSection', 'verifyStressSection', 'verifyCounterSection']);
+  collapsible.forEach((tag) => assert.match(tag, / open>$/, tag));
 });
 
 test('verify workspace is initialised in the webview and can send an input to the run tab', () => {
@@ -1085,24 +1107,214 @@ const {
 } = require('../src/complexity/complexityWebview');
 
 test('verify workspace has the 計算量 section between 入力形式 and ストレステスト', () => {
-  const panel = verifyPanelHtml(getWebviewHtml());
+  const html = getWebviewHtml();
+  const panel = verifyPanelHtml(html);
   const formatIndex = panel.indexOf('id="verifyFormatSection"');
   const complexityIndex = panel.indexOf('id="complexitySection"');
   const stressIndex = panel.indexOf('id="verifyStressSection"');
+  const counterIndex = panel.indexOf('id="verifyCounterSection"');
   assert.ok(formatIndex > -1);
   assert.ok(complexityIndex > formatIndex);
   assert.ok(stressIndex > complexityIndex);
+  assert.ok(counterIndex > stressIndex);
   assert.equal((panel.match(/id="complexitySection"/g) || []).length, 1);
 
-  assert.match(openingTag(panel, 'complexitySection'), /^<details\b[^>]*class="verifySection complexitySection"[^>]* open>$/);
-  assert.match(panel, /<details id="complexitySection"[^>]*>\s*<summary>計算量<span id="complexitySummary" class="summaryValue"><\/span><\/summary>/);
-  for (const [id, label] of [['complexityAnalyze', '解析'], ['complexityMeasure', '実測'], ['complexityCancel', '中止']]) {
-    assert.match(panel, new RegExp(`<button\\b[^>]*\\bid="${id}"[^>]*type="button"[^>]*>${label}</button>`), id);
+  // A plain titled section, not a collapsible <details>.
+  const section = elementHtml(panel, 'complexitySection');
+  assert.match(section, /^<section id="complexitySection" class="verifySection complexitySection" aria-labelledby="complexityHeading">\s*<h2 id="complexityHeading" class="complexitySectionTitle">計算量<\/h2>/);
+  assert.doesNotMatch(panel, /<details\b[^>]*\sid="complexitySection"/);
+  assert.ok(stressIndex > complexityIndex + section.length - 1, 'ストレステスト starts after the 計算量 section ends');
+  for (const removed of ['complexitySummary', 'complexityMeasureHint', 'complexityConfidence']) {
+    assert.doesNotMatch(html, new RegExp(`\\sid="${removed}"`), removed);
   }
-  assert.match(openingTag(panel, 'complexityCancel'), /\shidden>$/);
-  assert.doesNotMatch(openingTag(panel, 'complexityAnalyze'), /\shidden\b/);
-  assert.doesNotMatch(openingTag(panel, 'complexityMeasure'), /\shidden\b/);
+
+  for (const [id, label] of [['complexityAnalyze', '解析'], ['complexityMeasure', '実測'], ['complexityCancel', '中止']]) {
+    assert.match(section, new RegExp(`<button\\b[^>]*\\bid="${id}"[^>]*type="button"[^>]*>${label}</button>`), id);
+  }
+  assert.match(openingTag(section, 'complexityCancel'), /\shidden>$/);
+  for (const id of ['complexityAnalyze', 'complexityMeasure']) {
+    assert.doesNotMatch(openingTag(section, id), /\s(?:hidden|disabled)\b/, id);
+  }
+
+  // 時間 / 空間 shown big.
+  const bigItems = Array.from(
+    section.matchAll(/<div class="complexityBigItem">\s*<span class="complexityBigLabel">([^<]+)<\/span>\s*<span id="([^"]+)" class="complexityBigValue"><\/span>\s*<\/div>/g),
+    (match) => [match[1], match[2]]
+  );
+  assert.deepEqual(bigItems, [['時間', 'complexityTime'], ['空間', 'complexitySpace']]);
+  assert.match(section, /<div class="complexityBig">\s*<div class="complexityBigItem">/);
+
+  const result = elementHtml(section, 'complexityResult');
+  assert.match(openingTag(section, 'complexityResult'), /\shidden>$/);
+  for (const id of ['complexityTime', 'complexitySpace', 'complexityVerdict', 'complexityBreakdown', 'complexityWarnings', 'complexityAssumptions']) {
+    assert.match(result, new RegExp(`\\sid="${id}"`), id);
+  }
+  assert.doesNotMatch(result, /\sid="complexityMeasureDetails"/, 'the measurement lives outside the result');
+  assert.ok(section.indexOf('id="complexityMeasureDetails"') > section.indexOf('id="complexityResult"') + result.length - 1);
+
+  // Closed or hidden until there is something to show.
+  assert.doesNotMatch(openingTag(section, 'complexityBreakdown'), /\s(?:open|hidden)\b/);
+  assert.doesNotMatch(openingTag(section, 'complexityAssumptions'), /\s(?:open|hidden)\b/);
+  assert.match(openingTag(section, 'complexityWarnings'), /^<details\b[^>]*\shidden>$/);
+  assert.match(openingTag(section, 'complexityMeasureDetails'), /^<details\b[^>]*\shidden>$/);
+
+  const assumptions = elementHtml(section, 'complexityAssumptions');
+  assert.match(assumptions, /<summary>計算の前提（変数の上限・速さ）<\/summary>/);
+  assert.match(assumptions, /\sid="complexityBindings"/);
+  assert.match(assumptions, /\sid="complexitySpeed"/);
+
   assert.doesNotMatch(COMPLEXITY_MARKUP, /\sstyle\s*=/i);
+  assert.doesNotMatch(section, /\sstyle\s*=/i);
+});
+
+// A minimal DOM for running initComplexitySection outside a browser.
+function runComplexityScript() {
+  class FakeElement {
+    constructor(tag, { hidden = false, open = false } = {}) {
+      this.tagName = tag;
+      this.hidden = hidden;
+      this.open = open;
+      this.disabled = false;
+      this.title = '';
+      this.value = '';
+      this.className = '';
+      this.textContent = '';
+      this.children = [];
+      this.attributes = {};
+      this.listeners = {};
+    }
+
+    setAttribute(name, value) {
+      this.attributes[name] = value;
+    }
+
+    append(...nodes) {
+      this.children.push(...nodes);
+    }
+
+    replaceChildren(...nodes) {
+      this.children = nodes;
+    }
+
+    addEventListener(type, listener) {
+      (this.listeners[type] = this.listeners[type] || []).push(listener);
+    }
+
+    focus() {}
+
+    click() {
+      (this.listeners.click || []).forEach((listener) => listener());
+    }
+  }
+
+  const elements = new Map();
+  for (const match of COMPLEXITY_MARKUP.matchAll(/<([a-z0-9]+)\b([^>]*)\sid="([^"]+)"([^>]*)>/g)) {
+    const attributes = `${match[2]} ${match[4]}`;
+    elements.set(match[3], new FakeElement(match[1], {
+      hidden: /\shidden\b/.test(attributes),
+      open: /\sopen\b/.test(attributes)
+    }));
+  }
+  const posted = [];
+  let onMessage = null;
+  const fakeDocument = {
+    getElementById: (id) => elements.get(id) || null,
+    createElement: (tag) => new FakeElement(tag),
+    createTextNode: (text) => ({ textContent: text })
+  };
+  const fakeWindow = {
+    addEventListener(type, listener) {
+      if (type === 'message') {
+        onMessage = listener;
+      }
+    }
+  };
+  const vscode = { postMessage: (message) => posted.push(message) };
+  new Function('document', 'window', 'vscode', `${initComplexitySection.toString()}\ninitComplexitySection({ vscode });`)(
+    fakeDocument,
+    fakeWindow,
+    vscode
+  );
+  assert.equal(typeof onMessage, 'function');
+  return { el: (id) => elements.get(id), posted, send: (data) => onMessage({ data }) };
+}
+
+function complexityResultMessage(overrides = {}) {
+  return {
+    type: 'complexityResult',
+    ok: true,
+    fileName: 'a.py',
+    time: 'O(N²)',
+    space: 'O(N)',
+    confidence: 'high',
+    confidenceLabel: '高',
+    verdict: { text: 'N = 2×10^5 → 4×10^10 回', label: 'TLE の恐れ', verdict: 'tle' },
+    verdictNote: '',
+    speedText: '1 秒あたり 3×10^7 回として計算（PyPy・目安の値）、制限時間 2 秒',
+    bindings: [{ symbol: 'n', display: 'N', source: 'name', formatVar: 'N', value: 200000, valueText: '2×10^5' }],
+    unbound: [],
+    formatVars: ['N'],
+    lines: [{ line: 2, kind: 'loop', label: '× N', note: '' }],
+    warnings: [],
+    ...overrides
+  };
+}
+
+test('the 計算量 script shows time and space big and opens details only when needed', () => {
+  const page = runComplexityScript();
+  const measure = page.el('complexityMeasure');
+  assert.equal(measure.disabled, false);
+  assert.equal(page.el('complexityCancel').hidden, true);
+
+  // Missing format: the button stays usable and explains why in its title.
+  page.send({ type: 'complexityState', canMeasure: false, measureReason: '入力形式がないため実測できません。' });
+  assert.equal(measure.disabled, false);
+  assert.equal(measure.title, '入力形式がないため実測できません。');
+
+  page.send(complexityResultMessage());
+  assert.equal(page.el('complexityResult').hidden, false);
+  assert.equal(page.el('complexityTime').textContent, 'O(N²)');
+  assert.equal(page.el('complexitySpace').textContent, 'O(N)');
+  assert.deepEqual(
+    page.el('complexityVerdict').children.map((child) => child.textContent),
+    ['TLE の恐れ', 'N = 2×10^5 → 4×10^10 回', '推定: 高']
+  );
+  assert.equal(page.el('complexityStatus').textContent, '', 'no status text after a successful analysis');
+  assert.equal(page.el('complexityWarnings').hidden, true);
+  assert.equal(page.el('complexityBreakdown').open, false);
+  assert.equal(page.el('complexityAssumptions').open, false);
+
+  const unboundNote = '上限が決まっていない変数があります（n）。「計算の前提」で上限を選んでください。';
+  page.send(complexityResultMessage({ verdict: null, verdictNote: unboundNote, bindings: [], unbound: ['n'], formatVars: [] }));
+  assert.equal(page.el('complexityAssumptions').open, true, 'opened when a limit is missing');
+  assert.deepEqual(page.el('complexityVerdict').children.map((child) => child.textContent), [unboundNote, '推定: 高']);
+
+  page.send(complexityResultMessage());
+  assert.equal(page.el('complexityAssumptions').open, true, 'never closed by the script');
+  page.el('complexityAssumptions').open = false;
+  page.send(complexityResultMessage());
+  assert.equal(page.el('complexityAssumptions').open, false, 'a closed section stays closed without a missing limit');
+
+  page.send(complexityResultMessage({ warnings: [{ line: 3, message: 'N 回とみなしました。' }] }));
+  assert.equal(page.el('complexityWarnings').hidden, false);
+  assert.equal(page.el('complexityWarningCount').textContent, '1');
+  page.send(complexityResultMessage());
+  assert.equal(page.el('complexityWarnings').hidden, true);
+
+  measure.click();
+  assert.deepEqual(page.posted.at(-1), { type: 'complexityMeasure' });
+  assert.equal(measure.disabled, true, 'disabled only while measuring');
+  assert.equal(page.el('complexityCancel').hidden, false);
+  assert.equal(page.el('complexityMeasureDetails').hidden, false);
+  page.send({ type: 'complexityMeasureResult', ok: false, message: '入力形式がないため実測できません。' });
+  assert.equal(measure.disabled, false);
+  assert.equal(page.el('complexityCancel').hidden, true);
+  assert.equal(page.el('complexityMeasureResult').textContent, '入力形式がないため実測できません。');
+
+  page.send({ type: 'complexityResult', ok: false, message: '2 行目に文法の誤りがあるため、計算量を推定できませんでした。' });
+  assert.equal(page.el('complexityResult').hidden, true);
+  assert.equal(page.el('complexityStatus').textContent, '2 行目に文法の誤りがあるため、計算量を推定できませんでした。');
+  assert.equal(page.el('complexityStatus').className, 'verifyStatus error');
 });
 
 test('complexity section styles and script are injected, and the script starts before ready', () => {

@@ -28,6 +28,8 @@ const AST_OUTPUT_LIMIT_BYTES = 64 * 1024 * 1024;
 const MEASURE_OUTPUT_LIMIT_BYTES = 16 * 1024 * 1024;
 const SAVE_ANALYSIS_DELAY_MS = 300;
 const CONFIDENCE_LABELS = { high: '高', medium: '中', low: '低' };
+// 'call' covers user functions and expensive operations such as `x in list` or `.index()`.
+const INLINE_HINT_KINDS = new Set(['loop', 'function', 'call']);
 const NO_FORMAT_REASON = '入力形式がないため実測できません。上の「入力形式」を作ると使えます。';
 
 function isPythonDocument(document) {
@@ -242,7 +244,7 @@ class ComplexityController {
       };
     } else {
       verdictNote = binding.unbound.length > 0
-        ? `上限が決まっていない変数があります（${binding.unbound.join('、')}）。入力形式を作るか、下で上限を選んでください。`
+        ? `上限が決まっていない変数があります（${binding.unbound.join('、')}）。「計算の前提」で上限を選んでください。`
         : '演算回数を計算できませんでした。';
     }
     const lines = result.lines.map((item) => ({
@@ -493,15 +495,20 @@ class ComplexityController {
         return;
       }
       const document = editor.document;
-      const options = this.lastView.lines
-        .filter((item) => item.line >= 1 && item.line <= document.lineCount && (item.kind === 'loop' || item.kind === 'function'))
-        .map((item) => {
-          const end = document.lineAt(item.line - 1).range.end;
-          return {
-            range: new this.vscodeApi.Range(end, end),
-            renderOptions: { after: { contentText: item.label } }
-          };
+      // One hint per line: a line can hold a loop and an expensive call (for x in sorted(a):).
+      const labelsByLine = new Map();
+      this.lastView.lines
+        .filter((item) => item.line >= 1 && item.line <= document.lineCount && INLINE_HINT_KINDS.has(item.kind))
+        .forEach((item) => {
+          labelsByLine.set(item.line, [...(labelsByLine.get(item.line) || []), item.label]);
         });
+      const options = [...labelsByLine].map(([line, labels]) => {
+        const end = document.lineAt(line - 1).range.end;
+        return {
+          range: new this.vscodeApi.Range(end, end),
+          renderOptions: { after: { contentText: labels.join('  ') } }
+        };
+      });
       editor.setDecorations(this.decorationType, options);
     });
   }

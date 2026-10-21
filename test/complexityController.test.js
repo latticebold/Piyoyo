@@ -80,7 +80,39 @@ function dumpAst(source) {
   }
   return astOutputs.get(source);
 }
-[DOUBLE_LOOP, SINGLE_LOOP, SYNTAX_ERROR, FUNCTION_CODE].forEach(dumpAst);
+const SORTED_LOOP_AND_RECURSION = code([
+  'def depth(k):',
+  '    if k == 0:',
+  '        return 0',
+  '    return depth(k - 1) + 1',
+  '',
+  'n = int(input())',
+  'a = list(map(int, input().split()))',
+  'for x in sorted(a):',
+  '    print(x)',
+  'print(depth(n))'
+]);
+const WORD_MATCH = code([
+  'N,M=map(int,input().split())',
+  'S=[input() for i in range(N)]',
+  'T=[input() for j in range(M)]',
+  'ans_lst=[0]*N',
+  'for j in range(M):',
+  '    if T[j] in S:',
+  '        ans_lst[S.index(T[j])]+=1',
+  '    else:',
+  '        I=[]',
+  '        for i in range(N):',
+  '            if len(S[i])==len(T[j]) and sum(s!=t for s,t in zip(S[i],T[j]))==1:',
+  '                I.append(i)',
+  '        if len(I)==1:',
+  '            ans_lst[I[0]]+=1',
+  '',
+  'print(*ans_lst,sep="\\n")'
+]);
+[DOUBLE_LOOP, SINGLE_LOOP, SYNTAX_ERROR, FUNCTION_CODE, SORTED_LOOP_AND_RECURSION, WORD_MATCH].forEach(dumpAst);
+// FUNCTION_CODE hints: the function line, two loop lines and the solve(n) call line.
+const FUNCTION_CODE_HINT_COUNT = 4;
 
 function intsRow(vars) {
   return { kind: 'ints', vars, needsReview: false, reviewReason: '' };
@@ -586,7 +618,7 @@ test('a failed analysis after a success clears the result and the editor hints f
     });
     await h.controller.analyze(MAIN);
     assert.equal(h.last('complexityResult').ok, true, failure.name);
-    assert.equal(mainEditor.lastOptions().length, 3, failure.name);
+    assert.equal(mainEditor.lastOptions().length, FUNCTION_CODE_HINT_COUNT, failure.name);
 
     failing = true;
     if (failure.source) {
@@ -629,7 +661,7 @@ test('analyzing another file drops the previous file result at once', async () =
   });
   await h.controller.analyze(MAIN);
   assert.equal(h.last('complexityResult').fileName, 'a.py');
-  assert.equal(mainEditor.lastOptions().length, 3);
+  assert.equal(mainEditor.lastOptions().length, FUNCTION_CODE_HINT_COUNT);
   const firstCount = h.ofType('complexityResult').length;
 
   h.state.target = OTHER;
@@ -1107,7 +1139,7 @@ test('complexityRevealLine opens the analyzed file and puts the cursor on the li
   assert.equal(fake.shown.length, shownCount);
 });
 
-test('refreshDecorations shows loop counts and function costs only in editors of the analyzed file', async () => {
+test('refreshDecorations shows loop counts, function costs and call costs only in editors of the analyzed file', async () => {
   const mainEditor = fakeEditor(fakeDocument(MAIN, FUNCTION_CODE));
   const otherEditor = fakeEditor(fakeDocument(OTHER, DOUBLE_LOOP));
   const fake = createFakeVscode({ visible: [mainEditor, otherEditor] });
@@ -1121,16 +1153,15 @@ test('refreshDecorations shows loop counts and function costs only in editors of
 
   const result = h.last('complexityResult');
   assert.equal(result.ok, true);
-  assert.ok(
-    result.lines.some((item) => item.kind !== 'loop' && item.kind !== 'function'),
-    'the sample needs a breakdown line that gets no hint'
-  );
+  assert.equal(result.lines.find((item) => item.line === 9).kind, 'call');
   const lines = FUNCTION_CODE.split('\n');
   const options = mainEditor.lastOptions();
+  assert.equal(options.length, FUNCTION_CODE_HINT_COUNT);
   assert.deepEqual(hintsOf(options), [
     { line: 0, character: lines[0].length, text: 'O(N²)' },
     { line: 2, character: lines[2].length, text: '× N' },
-    { line: 3, character: lines[3].length, text: '× N' }
+    { line: 3, character: lines[3].length, text: '× N' },
+    { line: 8, character: lines[8].length, text: 'O(N²)' }
   ]);
   for (const option of options) {
     assert.ok(option.range instanceof FakeRange);
@@ -1154,7 +1185,7 @@ test('refreshDecorations clears the hints when the setting is off or the code st
   const fake = createFakeVscode({ visible: [mainEditor] });
   const h = createHarness({ vscodeApi: fake.vscodeApi, files: { [MAIN]: FUNCTION_CODE } });
   await h.controller.analyze(MAIN);
-  assert.equal(mainEditor.lastOptions().length, 3);
+  assert.equal(mainEditor.lastOptions().length, FUNCTION_CODE_HINT_COUNT);
 
   fake.config.showInlineHints = false;
   h.controller.refreshDecorations();
@@ -1162,7 +1193,7 @@ test('refreshDecorations clears the hints when the setting is off or the code st
 
   fake.config.showInlineHints = true;
   h.controller.refreshDecorations();
-  assert.equal(mainEditor.lastOptions().length, 3);
+  assert.equal(mainEditor.lastOptions().length, FUNCTION_CODE_HINT_COUNT);
 
   h.files.set(MAIN, SYNTAX_ERROR);
   await h.controller.analyze(MAIN);
@@ -1170,4 +1201,55 @@ test('refreshDecorations clears the hints when the setting is off or the code st
   assert.deepEqual(mainEditor.lastOptions(), []);
   h.controller.refreshDecorations();
   assert.deepEqual(mainEditor.lastOptions(), []);
+});
+
+test('refreshDecorations joins a loop and a call on one line and skips recursion entries', async () => {
+  const mainEditor = fakeEditor(fakeDocument(MAIN, SORTED_LOOP_AND_RECURSION));
+  const fake = createFakeVscode({ visible: [mainEditor] });
+  // A binds |a| to N, so sorted(a) reads O(N log N).
+  const format = { rows: [intsRow([{ name: 'N', min: '1', max: '2×10^5' }]), intListRow('A', 'N')] };
+  const h = createHarness({ vscodeApi: fake.vscodeApi, files: { [MAIN]: SORTED_LOOP_AND_RECURSION }, format });
+  await h.controller.analyze(MAIN);
+
+  const result = h.last('complexityResult');
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.lines.map(({ line, kind, label }) => ({ line, kind, label })), [
+    { line: 1, kind: 'function', label: 'O(N)' },
+    { line: 4, kind: 'recursion', label: 'O(N)' },
+    { line: 8, kind: 'loop', label: '× N' },
+    { line: 8, kind: 'call', label: 'O(N log N)' },
+    { line: 10, kind: 'call', label: 'O(N)' }
+  ]);
+
+  const lines = SORTED_LOOP_AND_RECURSION.split('\n');
+  assert.deepEqual(hintsOf(mainEditor.lastOptions()), [
+    { line: 0, character: lines[0].length, text: 'O(N)' },
+    { line: 7, character: lines[7].length, text: '× N  O(N log N)' },
+    { line: 9, character: lines[9].length, text: 'O(N)' }
+  ]);
+});
+
+test('refreshDecorations marks the loops and the expensive list operations of a real program', async () => {
+  const mainEditor = fakeEditor(fakeDocument(MAIN, WORD_MATCH));
+  const fake = createFakeVscode({ visible: [mainEditor] });
+  const h = createHarness({ vscodeApi: fake.vscodeApi, files: { [MAIN]: WORD_MATCH } });
+  await h.controller.analyze(MAIN);
+
+  const result = h.last('complexityResult');
+  assert.equal(result.ok, true);
+  // The input comprehensions on lines 2 and 3 are input reading, so the analyzer reports nothing for them.
+  assert.equal(result.lines.some((item) => item.line === 2 || item.line === 3), false);
+
+  const textByLine = new Map(hintsOf(mainEditor.lastOptions()).map((hint) => [hint.line + 1, hint.text]));
+  assert.deepEqual([...textByLine], [
+    [5, '× M'],
+    [6, 'O(N)'],
+    [7, 'O(N)'],
+    [10, '× N'],
+    [11, '× N'],
+    [16, 'O(N)']
+  ]);
+  for (const line of [1, 2, 3, 4, 8, 9, 12, 13, 14]) {
+    assert.equal(textByLine.has(line), false, `line ${line}`);
+  }
 });
