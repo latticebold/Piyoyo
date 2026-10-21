@@ -176,6 +176,11 @@
           "default": true,
           "description": "PyPy が見つからず Python で実行したときに、PyPy の入れ方の案内を出します。"
         },
+        "piyoyo.complexity.showInlineHints": {
+          "type": "boolean",
+          "default": true,
+          "description": "計算量の解析結果を、エディタのループの行（× N など）と関数の行（O(N²) など）の右端に薄く表示します。"
+        },
         "piyoyo.timeoutMs": {
           "type": "number",
           "default": 2000,
@@ -233,6 +238,6 @@
   },
   "scripts": {
     "test": "node --test test/*.test.js",
-    "check": "node --check extension.js && node --check src/webviewHtml.js && node --check src/snippetLibrary.js && node --check src/snippetPreferences.js && node --check src/snippetInsertion.js && node --check src/pythonImportInsertion.js && node --check src/pythonHelperInsertion.js &&node --check src/pythonStatements.js && node --check src/runners/pythonRunner.js && node --check src/runners/pythonErrorExplainer.js && node --check src/runners/boundedOutput.js && node --check src/runners/processTermination.js && node --check src/errorDisplayMode.js && node --check src/piyoyoSettings.js && node --check src/targetSelection.js && node --check src/keyboardShortcuts.js && node --check src/inputFocus.js && node --check src/pythonPathSelection.js && node --check src/pythonPathPreference.js && node --check src/pythonLauncherAvailability.js && node --check src/pythonLauncherAvailabilityCache.js && node --check src/ruffImportOrganizer.js && node --check src/verify/expression.js && node --check src/verify/inputFormat.js && node --check src/verify/inputGenerator.js && node --check src/verify/outputCompare.js && node --check src/verify/verifyFile.js && node --check src/verify/stressRunner.js && node --check src/verify/problemParser.js && node --check src/verify/verifyWebview.js && node --check src/verify/verifyController.js"
+    "check": "node --check extension.js && node --check src/webviewHtml.js && node --check src/snippetLibrary.js && node --check src/snippetPreferences.js && node --check src/snippetInsertion.js && node --check src/pythonImportInsertion.js && node --check src/pythonHelperInsertion.js &&node --check src/pythonStatements.js && node --check src/runners/pythonRunner.js && node --check src/runners/pythonErrorExplainer.js && node --check src/runners/boundedOutput.js && node --check src/runners/processTermination.js && node --check src/errorDisplayMode.js && node --check src/piyoyoSettings.js && node --check src/targetSelection.js && node --check src/keyboardShortcuts.js && node --check src/inputFocus.js && node --check src/pythonPathSelection.js && node --check src/pythonPathPreference.js && node --check src/pythonLauncherAvailability.js && node --check src/pythonLauncherAvailabilityCache.js && node --check src/ruffImportOrganizer.js && node --check src/verify/expression.js && node --check src/verify/inputFormat.js && node --check src/verify/inputGenerator.js && node --check src/verify/outputCompare.js && node --check src/verify/verifyFile.js && node --check src/verify/stressRunner.js && node --check src/verify/problemParser.js && node --check src/verify/verifyWebview.js && node --check src/verify/verifyController.js && node --check src/complexity/complexityExpr.js && node --check src/complexity/analyzer.js && node --check src/complexity/inputBinding.js && node --check src/complexity/judge.js && node --check src/complexity/measure.js && node --check src/complexity/complexityWebview.js && node --check src/complexity/complexityController.js"
   }
 }

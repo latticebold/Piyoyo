@@ -1043,10 +1043,10 @@ test('verify workspace controls exist with accessible names', () => {
     ['tokens', 'exact', 'float']
   );
 
-  const sections = panel.match(/<details\b[^>]*class="verifySection"[^>]*>/g) || [];
+  const sections = panel.match(/<details\b[^>]*class="verifySection(?: [^"]*)?"[^>]*>/g) || [];
   assert.deepEqual(
     sections.map((tag) => tag.match(/id="([^"]+)"/)[1]),
-    ['verifyFormatSection', 'verifyStressSection', 'verifyCounterSection']
+    ['verifyFormatSection', 'complexitySection', 'verifyStressSection', 'verifyCounterSection']
   );
   sections.forEach((tag) => assert.match(tag, / open>$/, tag));
 });
@@ -1076,4 +1076,62 @@ test('initVerifyWorkspace is self-contained so it can be injected with toString(
   assert.doesNotMatch(source, /\brequire\(/);
   // option() is a module-level markup helper, not available in the webview.
   assert.doesNotMatch(source, /\boption\(/);
+});
+
+const {
+  COMPLEXITY_MARKUP,
+  COMPLEXITY_STYLES,
+  initComplexitySection
+} = require('../src/complexity/complexityWebview');
+
+test('verify workspace has the 計算量 section between 入力形式 and ストレステスト', () => {
+  const panel = verifyPanelHtml(getWebviewHtml());
+  const formatIndex = panel.indexOf('id="verifyFormatSection"');
+  const complexityIndex = panel.indexOf('id="complexitySection"');
+  const stressIndex = panel.indexOf('id="verifyStressSection"');
+  assert.ok(formatIndex > -1);
+  assert.ok(complexityIndex > formatIndex);
+  assert.ok(stressIndex > complexityIndex);
+  assert.equal((panel.match(/id="complexitySection"/g) || []).length, 1);
+
+  assert.match(openingTag(panel, 'complexitySection'), /^<details\b[^>]*class="verifySection complexitySection"[^>]* open>$/);
+  assert.match(panel, /<details id="complexitySection"[^>]*>\s*<summary>計算量<span id="complexitySummary" class="summaryValue"><\/span><\/summary>/);
+  for (const [id, label] of [['complexityAnalyze', '解析'], ['complexityMeasure', '実測'], ['complexityCancel', '中止']]) {
+    assert.match(panel, new RegExp(`<button\\b[^>]*\\bid="${id}"[^>]*type="button"[^>]*>${label}</button>`), id);
+  }
+  assert.match(openingTag(panel, 'complexityCancel'), /\shidden>$/);
+  assert.doesNotMatch(openingTag(panel, 'complexityAnalyze'), /\shidden\b/);
+  assert.doesNotMatch(openingTag(panel, 'complexityMeasure'), /\shidden\b/);
+  assert.doesNotMatch(COMPLEXITY_MARKUP, /\sstyle\s*=/i);
+});
+
+test('complexity section styles and script are injected, and the script starts before ready', () => {
+  const html = getWebviewHtml();
+  assert.ok(html.includes(COMPLEXITY_STYLES));
+  assert.ok(html.includes(initComplexitySection.toString()));
+  assert.match(html, /function initComplexitySection\(\{ vscode \}\)/);
+
+  const call = 'initComplexitySection({ vscode });';
+  const callIndex = html.indexOf(call);
+  assert.ok(callIndex > -1);
+  assert.equal(html.indexOf(call, callIndex + 1), -1);
+  // The extension publishes the complexity state when the webview says ready.
+  assert.ok(callIndex < html.indexOf("vscode.postMessage({ type: 'ready' });"));
+});
+
+test('initComplexitySection is self-contained so it can be injected with toString()', () => {
+  const source = initComplexitySection.toString();
+  assert.doesNotThrow(() => new Function(source));
+  assert.doesNotMatch(source, /\bCOMPLEXITY_MARKUP\b/);
+  assert.doesNotMatch(source, /\bCOMPLEXITY_STYLES\b/);
+  assert.doesNotMatch(source, /\brequire\(/);
+});
+
+test('every element initComplexitySection looks up exists exactly once in the page', () => {
+  const html = getWebviewHtml();
+  const ids = [...new Set(Array.from(initComplexitySection.toString().matchAll(/\$\('([^']+)'\)/g), (match) => match[1]))];
+  assert.ok(ids.length >= 10, ids.join(', '));
+  for (const id of ids) {
+    assert.equal((html.match(new RegExp(`\\sid="${id}"`, 'g')) || []).length, 1, id);
+  }
 });

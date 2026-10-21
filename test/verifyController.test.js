@@ -114,12 +114,13 @@ function createFakeFs(initial) {
   };
 }
 
-function createHarness({ files = {}, run = () => okRun(), fetchImpl = null } = {}) {
+function createHarness({ files = {}, run = () => okRun(), fetchImpl = null, hooks = {} } = {}) {
   const fs = createFakeFs(files);
   const messages = [];
   const runs = [];
   const fetches = [];
   const controller = new VerifyController({
+    ...hooks,
     vscodeApi: { workspace: { textDocuments: [] } },
     postMessage: (message) => messages.push(message),
     getRunSettings: async () => ({ pythonPath: 'python', timeoutMs: TIMEOUT_MS, workspaceFolders: [] }),
@@ -365,6 +366,90 @@ test('setTargetFile ignores an empty path and the file that is already loaded', 
   await h.controller.setTargetFile(MAIN);
   assert.equal(h.fs.reads.length, readsBefore);
   assert.equal(h.ofType('verifyLoaded').length, 0);
+});
+
+test('onTargetChanged fires once after a new target is loaded', async () => {
+  const otherMain = path.join(DIR, 'b.py');
+  const changes = [];
+  const h = createHarness({
+    files: { [MAIN]: 'print(1)\n', [NAIVE]: 'print(1)\n' },
+    hooks: {
+      onTargetChanged: (mainPath) => {
+        changes.push({ mainPath, target: h.controller.target, loaded: h.ofType('verifyLoaded').length });
+      }
+    }
+  });
+  await h.controller.setTargetFile(MAIN);
+  assert.deepEqual(changes, [{ mainPath: MAIN, target: MAIN, loaded: 1 }]);
+
+  await h.controller.setTargetFile(MAIN);
+  await h.controller.setTargetFile(NAIVE);
+  await h.controller.setTargetFile('');
+  assert.equal(changes.length, 1, 'the same target (also through its naive file) does not fire again');
+
+  await h.controller.setTargetFile(otherMain);
+  assert.deepEqual(changes.map((change) => change.mainPath), [MAIN, otherMain]);
+  assert.equal(changes[1].loaded, 2);
+});
+
+test('onTargetChanged fires only for the winner of overlapping target loads', async () => {
+  const otherMain = path.join(DIR, 'b.py');
+  const otherVerify = path.join(DIR, 'b.piyoyo.json');
+  for (const laterFinishesFirst of [true, false]) {
+    const changes = [];
+    const h = createHarness({
+      files: { [VERIFY]: verifyFileText({ format: VALID_FORMAT }), [otherVerify]: verifyFileText() },
+      hooks: { onTargetChanged: (mainPath) => changes.push(mainPath) }
+    });
+    const gateA = h.fs.gate(VERIFY);
+    const gateB = h.fs.gate(otherVerify);
+    const first = h.controller.setTargetFile(MAIN);
+    await gateA.entered;
+    const second = h.controller.setTargetFile(otherMain);
+    await gateB.entered;
+    if (laterFinishesFirst) {
+      gateB.release();
+      await second;
+      gateA.release();
+      await first;
+    } else {
+      gateA.release();
+      await first;
+      gateB.release();
+      await second;
+    }
+    assert.deepEqual(changes, [otherMain], `later finishes first: ${laterFinishesFirst}`);
+  }
+});
+
+test('onFormatChanged fires only when the format really changes', async () => {
+  let count = 0;
+  const h = createHarness({
+    files: { [VERIFY]: verifyFileText({ format: VALID_FORMAT }) },
+    hooks: {
+      onFormatChanged: () => {
+        count += 1;
+      }
+    }
+  });
+  await h.send({ type: 'verifyFormatChanged', format: INVALID_FORMAT });
+  assert.equal(count, 0, 'no target yet');
+
+  await h.load();
+  assert.equal(count, 0, 'loading a saved format is a target change, not a format change');
+  await h.send({ type: 'verifyFormatChanged', format: VALID_FORMAT });
+  await h.send({ type: 'verifyFormatChanged', format: JSON.parse(JSON.stringify(VALID_FORMAT)) });
+  assert.equal(count, 0, 'the same format again');
+
+  await h.send({ type: 'verifyFormatChanged', format: INVALID_FORMAT });
+  assert.equal(count, 1);
+  await h.send({ type: 'verifyFormatChanged', format: INVALID_FORMAT });
+  assert.equal(count, 1);
+  await h.send({ type: 'verifyFormatChanged', format: { rows: [] } });
+  assert.equal(count, 2);
+  await h.send({ type: 'verifySettingsChanged', compareMode: 'exact', iterations: 50 });
+  assert.equal(count, 2, 'other settings are not a format change');
+  await h.controller.flushSave();
 });
 
 // ---------- verifyFormatChanged / verifySettingsChanged ----------

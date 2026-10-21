@@ -105,6 +105,30 @@ test('manifest lets users turn off the PyPy install hint', () => {
   assert.equal(setting.default, true);
 });
 
+test('manifest lets users hide the inline complexity hints in the editor', () => {
+  const setting = manifest.contributes.configuration.properties['piyoyo.complexity.showInlineHints'];
+  assert.ok(setting);
+  assert.equal(setting.type, 'boolean');
+  assert.equal(setting.default, true);
+  assert.match(setting.description, /[぀-ヿ一-鿿]/);
+  assert.match(setting.description, /計算量/);
+});
+
+test('manifest syntax-checks the complexity modules', () => {
+  const files = [
+    'src/complexity/complexityExpr.js',
+    'src/complexity/analyzer.js',
+    'src/complexity/inputBinding.js',
+    'src/complexity/judge.js',
+    'src/complexity/measure.js',
+    'src/complexity/complexityWebview.js',
+    'src/complexity/complexityController.js'
+  ];
+  for (const file of files) {
+    assert.ok(manifest.scripts.check.includes(`node --check ${file}`), file);
+  }
+});
+
 test('manifest keeps code visibility preferences inside Piyoyo instead of VS Code settings', () => {
   assert.equal(
     Object.hasOwn(

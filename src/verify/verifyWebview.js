@@ -4,6 +4,8 @@
 // initVerifyWorkspace is injected into the webview via toString(), so it must stay
 // self-contained (no closures over this module).
 
+const { COMPLEXITY_MARKUP } = require('../complexity/complexityWebview');
+
 const VERIFY_STYLES = `
     .verifyWorkspace {
       align-content: start;
@@ -379,6 +381,7 @@ const VERIFY_MARKUP = `
           </div>
         </div>
       </details>
+${COMPLEXITY_MARKUP}
 
       <details id="verifyStressSection" class="verifySection" open>
         <summary>ストレステスト<span id="verifyStressSummary" class="summaryValue"></span></summary>

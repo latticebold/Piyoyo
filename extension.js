@@ -37,6 +37,7 @@ const {
 const { getRunnablePythonFileFromDocument, saveDocumentBeforeRun } = require('./src/targetSelection');
 const { getWebviewHtml } = require('./src/webviewHtml');
 const { VerifyController } = require('./src/verify/verifyController');
+const { ComplexityController } = require('./src/complexity/complexityController');
 
 const VIEW_CONTAINER_ID = 'piyoyo';
 const VIEW_TYPE = 'piyoyo.runnerView';
@@ -96,8 +97,18 @@ function activate(context) {
     if (event.affectsConfiguration('piyoyo.inputFocusShortcut')) {
       provider.postInputFocusShortcut();
     }
+    if (event.affectsConfiguration('piyoyo.complexity.showInlineHints')) {
+      provider.complexityController.refreshDecorations();
+    }
   }));
 
+  context.subscriptions.push(vscode.workspace.onDidSaveTextDocument((document) => {
+    provider.complexityController.handleDocumentSaved(document);
+  }));
+  context.subscriptions.push(vscode.window.onDidChangeVisibleTextEditors(() => {
+    provider.complexityController.refreshDecorations();
+  }));
+  context.subscriptions.push({ dispose: () => provider.complexityController.dispose() });
 }
 
 function getConfiguredInputFocusShortcut() {
@@ -131,12 +142,26 @@ class RunnerViewProvider {
     this.activeFile = getRunnablePythonFileFromDocument(undefined);
     this.launcherAvailabilityCache = createLauncherAvailabilityCache();
     this.pyPyHintShown = false;
+    // The 検証 tab has no launcher picker; it follows the choice saved by the 実行 tab.
+    const getVerifyRunSettings = () => this.getRunSettings(getSavedPythonPathPreference(this.globalState));
+    this.complexityController = new ComplexityController({
+      vscodeApi: vscode,
+      postMessage: (message) => this.postMessage(message),
+      getRunSettings: getVerifyRunSettings,
+      runPythonFile,
+      getVerifyState: () => ({
+        target: this.verifyController.target,
+        format: this.verifyController.data.format
+      }),
+      extensionPath: extensionUri.fsPath
+    });
     this.verifyController = new VerifyController({
       vscodeApi: vscode,
       postMessage: (message) => this.postMessage(message),
-      // The 検証 tab has no launcher picker; it follows the choice saved by the 実行 tab.
-      getRunSettings: () => this.getRunSettings(getSavedPythonPathPreference(this.globalState)),
-      runPythonFile
+      getRunSettings: getVerifyRunSettings,
+      runPythonFile,
+      onTargetChanged: (target) => this.complexityController.handleTargetChanged(target),
+      onFormatChanged: () => this.complexityController.handleFormatChanged()
     });
   }
 
@@ -174,11 +199,17 @@ class RunnerViewProvider {
         this.flushPendingRunRequest();
         this.flushPendingFocusInputRequest();
         this.verifyController.postLoaded();
+        this.complexityController.publish();
         return;
       }
 
       if (message.type.startsWith('verify')) {
         await this.verifyController.handleMessage(message);
+        return;
+      }
+
+      if (message.type.startsWith('complexity')) {
+        await this.complexityController.handleMessage(message);
         return;
       }
 

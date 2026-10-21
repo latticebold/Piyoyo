@@ -101,8 +101,12 @@ class VerifyController {
     fs = nodeFs,
     fetchImpl = globalThis.fetch,
     random = Math.random,
-    now = () => new Date()
+    now = () => new Date(),
+    onTargetChanged = () => {},
+    onFormatChanged = () => {}
   }) {
+    this.onTargetChanged = onTargetChanged;
+    this.onFormatChanged = onFormatChanged;
     this.vscodeApi = vscodeApi;
     this.postMessage = postMessage;
     this.getRunSettings = getRunSettings;
@@ -164,6 +168,7 @@ class VerifyController {
     this.fileExistedOnLoad = loaded.existed;
     this.saveLocked = Boolean(loaded.locked);
     await this.postLoaded();
+    this.onTargetChanged(mainPath);
   }
 
   async readData(mainPath) {
@@ -340,6 +345,7 @@ class VerifyController {
     this.postMessage({ type: 'verifyFormatStatus', errors, example, exampleError });
     if (changed) {
       this.scheduleSave();
+      this.onFormatChanged();
     }
   }
 

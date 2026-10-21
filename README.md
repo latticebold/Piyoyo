@@ -28,6 +28,7 @@ Pythonや競技プログラミングを始めた人が、入力と出力を気�
 - Pythonの実行エラーを日本語で説明する。
 - コード整理で、スニペットの表示と同じジャンル内の順番を自分用に変える。
 - 「検証」タブで、問題の入力形式から入力を自動で作り、本番の解と愚直解の出力を比べて反例を探す（ストレステスト）。最大サイズの入力で時間切れや実行時エラーも探す（[検証タブ](docs/user-guide.md#検証タブで反例を探す)）。
+- 書いたコードの計算量（`O(N²)`など）を見積もり、入力の上限から制限時間に間に合うか（余裕 / 厳しい / TLE の恐れ）を出す。入力のサイズを変えて実際の時間も測る（[計算量を見積もる](docs/user-guide.md#計算量を見積もる)）。
 - キーボードだけで操作する。Pythonファイルで`Ctrl+Enter`（macOSは`Cmd+Enter`）を押すと、保存して実行する。`Alt+I`（macOSは`Option+I`）でエディタとPiyoyoパネル（最後に開いていたタブ）を行き来し、Piyoyoパネルの中では`Shift+←` / `Shift+→`で「実行」「コード挿入」「検証」タブを隣へ切り替える（文字の入力欄の中では、カーソルが端にあるときだけ切り替わる）。よく使うキーはパネルの上に常に表示される（[キーボード操作](docs/user-guide.md#キーボード操作)）。
 
 ## 必要なもの
@@ -111,6 +112,7 @@ Piyoyoパネル上部の歯車ボタン（または`Piyoyo Runner`の見出し�
 | `piyoyo.pythonPath` | 空 | Python実行ファイルのパスです。実行環境で選んだ値を優先し、空の場合は起動できるPyPy（`pypy3`、`pypy`）、`python.defaultInterpreterPath`、OSの標準候補の順に使います。 |
 | `piyoyo.timeoutMs` | `2000` | Pythonの最大実行時間をミリ秒で指定します。初期値はAtCoderのABCに合わせた2秒です。 |
 | `piyoyo.showPyPyInstallHint` | `true` | PyPyが見つからずPythonで実行したときに、PyPyの入れ方の案内を出します。 |
+| `piyoyo.complexity.showInlineHints` | `true` | 計算量の解析結果を、エディタのループの行と関数の行の右端に薄く表示します。 |
 | `piyoyo.errorDisplayMode` | `friendly` | Pythonのエラーの表示方法です。`friendly`（やさしい表示）は日本語の説明を表示し、元のエラーは「原文を見る」に折りたたみます。`both`（両方表示）は両方を表示し、`original`（原文表示）は元のエラーとトレースバックを中心に表示します。 |
 | `piyoyo.advanced.showOriginalErrors` | `false` | 以前の設定です。`piyoyo.errorDisplayMode`を設定していない場合に限り、`true`で「両方表示」になります。 |
 

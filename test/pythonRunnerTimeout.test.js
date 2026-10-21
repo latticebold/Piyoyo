@@ -26,20 +26,22 @@ async function descendantCase(parentExits) {
   try {
     await fs.writeFile(filePath, [
       'import pathlib, subprocess, sys, time',
-      'child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(2)"])',
+      'child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(5)"])',
       'pathlib.Path("child.pid").write_text(str(child.pid))',
       'print(child.pid, flush=True)',
       parentExits ? 'sys.exit(0)' : 'time.sleep(10)'
     ].join('\n'));
-    const result = await runPythonFile({ filePath, cwd, pythonPath, timeoutMs: 100 });
+    // The timeout must fire only after Python has started and spawned the child, even when
+    // the machine is busy (100 ms was too short under the full parallel test run).
+    const result = await runPythonFile({ filePath, cwd, pythonPath, timeoutMs: 1000 });
     childPid = Number(await fs.readFile(pidPath, 'utf8'));
     assert.ok(Number.isInteger(childPid) && childPid > 0);
     assert.equal(result.timedOut, true);
-    assert.ok(result.elapsedMs < 1500, `execution took ${result.elapsedMs} ms`);
+    assert.ok(result.elapsedMs < 2500, `execution took ${result.elapsedMs} ms`);
     assert.equal(result.processTerminationIncomplete, parentExits && process.platform === 'win32');
     if (result.processTerminationIncomplete) {
       assert.match(result.errorExplanation, /子プロセスの停止を確認できないため、結果の待機を打ち切りました。/);
-      assert.match(result.errorExplanation, /100 ms/);
+      assert.match(result.errorExplanation, /1000 ms/);
     }
     if (!parentExits || process.platform !== 'win32') {
       assert.equal(alive(childPid), false, `descendant ${childPid} survived cancellation`);

@@ -28,6 +28,7 @@ const {
   normalizeInputFocusShortcut
 } = require('./keyboardShortcuts');
 const { VERIFY_MARKUP, VERIFY_STYLES, initVerifyWorkspace } = require('./verify/verifyWebview');
+const { COMPLEXITY_STYLES, initComplexitySection } = require('./complexity/complexityWebview');
 
 function getStdinPlaceholder(shortcutLabel) {
   return `ここに複数行の入力を貼り付け（${shortcutLabel} でエディタと行き来）`;
@@ -1828,6 +1829,7 @@ function getWebviewHtml({
     }
 
 ${VERIFY_STYLES}
+${COMPLEXITY_STYLES}
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { transition: none !important; }
     }
@@ -2040,6 +2042,7 @@ ${VERIFY_STYLES}
     ${getStdinPlaceholder.toString()}
     ${getStdinTitle.toString()}
     ${initVerifyWorkspace.toString()}
+    ${initComplexitySection.toString()}
     let inputFocusMode = ${scriptJson(inputFocusMode)};
     const inputFocusHintKey = document.getElementById('inputFocusHintKey');
     const shiftDoubleTap = createShiftDoubleTapDetector(${SHIFT_DOUBLE_TAP_INTERVAL_MS});
@@ -3241,6 +3244,7 @@ ${VERIFY_STYLES}
         stdin.focus();
       }
     });
+    initComplexitySection({ vscode });
 
     postFocusState();
     vscode.postMessage({ type: 'ready' });
