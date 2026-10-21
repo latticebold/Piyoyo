@@ -60,19 +60,21 @@ InputFormat = { rows: Row[] }
 | `intList` | `name`, `length`, `min`, `max`, `layout: 'row' \| 'column'`, `distinct: boolean`, `order` | `row` は1行に空白区切り、`column` は1行に1個 |
 | `matrix` | `name`, `rows`, `cols`, `min`, `max` | `rows` 行、各行に `cols` 個を空白区切り |
 | `string` | `name`, `minLength`, `maxLength`, `charset`, `chars` | 1行 |
-| `grid` | `name`, `rows`, `cols`, `charset`, `chars` | `rows` 行、各行は `cols` 文字 |
+| `grid` | `name`, `rows`, `minCols`, `cols`, `charset`, `chars`, `distinct` | `rows` 行の文字列。各行の長さは `minCols`〜`cols` から行ごとに選ぶ |
 
 - `name`・`min`・`max`・`length`・`rows`・`cols`・`minLength`・`maxLength` は文字列の式です。
 - `order`：`'none' | 'asc' | 'desc' | 'strictAsc' | 'strictDesc'`。`strictAsc` と `strictDesc` は、すべて異なることも意味します。
 - `charset`：`'lower' | 'upper' | 'digit' | 'custom'`。`custom` のときだけ `chars`（使う文字。例 `.#`）を使います。
 - `string` の `minLength` が空文字列のときは `maxLength` と同じ（長さが固定）とみなします。
+- `grid`（画面の名前は「H 行の文字列」）の `minCols` が空文字列のとき、または項目がないとき（前の版のファイル）は `cols` と同じで、すべての行が同じ長さ（グリッド）になります。`minCols` があれば、行ごとに `minCols`〜`cols` の長さをランダムに選びます（`mode: 'max'` ではすべて `cols`）。
+- `grid` の `distinct` が `true` なら、すべての行が異なる文字列になります。省略時は `false` です。作れる文字列の種類（長さの範囲と文字の種類から数える）が行数より少ないときは、`sizeCap` で縮めた長さの範囲を元の範囲の中で広げ、それでも足りなければ `{ ok: false }` です。
 
 ### 変数の決まり
 
 - 変数を定義できるのは `ints` 行の `vars` だけです。ほかの行の `name` は表示用の名前で、式からは参照できません。
 - 式から参照できるのは、**それより前の行**か、**同じ `ints` 行の左側**で定義した変数だけです。
 - 名前は、すべての行（`vars` の名前と各行の `name`）を通して重複できません。
-- **サイズ変数**：`length`・`rows`・`cols`・`minLength`・`maxLength` の式から参照される変数です。生成のときのサイズの上限（`sizeCap`）は、サイズ変数と文字列の長さにだけかかります。
+- **サイズ変数**：`length`・`rows`・`minCols`・`cols`・`minLength`・`maxLength` の式から参照される変数です。生成のときのサイズの上限（`sizeCap`）は、サイズ変数と文字列の長さにだけかかります。
 
 ### 例
 
@@ -108,6 +110,7 @@ ab
   "version": 1,
   "format": { "rows": [] },
   "naivePath": "a_naive.py",
+  "useNaive": true,
   "compareMode": "tokens",
   "iterations": 100,
   "counterexamples": [
@@ -124,6 +127,7 @@ ab
 ```
 
 - `naivePath`：本番のファイルのフォルダから見た相対パス（区切りは `/`）。空なら `<名前>_naive.py` です。
+- `useNaive`：愚直解のファイルがあるときに、それと出力を比べるかどうか（省略時 `true`）。`false` なら愚直解があっても本番の解だけを動かします。
 - `compareMode`：`'tokens'`（空白区切り、既定）、`'exact'`（完全一致）、`'float'`（小数の誤差を許す）。
 - `counterexamples[].kind`：`'mismatch'`（出力が違う）、`'mainError'`（本番の実行時エラー）、`'mainTimeout'`（本番の時間切れ）。
 - `counterexamples[].expected`：愚直解の出力。愚直解がまだないときに見つけた実行時エラー・時間切れの反例では `null` です。「期待する出力を作り直す」で後から入ります。
@@ -237,6 +241,7 @@ runStressTest({
 - `RunResult` は `runPythonFile` の結果の一部です：`{ stdout, stderr, exitCode, timedOut, outputLimitExceeded, errorMessage, elapsedMs }`。
 - 回ごとの計画：
   - 10 回に 1 回（`iteration % 10 === 9`）は `max`。本番の解だけを動かします。
+  - 愚直解がないとき（`runNaive` なし）は、比べる相手がいないので、5 回に 1 回（`iteration % 5 === 4`）を `max` にして時間切れを見つけやすくします。`getStressPlan(iteration, total, { maxEvery = 10 } = {})` の `maxEvery` で切り替えます。
   - それ以外は `compare`。最初の 30% の回は `sizeCap ≤ 8`、`valueCap ≤ 10` にし、回が進むほど大きくします（`sizeCap` は最大 20、終盤の `valueCap` は `null`）。愚直解は全探索などで遅いことが多く、サイズを大きくしすぎると愚直解の時間切れで止まってしまうためです。
   - `boundaryRate` は 0.2 です。
 - 止める条件と `status`：

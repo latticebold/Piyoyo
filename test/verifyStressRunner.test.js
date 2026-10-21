@@ -113,17 +113,17 @@ test('deriveCaseSeed treats seeds as 32-bit values', () => {
   assert.equal(deriveCaseSeed(Number.NaN, 3), deriveCaseSeed(0, 3));
 });
 
-test('getStressPlan follows the size and value rules for several totals', () => {
+function assertPlanRules(maxEvery, planFor) {
   for (const total of [1, 2, 3, 10, 25, 100, 1000]) {
     let previousSize = 0;
     let previousValue = 0;
     let lastCompare = null;
     for (let iteration = 0; iteration < total; iteration += 1) {
-      const plan = getStressPlan(iteration, total);
-      const where = `total ${total}, iteration ${iteration}`;
+      const plan = planFor(iteration, total);
+      const where = `maxEvery ${maxEvery}, total ${total}, iteration ${iteration}`;
       assert.equal(plan.boundaryRate, 0.2, where);
 
-      if (iteration % 10 === 9) {
+      if (iteration % maxEvery === maxEvery - 1) {
         assert.deepEqual(plan, { mode: 'max', sizeCap: null, valueCap: null, boundaryRate: 0.2 }, where);
         continue;
       }
@@ -150,9 +150,52 @@ test('getStressPlan follows the size and value rules for several totals', () => 
     }
 
     if (total >= 10) {
-      assert.equal(lastCompare.valueCap, null, `total ${total}`);
-      assert.equal(lastCompare.sizeCap, 20, `total ${total}`);
+      assert.equal(lastCompare.valueCap, null, `maxEvery ${maxEvery}, total ${total}`);
+      assert.equal(lastCompare.sizeCap, 20, `maxEvery ${maxEvery}, total ${total}`);
     }
+  }
+}
+
+test('getStressPlan follows the size and value rules for several totals', () => {
+  assertPlanRules(10, (iteration, total) => getStressPlan(iteration, total));
+  assertPlanRules(10, (iteration, total) => getStressPlan(iteration, total, {}));
+  assertPlanRules(10, (iteration, total) => getStressPlan(iteration, total, { maxEvery: 10 }));
+});
+
+test('getStressPlan keeps the rules for other maxEvery values', () => {
+  for (const maxEvery of [2, 3, 5, 7]) {
+    assertPlanRules(maxEvery, (iteration, total) => getStressPlan(iteration, total, { maxEvery }));
+  }
+});
+
+test('getStressPlan with maxEvery 5 puts max at 4, 9, 14 and leaves compare caps unchanged', () => {
+  const maxIterations = [];
+  for (let iteration = 0; iteration < 30; iteration += 1) {
+    const plan = getStressPlan(iteration, 30, { maxEvery: 5 });
+    if (plan.mode === 'max') {
+      maxIterations.push(iteration);
+      assert.deepEqual(plan, { mode: 'max', sizeCap: null, valueCap: null, boundaryRate: 0.2 });
+    } else {
+      assert.deepEqual(plan, getStressPlan(iteration, 30));
+    }
+  }
+  assert.deepEqual(maxIterations, [4, 9, 14, 19, 24, 29]);
+});
+
+test('getStressPlan falls back to maxEvery 10 for invalid values', () => {
+  const invalid = [1, 0, -5, 2.5, '5', null, Number.NaN, Infinity];
+  for (const maxEvery of invalid) {
+    for (let iteration = 0; iteration < 40; iteration += 1) {
+      assert.deepEqual(
+        getStressPlan(iteration, 40, { maxEvery }),
+        getStressPlan(iteration, 40),
+        `maxEvery ${String(maxEvery)}, iteration ${iteration}`
+      );
+    }
+  }
+  for (const options of [null, 'x', 5, []]) {
+    assert.deepEqual(getStressPlan(4, 40, options), getStressPlan(4, 40));
+    assert.equal(getStressPlan(9, 40, options).mode, 'max');
   }
 });
 
@@ -630,7 +673,46 @@ test('runStressTest without runNaive still uses the plan for every iteration', a
   await runWithHarness(harness, { runNaive: null, onProgress: (update) => progress.push(update.mode) });
   assert.equal(progress.length, 20);
   assert.deepEqual(harness.calls.main.map(modeOf), progress);
-  assert.deepEqual(harness.calls.main.filter((input) => modeOf(input) === 'max').map(iterationOf), [9, 19]);
+  assert.deepEqual(harness.calls.main.filter((input) => modeOf(input) === 'max').map(iterationOf), [4, 9, 14, 19]);
+});
+
+test('runStressTest without runNaive uses a max-size input every 5 iterations', async () => {
+  const harness = makeHarness();
+  await runWithHarness(harness, { runNaive: null, seed: 5 });
+  const options = harness.calls.generate.map((call) => call.options);
+  assert.deepEqual(options[4], {
+    seed: deriveCaseSeed(5, 4),
+    mode: 'max',
+    sizeCap: null,
+    valueCap: null,
+    boundaryRate: 0.2
+  });
+  options.forEach((option, iteration) => {
+    const plan = getStressPlan(iteration, 20, { maxEvery: 5 });
+    assert.deepEqual(option, {
+      seed: deriveCaseSeed(5, iteration),
+      mode: plan.mode,
+      sizeCap: plan.sizeCap,
+      valueCap: plan.valueCap,
+      boundaryRate: 0.2
+    });
+  });
+});
+
+test('runStressTest with runNaive keeps a max-size input every 10 iterations', async () => {
+  const harness = makeHarness();
+  await runWithHarness(harness, { seed: 5 });
+  const options = harness.calls.generate.map((call) => call.options);
+  assert.equal(options[4].mode, 'compare');
+  assert.deepEqual(options[4], { ...getStressPlan(4, 20), seed: deriveCaseSeed(5, 4) });
+  assert.deepEqual(options[9], {
+    seed: deriveCaseSeed(5, 9),
+    mode: 'max',
+    sizeCap: null,
+    valueCap: null,
+    boundaryRate: 0.2
+  });
+  assert.equal(options.filter((option) => option.mode === 'max').length, 2);
 });
 
 test('runStressTest without runNaive stops on main errors and timeouts at compare iterations', async () => {
@@ -667,8 +749,10 @@ test('runStressTest without runNaive reports max-size failures too', async () =>
   });
   const result = await runWithHarness(harness, { runNaive: null });
   assert.equal(result.status, 'mainTimeout');
-  assert.equal(result.iteration, 9);
+  assert.equal(result.iteration, 4);
+  assert.equal(result.iterationsRun, 5);
   assert.equal(result.mode, 'max');
+  assert.equal(result.caseSeed, deriveCaseSeed(42, 4));
   assert.match(result.message, /最大サイズ/);
   assert.equal(harness.calls.naive.length, 0);
 });

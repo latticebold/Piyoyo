@@ -76,6 +76,7 @@ function createEmptyVerifyData() {
     version: VERIFY_FILE_VERSION,
     format: { rows: [] },
     naivePath: '',
+    useNaive: true,
     compareMode: DEFAULT_COMPARE_MODE,
     iterations: DEFAULT_ITERATIONS,
     counterexamples: []
@@ -174,7 +175,7 @@ function parseVerifyFile(text) {
 
   let raw;
   try {
-    raw = JSON.parse(text.replace(/^﻿/, ''));
+    raw = JSON.parse(text.replace(/^\uFEFF/, ''));
   } catch {
     return { ok: false, message: '保存ファイルが JSON の形になっていないため、読み込めませんでした。' };
   }
@@ -211,6 +212,14 @@ function parseVerifyFile(text) {
       data.naivePath = toSlashSeparators(raw.naivePath.trim());
     } else {
       warnings.push('愚直解の場所を読み取れなかったため、いつもの場所（<名前>_naive.py）にしました。');
+    }
+  }
+
+  if (raw.useNaive !== undefined) {
+    if (typeof raw.useNaive === 'boolean') {
+      data.useNaive = raw.useNaive;
+    } else {
+      warnings.push('愚直解と比べるかどうかを読み取れなかったため、「比べる」にしました。');
     }
   }
 
@@ -258,6 +267,7 @@ function serializeVerifyFile(data) {
     version: VERIFY_FILE_VERSION,
     format: isPlainObject(source.format) && Array.isArray(source.format.rows) ? source.format : { rows: [] },
     naivePath: typeof source.naivePath === 'string' ? source.naivePath : '',
+    useNaive: typeof source.useNaive === 'boolean' ? source.useNaive : true,
     compareMode: COMPARE_MODES.includes(source.compareMode) ? source.compareMode : DEFAULT_COMPARE_MODE,
     iterations: normalizeIterations(source.iterations).value,
     counterexamples: (Array.isArray(source.counterexamples) ? source.counterexamples : [])

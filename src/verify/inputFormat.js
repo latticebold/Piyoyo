@@ -16,7 +16,7 @@ const SIZE_FIELDS = {
   intList: ['length'],
   matrix: ['rows', 'cols'],
   string: ['minLength', 'maxLength'],
-  grid: ['rows', 'cols']
+  grid: ['rows', 'minCols', 'cols']
 };
 const FIELD_LABELS = {
   min: '最小値',
@@ -27,6 +27,13 @@ const FIELD_LABELS = {
   minLength: '最短の長さ',
   maxLength: '最長の長さ'
 };
+const CHARSET_CHARS = {
+  lower: 'abcdefghijklmnopqrstuvwxyz',
+  upper: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+  digit: '0123456789'
+};
+// Any count of strings at or above 2^64 is "more than enough" for an input under 20 million characters.
+const COUNT_LENGTH_LIMIT = 64n;
 
 function isObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -36,10 +43,58 @@ function trimmedString(value) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+function isBlankExpr(value) {
+  return value === undefined || value === null || (typeof value === 'string' && value.trim() === '');
+}
+
 // An empty minLength means the string length is fixed to maxLength.
 function isFixedLength(row) {
-  return row.minLength === undefined || row.minLength === null
-    || (typeof row.minLength === 'string' && row.minLength.trim() === '');
+  return isBlankExpr(row.minLength);
+}
+
+// An empty or missing minCols (files from earlier versions) means every grid line has length cols.
+function isFixedWidth(row) {
+  return isBlankExpr(row.minCols);
+}
+
+// The characters a string or grid row may use (custom characters without repeats).
+function getCharsetChars(row) {
+  if (row.charset === 'custom') {
+    return Array.from(new Set(Array.from(typeof row.chars === 'string' ? row.chars : '')));
+  }
+
+  return Array.from(CHARSET_CHARS[row.charset] || CHARSET_CHARS.lower);
+}
+
+function powCapped(charCount, length, cap) {
+  if (length >= COUNT_LENGTH_LIMIT) {
+    return cap;
+  }
+
+  const count = BigInt(charCount) ** length;
+  return count < cap ? count : cap;
+}
+
+// Number of different strings with a length in [minLength, maxLength], capped at `cap`.
+function countStrings(charCount, minLength, maxLength, cap) {
+  if (cap <= 0n || charCount <= 0 || maxLength < minLength) {
+    return 0n;
+  }
+
+  if (charCount === 1) {
+    const count = maxLength - minLength + 1n;
+    return count < cap ? count : cap;
+  }
+
+  let total = 0n;
+  for (let length = maxLength; length >= minLength; length -= 1n) {
+    total += powCapped(charCount, length, cap);
+    if (total >= cap) {
+      return cap;
+    }
+  }
+
+  return total;
 }
 
 function toNameSet(existingNames) {
@@ -116,9 +171,11 @@ function createRow(kind, existingNames = []) {
         kind,
         name: pickName(TEXT_NAME_CANDIDATES, used),
         rows: pick('H', 'N', '3'),
+        minCols: '',
         cols: pick('W', 'M', '3'),
         charset: 'custom',
         chars: '.#',
+        distinct: false,
         ...review
       };
     default:
@@ -247,9 +304,11 @@ function normalizeRow(raw, rowNumber, warnings) {
         kind: 'grid',
         name: toExprString(raw.name),
         rows: toExprString(raw.rows),
+        minCols: toExprString(raw.minCols),
         cols: toExprString(raw.cols),
         charset: toChoice(raw.charset, CHARSETS, 'lower', '文字の種類', rowNumber, warnings),
         chars: typeof raw.chars === 'string' ? raw.chars : '',
+        distinct: toBoolean(raw.distinct),
         ...review
       };
   }
@@ -479,6 +538,44 @@ function validateDistinct(row, infos, checker) {
   }
 }
 
+// Reports distinct grid lines only when there are never enough different strings.
+function validateDistinctLines(row, infos, checker) {
+  const rowsInfo = infos.rows;
+  const colsInfo = infos.cols;
+  const minInfo = isFixedWidth(row) ? colsInfo : infos.minCols;
+  if (!rowsInfo || !colsInfo || !minInfo || rowsInfo.lo === null || colsInfo.hi === null
+    || colsInfo.hi < 0n || !CHARSETS.includes(row.charset)) {
+    return;
+  }
+
+  let shortest = isFixedWidth(row) ? colsInfo.hi : minInfo.lo;
+  if (shortest === null || shortest > colsInfo.hi) {
+    return;
+  }
+
+  if (shortest < 0n) {
+    shortest = 0n;
+  }
+
+  const chars = getCharsetChars(row);
+  const available = countStrings(chars.length, shortest, colsInfo.hi, rowsInfo.lo);
+  if (chars.length > 0 && rowsInfo.lo > available) {
+    checker.push('distinct', `作れる文字列は ${available} 種類しかないので、${rowsInfo.lo} 行をすべて異なる文字列にできません。`);
+  }
+}
+
+function fieldLabel(row, field) {
+  if (row.kind === 'grid' && field === 'minCols') {
+    return '最短の長さ';
+  }
+
+  if (row.kind === 'grid' && field === 'cols') {
+    return isFixedWidth(row) ? '文字列の長さ' : '最長の長さ';
+  }
+
+  return FIELD_LABELS[field];
+}
+
 function validateRow(row, rowIndex, state) {
   const checker = createRowChecker(rowIndex, state);
   if (!isObject(row)) {
@@ -499,12 +596,13 @@ function validateRow(row, rowIndex, state) {
   checker.checkName(row.name, 'name', '名前');
   const infos = {};
   for (const field of SIZE_FIELDS[row.kind]) {
-    if (field === 'minLength' && isFixedLength(row)) {
+    if ((field === 'minLength' && isFixedLength(row)) || (field === 'minCols' && isFixedWidth(row))) {
       continue;
     }
 
-    infos[field] = checker.checkExpr(row[field], field, FIELD_LABELS[field]);
-    checker.checkSize(infos[field], field, FIELD_LABELS[field]);
+    const label = fieldLabel(row, field);
+    infos[field] = checker.checkExpr(row[field], field, label);
+    checker.checkSize(infos[field], field, label);
   }
 
   if (row.kind === 'string') {
@@ -517,7 +615,17 @@ function validateRow(row, rowIndex, state) {
   }
 
   if (row.kind === 'grid') {
+    if (infos.minCols && infos.cols && isAlwaysEmpty(infos.minCols, infos.cols)) {
+      checker.push('cols', '最短の長さが最長の長さより長くなっています。');
+    }
+
     checker.checkCharset(row);
+    if (row.distinct !== undefined && typeof row.distinct !== 'boolean') {
+      checker.push('distinct', '「すべて異なる」の指定が正しくありません。');
+    } else if (row.distinct === true) {
+      validateDistinctLines(row, infos, checker);
+    }
+
     return;
   }
 
@@ -616,10 +724,13 @@ module.exports = {
   ORDERS,
   ROW_KINDS,
   collectNames,
+  countStrings,
   createRow,
   createVar,
+  getCharsetChars,
   getSizeVariables,
   isFixedLength,
+  isFixedWidth,
   normalizeFormat,
   validateFormat
 };

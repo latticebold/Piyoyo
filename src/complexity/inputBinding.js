@@ -2,12 +2,14 @@
 
 const { evaluateExpr, parseExpr } = require('../verify/expression');
 
+// |a| is the length of a; |a[]| is the length of each element of a.
 const COLLECTION_PATTERN = /^\|(.+)\|$/;
-// Which input kind pairs with which row kind when binding by read order.
+const ELEMENT_SUFFIX = '[]';
+// Which row kinds an input kind pairs with when binding by read order.
 const ORDER_KIND_PAIRS = {
-  intList: 'intList',
-  string: 'string',
-  lines: 'grid'
+  intList: ['intList', 'matrix'],
+  string: ['string'],
+  lines: ['grid']
 };
 // The size field that gives the length of a collection row.
 const COLLECTION_SIZE_FIELDS = {
@@ -15,6 +17,11 @@ const COLLECTION_SIZE_FIELDS = {
   string: 'maxLength',
   grid: 'rows',
   matrix: 'rows'
+};
+// The size field that gives the (maximum) length of each element of a row.
+const ELEMENT_SIZE_FIELDS = {
+  grid: 'cols',
+  matrix: 'cols'
 };
 
 function isObject(value) {
@@ -101,9 +108,19 @@ function resolveExpr(text, env) {
   return { value, formatVar: name, rename: name };
 }
 
-function collectionName(symbol) {
+// '|a|' => { name: 'a', fields: COLLECTION_SIZE_FIELDS }, '|a[]|' => { name: 'a', fields: ELEMENT_SIZE_FIELDS }
+function parseCollectionSymbol(symbol) {
   const match = COLLECTION_PATTERN.exec(symbol);
-  return match ? match[1].trim() : null;
+  if (!match) {
+    return null;
+  }
+
+  const inner = match[1].trim();
+  if (inner.endsWith(ELEMENT_SUFFIX)) {
+    return { name: inner.slice(0, -ELEMENT_SUFFIX.length).trim(), fields: ELEMENT_SIZE_FIELDS };
+  }
+
+  return { name: inner, fields: COLLECTION_SIZE_FIELDS };
 }
 
 function findByName(items, name, getName) {
@@ -196,13 +213,12 @@ function bindSymbols(analysis, format, options = {}) {
     }
   }
 
-  // 2. Same name, ignoring case (n <-> N, |a| <-> the row named A).
+  // 2. Same name, ignoring case (n <-> N, |a| <-> the row named A, |S[]| <-> cols of the row named S).
   const formatVars = listFormatVars(rows);
-  const namedRows = rows.filter((row) => isObject(row)
-    && hasOwn(COLLECTION_SIZE_FIELDS, row.kind) && trimmedString(row.name) !== '');
+  const namedRows = rows.filter((row) => isObject(row) && trimmedString(row.name) !== '');
   for (const symbol of symbols) {
-    const inner = collectionName(symbol);
-    if (inner === null) {
+    const collection = parseCollectionSymbol(symbol);
+    if (collection === null) {
       const name = findByName(formatVars, symbol, (item) => item);
       if (name !== null && hasOwn(env, name)) {
         bind(symbol, 'name', resolveExpr(name, env));
@@ -210,9 +226,11 @@ function bindSymbols(analysis, format, options = {}) {
       continue;
     }
 
-    const row = findByName(namedRows, inner, (item) => trimmedString(item.name));
+    const { name, fields } = collection;
+    const candidates = namedRows.filter((row) => hasOwn(fields, row.kind));
+    const row = name === '' ? null : findByName(candidates, name, (item) => trimmedString(item.name));
     if (row) {
-      bind(symbol, 'name', resolveExpr(row[COLLECTION_SIZE_FIELDS[row.kind]], env));
+      bind(symbol, 'name', resolveExpr(row[fields[row.kind]], env));
     }
   }
 
@@ -238,8 +256,13 @@ function bindSymbols(analysis, format, options = {}) {
       continue;
     }
 
-    if (ORDER_KIND_PAIRS[input.kind] === row.kind && typeof input.targets[0] === 'string') {
-      bind(`|${input.targets[0]}|`, 'order', resolveExpr(row[COLLECTION_SIZE_FIELDS[row.kind]], env));
+    const rowKinds = hasOwn(ORDER_KIND_PAIRS, input.kind) ? ORDER_KIND_PAIRS[input.kind] : [];
+    const target = input.targets[0];
+    if (rowKinds.includes(row.kind) && typeof target === 'string') {
+      bind(`|${target}|`, 'order', resolveExpr(row[COLLECTION_SIZE_FIELDS[row.kind]], env));
+      if (hasOwn(ELEMENT_SIZE_FIELDS, row.kind)) {
+        bind(`|${target}[]|`, 'order', resolveExpr(row[ELEMENT_SIZE_FIELDS[row.kind]], env));
+      }
     }
   }
 

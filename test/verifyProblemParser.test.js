@@ -16,14 +16,14 @@ const ROW_KEYS = {
   intList: ['kind', 'name', 'length', 'min', 'max', 'layout', 'distinct', 'order', 'needsReview', 'reviewReason'],
   matrix: ['kind', 'name', 'rows', 'cols', 'min', 'max', 'needsReview', 'reviewReason'],
   string: ['kind', 'name', 'minLength', 'maxLength', 'charset', 'chars', 'needsReview', 'reviewReason'],
-  grid: ['kind', 'name', 'rows', 'cols', 'charset', 'chars', 'needsReview', 'reviewReason']
+  grid: ['kind', 'name', 'rows', 'minCols', 'cols', 'charset', 'chars', 'distinct', 'needsReview', 'reviewReason']
 };
 const EXPR_FIELDS = {
   ints: [],
   intList: ['length', 'min', 'max'],
   matrix: ['rows', 'cols', 'min', 'max'],
   string: ['minLength', 'maxLength'],
-  grid: ['rows', 'cols']
+  grid: ['rows', 'minCols', 'cols']
 };
 const NAME_RE = /^[A-Za-z][A-Za-z0-9_]*$/;
 
@@ -98,15 +98,17 @@ function assertSchema(result) {
 
     claim(row.name, where);
     for (const field of EXPR_FIELDS[row.kind]) {
-      if (field === 'minLength' && row.minLength === '') {
+      if ((field === 'minLength' || field === 'minCols') && row[field] === '') {
         continue;
       }
       checkExpr(row[field], available, `${where}.${field}`);
     }
     if (row.kind === 'intList') {
       assert.ok(['row', 'column'].includes(row.layout), `${where}.layout`);
-      assert.equal(typeof row.distinct, 'boolean', `${where}.distinct`);
       assert.ok(['none', 'asc', 'desc', 'strictAsc', 'strictDesc'].includes(row.order), `${where}.order`);
+    }
+    if (row.kind === 'intList' || row.kind === 'grid') {
+      assert.equal(typeof row.distinct, 'boolean', `${where}.distinct`);
     }
     if (row.kind === 'string' || row.kind === 'grid') {
       assert.ok(['lower', 'upper', 'digit', 'custom'].includes(row.charset), `${where}.charset`);
@@ -639,7 +641,24 @@ test('S_1 / vdots / S_H with length W strings becomes a grid', () => {
     '⋮',
     'S_H'
   ]);
-  assert.deepEqual(rows[1], ok({ kind: 'grid', name: 'S', rows: 'H', cols: 'W', charset: 'custom', chars: '.#' }));
+  assert.deepEqual(rows[1], ok({
+    kind: 'grid', name: 'S', rows: 'H', minCols: '', cols: 'W', charset: 'custom', chars: '.#', distinct: false
+  }));
+
+  const fixedByBars = parseText([
+    '制約',
+    '1 \\leq H, W \\leq 1000',
+    '|S_i| = W',
+    'S_i は英小文字からなる',
+    '入力',
+    'H W',
+    'S_1',
+    '⋮',
+    'S_H'
+  ]);
+  assert.deepEqual(fixedByBars[1], ok({
+    kind: 'grid', name: 'S', rows: 'H', minCols: '', cols: 'W', charset: 'lower', chars: '', distinct: false
+  }));
 });
 
 test('S_{1,1}S_{1,2}...S_{1,W} rows become a grid', () => {
@@ -654,7 +673,9 @@ test('S_{1,1}S_{1,2}...S_{1,W} rows become a grid', () => {
     '\\vdots',
     'S_{H,1}S_{H,2}\\ldots S_{H,W}'
   ]);
-  assert.deepEqual(rows[1], ok({ kind: 'grid', name: 'S', rows: 'H', cols: 'W', charset: 'custom', chars: '.#' }));
+  assert.deepEqual(rows[1], ok({
+    kind: 'grid', name: 'S', rows: 'H', minCols: '', cols: 'W', charset: 'custom', chars: '.#', distinct: false
+  }));
 });
 
 test('a grid without a width constraint needs review', () => {
@@ -669,10 +690,124 @@ test('a grid without a width constraint needs review', () => {
     'S_H'
   ]);
   assert.equal(rows[1].kind, 'grid');
+  assert.equal(rows[1].minCols, '');
   assert.equal(rows[1].cols, 'W');
   assert.equal(rows[1].charset, 'upper');
+  assert.equal(rows[1].distinct, false);
   assert.equal(rows[1].needsReview, true);
   assert.match(rows[1].reviewReason, /長さ/);
+});
+
+// Two lists of words with different lengths; only S must be distinct.
+const WORD_LISTS_ROWS = [
+  ok({ kind: 'ints', vars: [{ name: 'N', min: '1', max: '100' }, { name: 'M', min: '1', max: '100' }] }),
+  ok({ kind: 'grid', name: 'S', rows: 'N', minCols: '1', cols: '10', charset: 'lower', chars: '', distinct: true }),
+  ok({ kind: 'grid', name: 'T', rows: 'M', minCols: '1', cols: '10', charset: 'lower', chars: '', distinct: false })
+];
+
+test('vertical word lists read |S_i| ranges into minCols / cols and distinct only for S', () => {
+  const result = parseProblemText([
+    '問題文',
+    '高橋君は単語帳 S と、確かめたい単語 T を持っています。',
+    '制約',
+    '1 \\leq N \\leq 100',
+    '1 \\leq M \\leq 100',
+    '1 \\leq |S_i| \\leq 10',
+    'i \\neq j ならば S_i \\neq S_j',
+    '1 \\leq |T_j| \\leq 10',
+    'S_i, T_j は英小文字からなる文字列',
+    '入力',
+    '入力は以下の形式で標準入力から与えられる。',
+    'N M',
+    'S_1',
+    'S_2',
+    '\\vdots',
+    'S_N',
+    'T_1',
+    'T_2',
+    '\\vdots',
+    'T_M',
+    '出力',
+    '答えを出力せよ。'
+  ].join('\n'));
+  assert.deepEqual(assertSchema(result), WORD_LISTS_ROWS);
+  assert.deepEqual(result.warnings, []);
+});
+
+test('the word lists also parse from AtCoder-like HTML', () => {
+  const html = atcoderPage({
+    jaConstraints: [
+      '<li>\\(1 \\leq N \\leq 100\\)</li>',
+      '<li>\\(1 \\leq M \\leq 100\\)</li>',
+      '<li>\\(1 \\leq \\lvert S_i \\rvert \\leq 10\\)</li>',
+      '<li>\\(i \\neq j\\) ならば \\(S_i \\neq S_j\\)</li>',
+      '<li>\\(1 \\leq |T_j| \\leq 10\\)</li>',
+      '<li>\\(S_i, T_j\\) は英小文字からなる文字列</li>'
+    ].join('\n'),
+    jaInput: [
+      '<pre><var>N</var> <var>M</var>',
+      '<var>S_1</var>',
+      '<var>S_2</var>',
+      '<var>\\vdots</var>',
+      '<var>S_N</var>',
+      '<var>T_1</var>',
+      '<var>T_2</var>',
+      '<var>\\vdots</var>',
+      '<var>T_M</var>',
+      '</pre>'
+    ].join('\n'),
+    enConstraints: '<li>\\(1 \\leq |S_i| \\leq 3\\)</li><li>\\(S_i\\) consists of uppercase English letters.</li>',
+    enInput: '<pre><var>N</var> <var>M</var>\n<var>S_1</var>\n<var>\\vdots</var>\n<var>S_N</var>\n</pre>'
+  });
+  const result = parseProblemHtml(html);
+  assert.deepEqual(assertSchema(result), WORD_LISTS_ROWS);
+  assert.deepEqual(result.warnings, []);
+});
+
+test('other ways to say the strings are distinct mark only that grid', () => {
+  const cases = [
+    'S_i \\neq S_j (i \\neq j)',
+    'S_1, S_2, \\ldots, S_N は相異なる',
+    'S_i はすべて異なる'
+  ];
+  for (const distinctLine of cases) {
+    const rows = parseText([
+      '制約',
+      '1 \\leq N, M \\leq 50',
+      'S_i, T_i は英小文字からなる長さ 1 以上 M 以下の文字列',
+      distinctLine,
+      '入力',
+      'N M',
+      'S_1',
+      '\\vdots',
+      'S_N',
+      'T_1',
+      '\\vdots',
+      'T_N'
+    ]);
+    assert.deepEqual(rows.slice(1).map((r) => [r.name, r.minCols, r.cols, r.distinct, r.needsReview]), [
+      ['S', '1', 'M', true, false],
+      ['T', '1', 'M', false, false]
+    ], distinctLine);
+  }
+});
+
+test('a grid row with only an upper length gets minCols 1 and needs review', () => {
+  const rows = parseText([
+    '制約',
+    '1 \\leq N \\leq 10',
+    '|S_i| \\leq 20',
+    'S_i は英小文字からなる',
+    '入力',
+    'N',
+    'S_1',
+    '\\vdots',
+    'S_N'
+  ]);
+  assert.equal(rows[1].minCols, '1');
+  assert.equal(rows[1].cols, '20');
+  assert.equal(rows[1].needsReview, true);
+  assert.match(rows[1].reviewReason, /長さの下限/);
 });
 
 // ---------- Strings ----------

@@ -1,17 +1,20 @@
 'use strict';
 
 const { evaluateExpr } = require('./expression');
-const { getSizeVariables, isFixedLength, validateFormat } = require('./inputFormat');
+const {
+  countStrings,
+  getCharsetChars,
+  getSizeVariables,
+  isFixedLength,
+  isFixedWidth,
+  validateFormat
+} = require('./inputFormat');
 
 const MAX_INPUT_CHARS = 20000000n;
 const UINT32_RANGE = 0x100000000;
 const EXAMPLE_OPTIONS = { seed: 1, mode: 'max', sizeCap: 4, valueCap: 10, boundaryRate: 0 };
-const CHARSET_CHARS = {
-  lower: 'abcdefghijklmnopqrstuvwxyz',
-  upper: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
-  digit: '0123456789'
-};
 const BOUNDARY_PATTERNS = ['min', 'max', 'same', 'minOrMax'];
+const LINE_BOUNDARY_PATTERNS = ['sameChar', 'minLength', 'maxLength'];
 const TOO_LARGE_MESSAGE = '入力が 2,000 万文字を超えそうなので、作るのをやめました。個数や長さの上限を小さくしてください。';
 
 function fail(message) {
@@ -327,14 +330,6 @@ function tokenWidth(lo, hi) {
   return BigInt(Math.max(lo.toString().length, hi.toString().length) + 1);
 }
 
-function charsOf(row) {
-  if (row.charset === 'custom') {
-    return Array.from(new Set(Array.from(row.chars)));
-  }
-
-  return Array.from(CHARSET_CHARS[row.charset] || CHARSET_CHARS.lower);
-}
-
 function rowLabel(row, rowIndex) {
   return `${rowIndex + 1}行目（${String(row.name).trim()}）`;
 }
@@ -467,9 +462,115 @@ function planString(row, rowIndex, ctx) {
 
   const length = chooseSize(minLength.value, maxLength.value, ctx);
   return rowPlan(length + 1n, (lines) => {
-    const chars = charsOf(row);
+    const chars = getCharsetChars(row);
     lines.push(randomLine(Number(length), chars, pickSameChar(chars, ctx), ctx.rng));
   });
+}
+
+// Grows the line-length range inside [minLength, maxLength] until `need` different strings exist.
+function widenLineLengths(minLength, maxLength, lo, hi, charCount, need) {
+  if (charCount === 1) {
+    let missing = need - (hi - lo + 1n);
+    const up = missing > 0n ? minBig(maxLength - hi, missing) : 0n;
+    missing -= up;
+    const down = missing > 0n ? minBig(lo - minLength, missing) : 0n;
+    missing -= down;
+    return missing > 0n ? null : [lo - down, hi + up];
+  }
+
+  let low = lo;
+  let high = hi;
+  let total = countStrings(charCount, low, high, need);
+  while (total < need) {
+    if (high < maxLength) {
+      high += 1n;
+      total += countStrings(charCount, high, high, need);
+    } else if (low > minLength) {
+      low -= 1n;
+      total += countStrings(charCount, low, low, need);
+    } else {
+      return null;
+    }
+  }
+
+  return [low, high];
+}
+
+function randomLines(count, lo, hi, chars, ctx) {
+  const { rng } = ctx;
+  if (lo === hi) {
+    const sameChar = pickSameChar(chars, ctx);
+    return Array.from({ length: count }, () => randomLine(Number(hi), chars, sameChar, rng));
+  }
+
+  const pattern = rng.chance(ctx.boundaryRate)
+    ? LINE_BOUNDARY_PATTERNS[uniformBelow(rng.nextUint32, LINE_BOUNDARY_PATTERNS.length)]
+    : null;
+  const sameChar = pattern === 'sameChar' ? chars[uniformBelow(rng.nextUint32, chars.length)] : null;
+  const lines = new Array(count);
+  for (let index = 0; index < count; index += 1) {
+    const length = pattern === 'minLength' ? lo : pattern === 'maxLength' ? hi : rng.int(lo, hi);
+    lines[index] = randomLine(Number(length), chars, sameChar, rng);
+  }
+
+  return lines;
+}
+
+// Turns 0, 1, 2, ... into the strings of length minLength, minLength + 1, ... in order.
+function decodeLine(index, minLength, chars) {
+  const base = BigInt(chars.length);
+  if (base === 1n) {
+    return chars[0].repeat(Number(minLength + index));
+  }
+
+  let length = minLength;
+  let rest = index;
+  while (rest >= base ** length) {
+    rest -= base ** length;
+    length += 1n;
+  }
+
+  const picked = new Array(Number(length));
+  for (let position = picked.length - 1; position >= 0; position -= 1) {
+    picked[position] = chars[Number(rest % base)];
+    rest /= base;
+  }
+
+  return picked.join('');
+}
+
+function distinctLines(count, lo, hi, chars, ctx) {
+  const { rng } = ctx;
+  const need = BigInt(count);
+  let low = lo;
+  let high = hi;
+  if (rng.chance(ctx.boundaryRate)) {
+    const lengths = (low === high ? [low] : [low, high])
+      .filter((length) => countStrings(chars.length, length, length, need) >= need);
+    if (lengths.length > 0) {
+      low = lengths[uniformBelow(rng.nextUint32, lengths.length)];
+      high = low;
+    }
+  }
+
+  // With few possible strings, pick distinct indexes; otherwise retrying on a repeat is cheap.
+  const plenty = 2n * need;
+  const total = countStrings(chars.length, low, high, plenty);
+  if (total < plenty) {
+    return sampleDistinct(count, 0n, total - 1n, rng).map((index) => decodeLine(index, low, chars));
+  }
+
+  const seen = new Set();
+  const lines = [];
+  while (lines.length < count) {
+    const line = randomLine(Number(rng.int(low, high)), chars, null, rng);
+    if (!seen.has(line)) {
+      seen.add(line);
+      lines.push(line);
+    }
+  }
+
+  return lines;
 }
 
 function planGrid(row, rowIndex, ctx) {
@@ -479,18 +580,45 @@ function planGrid(row, rowIndex, ctx) {
     return rows;
   }
 
-  const cols = evaluateSize(row.cols, ctx, where, '列数');
+  const fixed = isFixedWidth(row);
+  const cols = evaluateSize(row.cols, ctx, where, fixed ? '文字列の長さ' : '最長の長さ');
   if (!cols.ok) {
     return cols;
   }
 
-  return rowPlan(rows.value * (cols.value + 1n), (lines) => {
-    const chars = charsOf(row);
-    const sameChar = pickSameChar(chars, ctx);
-    const rowCount = Number(rows.value);
-    const colCount = Number(cols.value);
-    for (let r = 0; r < rowCount; r += 1) {
-      lines.push(randomLine(colCount, chars, sameChar, ctx.rng));
+  const minCols = fixed ? cols : evaluateSize(row.minCols, ctx, where, '最短の長さ');
+  if (!minCols.ok) {
+    return minCols;
+  }
+
+  if (minCols.value > cols.value) {
+    return fail(`${where}: 最短の長さ（${minCols.value}）が最長の長さ（${cols.value}）より長いので、長さを選べません。`);
+  }
+
+  if (rows.value > MAX_INPUT_CHARS) {
+    return fail(TOO_LARGE_MESSAGE);
+  }
+
+  const chars = getCharsetChars(row);
+  const distinct = row.distinct === true;
+  const top = capSize(minCols.value, cols.value, ctx);
+  let lo = ctx.mode === 'max' ? top : minCols.value;
+  let hi = top;
+  if (distinct) {
+    const widened = widenLineLengths(minCols.value, cols.value, lo, hi, chars.length, rows.value);
+    if (!widened) {
+      const available = countStrings(chars.length, minCols.value, cols.value, rows.value);
+      return fail(`${where}: 作れる文字列は ${available} 種類しかないので、${rows.value} 行をすべて異なる文字列にできません。`);
+    }
+
+    [lo, hi] = widened;
+  }
+
+  return rowPlan(rows.value * (hi + 1n), (lines) => {
+    const count = Number(rows.value);
+    const built = distinct ? distinctLines(count, lo, hi, chars, ctx) : randomLines(count, lo, hi, chars, ctx);
+    for (const line of built) {
+      lines.push(line);
     }
   });
 }

@@ -105,6 +105,16 @@ test('formatComplexity renames symbols and merges names that become equal', () =
   assert.equal(formatComplexity(symbolComplexity('cnt')), 'O(CNT)');
 });
 
+test('element-length symbols like |S[]| are shown as they are', () => {
+  const element = symbolComplexity('|S[]|');
+  assert.equal(formatComplexity(element), 'O(|S[]|)');
+  assert.equal(formatComplexity(multiply(multiply(n, m), element)), 'O(N·M·|S[]|)');
+  assert.equal(formatComplexity(multiply(element, element)), 'O(|S[]|²)');
+  assert.equal(formatComplexity(logOf('|S[]|')), 'O(log |S[]|)');
+  assert.equal(formatComplexity(element, { rename: { '|S[]|': 'W' } }), 'O(W)');
+  assert.deepEqual(symbolsOf(add(element, multiply(n, symbolComplexity('|a|')))), ['n', '|a|', '|S[]|']);
+});
+
 test('formatCount omits O( ) for loop labels', () => {
   assert.equal(formatCount(n), 'N');
   assert.equal(formatCount(nLogN), 'N log N');

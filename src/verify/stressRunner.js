@@ -5,7 +5,9 @@ const MIN_ITERATIONS = 1;
 const MAX_ITERATIONS = 10000;
 const DEFAULT_COMPARE_MODE = 'tokens';
 const BOUNDARY_RATE = 0.2;
-const MAX_MODE_PERIOD = 10;
+const DEFAULT_MAX_EVERY = 10;
+// Without a naive solution there is nothing to compare, so max-size runs come more often.
+const MAX_EVERY_WITHOUT_NAIVE = 5;
 const SMALL_SIZE_START = 2;
 const SMALL_SIZE_CAP = 8;
 const SMALL_VALUE_START = 3;
@@ -58,12 +60,18 @@ function normalizeIterations(value) {
   return Math.min(MAX_ITERATIONS, Math.max(MIN_ITERATIONS, Math.floor(value)));
 }
 
-function getStressPlan(iteration, totalIterations) {
+function normalizeMaxEvery(options) {
+  const maxEvery = isPlainObject(options) ? options.maxEvery : undefined;
+  return Number.isInteger(maxEvery) && maxEvery >= 2 ? maxEvery : DEFAULT_MAX_EVERY;
+}
+
+function getStressPlan(iteration, totalIterations, options = {}) {
   const total = normalizePlanTotal(totalIterations);
+  const maxEvery = normalizeMaxEvery(options);
   const rawIndex = Number(iteration);
   const index = Math.min(total - 1, Math.max(0, Number.isFinite(rawIndex) ? Math.floor(rawIndex) : 0));
 
-  if (index % MAX_MODE_PERIOD === MAX_MODE_PERIOD - 1) {
+  if (index % maxEvery === maxEvery - 1) {
     return { mode: 'max', sizeCap: null, valueCap: null, boundaryRate: BOUNDARY_RATE };
   }
 
@@ -217,6 +225,7 @@ async function runStressTest(options) {
   }
   // Without a naive solution only runtime errors and timeouts of the main solution are checked.
   const hasNaive = typeof runNaive === 'function';
+  const maxEvery = hasNaive ? DEFAULT_MAX_EVERY : MAX_EVERY_WITHOUT_NAIVE;
 
   const total = normalizeIterations(iterations);
   const baseSeed = seed === undefined || seed === null
@@ -263,7 +272,7 @@ async function runStressTest(options) {
       });
     }
 
-    const plan = getStressPlan(iteration, total);
+    const plan = getStressPlan(iteration, total, { maxEvery });
     const caseSeed = deriveCaseSeed(baseSeed, iteration);
     const label = iterationLabel(iteration, plan.mode);
     const caseFields = { iteration, seed: baseSeed, caseSeed, mode: plan.mode };

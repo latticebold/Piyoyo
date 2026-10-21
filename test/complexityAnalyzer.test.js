@@ -1069,12 +1069,82 @@ test('correct answer: costly single operations get a call entry on their own lin
     assert.equal(calls.has(line), false, `line ${line}`);
   }
   assert.deepEqual(
-    result.lines.filter((entry) => entry.kind === 'loop').map((entry) => entry.line),
-    [5, 10, 11]
+    result.lines.filter((entry) => entry.kind === 'loop').map((entry) => [entry.line, entry.label]),
+    [[5, '× M'], [10, '× N'], [11, '× |S[]|']]
   );
   assert.equal(calls.get(16).label, 'O(N)');
-  assert.equal(formatComplexity(result.time), 'O(N²·M)');
-  assert.equal(result.confidence, 'medium');
+  assert.equal(formatComplexity(result.time), 'O(N·M·|S[]|)');
+  assert.equal(result.confidence, 'high');
+  assert.deepEqual(result.warnings, []);
+  assert.ok(result.symbols.includes('|S[]|'));
+});
+
+test('rows of a lines read use the element-length symbol |g[]|', () => {
+  const result = analyze([
+    'h, w = map(int, input().split())',
+    'g = [input() for _ in range(h)]',
+    'cnt = 0',
+    'for row in g:',
+    '    for c in row:',
+    '        if c == "#":',
+    '            cnt += 1',
+    'for i in range(h):',
+    '    if "#" in g[i]:',
+    '        print(g[i][::-1])'
+  ]);
+  assert.equal(result.ok, true);
+  assert.equal(formatComplexity(result.time), 'O(H·|g[]|)');
+  assert.equal(formatComplexity(result.space), 'O(H·|g[]|)');
+  assert.equal(result.confidence, 'high');
+  assert.deepEqual(result.warnings, []);
+  assert.deepEqual(result.symbols, ['h', '|g[]|']);
+  assert.equal(result.lines.find((entry) => entry.line === 5).label, '× |g[]|');
+  const calls = callEntries(result);
+  assert.deepEqual([calls.get(9).label, calls.get(9).note], ['O(|g[]|)', 'in（文字列）']);
+  assert.deepEqual([calls.get(10).label, calls.get(10).note], ['O(|g[]|)', 'スライス']);
+  assert.equal(formatComplexity(result.time, { rename: { h: 'H', '|g[]|': 'W' } }), 'O(H·W)');
+});
+
+test('a known element length is used instead of |g[]|', () => {
+  const result = analyze([
+    'n, m = map(int, input().split())',
+    'g = [[0] * m for _ in range(n)]',
+    'for row in g:',
+    '    for x in row:',
+    '        pass',
+    'for j in range(len(g[0])):',
+    '    pass'
+  ]);
+  assert.equal(result.ok, true);
+  assert.equal(formatComplexity(result.time), 'O(N·M)');
+  assert.deepEqual(result.symbols, ['n', 'm']);
+  assert.deepEqual(result.warnings, []);
+});
+
+test('a nested intList read is a matrix with rows and |a[]| columns', () => {
+  const result = analyze([
+    'n = int(input())',
+    'a = [list(map(int, input().split())) for _ in range(n)]',
+    'total = 0',
+    'for row in a:',
+    '    for x in row:',
+    '        total += x',
+    'for i in range(n):',
+    '    for j in range(len(a[i])):',
+    '        total += a[i][j]',
+    'for r1, r2 in zip(a, a[1:]):',
+    '    total += sum(x != y for x, y in zip(r1, r2))'
+  ]);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.inputs, [
+    { line: 1, targets: ['n'], kind: 'ints', count: null },
+    { line: 2, targets: ['a'], kind: 'intList', count: n, nested: true }
+  ]);
+  assert.equal(formatComplexity(result.time), 'O(N·|a[]|)');
+  assert.equal(formatComplexity(result.space), 'O(N·|a[]|)');
+  assert.equal(result.confidence, 'high');
+  assert.deepEqual(result.warnings, []);
+  assert.deepEqual(result.symbols, ['n', '|a[]|']);
 });
 
 test('call entries name each costly operation and skip constant ones', () => {

@@ -529,6 +529,9 @@ function classifyInputRead(ctx, valueNode, targetNode) {
       read.kind = 'lines';
     } else if (isIntRead(program, element)) {
       read.kind = 'intList';
+    } else if (isIntsSource(program, element) || wrappedIntsSource(program, element)) {
+      read.kind = 'intList';
+      read.nested = true;
     }
   } else if (!isReadRooted(program, value)) {
     return null;
@@ -562,7 +565,7 @@ function inputCount(ctx, base) {
   return C.isConstant(multiplier) ? null : multiplier;
 }
 
-function recordInput(ctx, node, targets, kind, count) {
+function recordInput(ctx, node, targets, kind, count, nested = false) {
   if (ctx.silent) {
     return;
   }
@@ -571,7 +574,11 @@ function recordInput(ctx, node, targets, kind, count) {
     return;
   }
   ctx.inputKeys.add(key);
-  ctx.inputs.push({ line: lineOf(node), targets, kind, count });
+  const entry = { line: lineOf(node), targets, kind, count };
+  if (nested) {
+    entry.nested = true;
+  }
+  ctx.inputs.push(entry);
 }
 
 function recordStrayInput(ctx, node) {
@@ -621,6 +628,7 @@ function makeInfo(fields = {}) {
     value: null,
     size: null,
     elemSize: null,
+    elemKind: null,
     elemTotal: null,
     adjacency: false,
     memory: null,
@@ -1172,7 +1180,8 @@ function callSize(ctx, node) {
     return args.length >= 2 ? args.slice(1).map((arg) => sizeOf(ctx, arg)).reduce(addOrNull, C.constant()) : null;
   }
   if (name === 'zip') {
-    return args.map((arg) => sizeOf(ctx, arg)).reduce(addOrNull, C.constant());
+    // zip stops at the shortest argument; to keep it simple the first argument's length is used.
+    return args.length > 0 ? sizeOf(ctx, args[0]) : C.constant();
   }
   if (name === 'permutations') {
     const base = args.length ? sizeOf(ctx, args[0]) : null;
@@ -1202,6 +1211,11 @@ function callSize(ctx, node) {
   return null;
 }
 
+// Length of each element of a collection whose element length the code does not show, e.g. |S[]|.
+function elementSymbol(name) {
+  return C.symbolComplexity(`|${name}[]|`);
+}
+
 function subscriptSize(ctx, node) {
   if (node.slice._type === 'Slice') {
     return sizeOf(ctx, node.value);
@@ -1217,6 +1231,7 @@ function subscriptSize(ctx, node) {
     if (info && info.kind === 'str') {
       return C.constant();
     }
+    return elementSymbol(node.value.id);
   }
   return null;
 }
@@ -1227,7 +1242,13 @@ function elemSizeOf(ctx, node) {
   }
   if (isName(node)) {
     const info = lookup(ctx, node.id);
-    return info ? info.elemSize : null;
+    if (!info) {
+      return null;
+    }
+    if (info.elemSize) {
+      return info.elemSize;
+    }
+    return info.kind === 'list' && !info.adjacency ? elementSymbol(node.id) : null;
   }
   if ((node._type === 'List' || node._type === 'Tuple') && node.elts.length > 0 && isSequenceLike(ctx, node.elts[0])) {
     return sizeOf(ctx, node.elts[0]);
@@ -1473,13 +1494,16 @@ function describeSubscript(ctx, node) {
   }
   const info = isName(node.value) ? lookup(ctx, node.value.id) : null;
   if (info && info.elemSize) {
-    return makeInfo({ kind: 'list', size: info.elemSize });
+    return makeInfo({ kind: info.elemKind || 'list', size: info.elemSize });
   }
   if (info && info.adjacency) {
     return makeInfo({ kind: 'list', size: info.elemTotal });
   }
   if (info && info.kind === 'str') {
     return makeInfo({ kind: 'str', size: C.constant() });
+  }
+  if (isName(node.value)) {
+    return makeInfo({ kind: info ? info.elemKind || null : null, size: elementSymbol(node.value.id) });
   }
   return makeInfo();
 }
@@ -1566,9 +1590,13 @@ function iterInfo(ctx, node) {
       }
       result.count = sizeOf(ctx, node);
       if (info && info.elemSize) {
-        result.elem = makeInfo({ kind: 'list', size: info.elemSize });
+        result.elem = makeInfo({ kind: info.elemKind || 'list', size: info.elemSize });
       } else if (info && info.kind === 'str') {
         result.elem = makeInfo({ kind: 'str', size: C.constant() });
+      } else if (info && info.adjacency) {
+        result.elem = makeInfo({ kind: 'list', size: info.elemTotal });
+      } else if (!info || info.kind !== 'int') {
+        result.elem = makeInfo({ kind: info ? info.elemKind || null : null, size: elementSymbol(node.id) });
       }
       result.exact = info ? info.exactSize : null;
       return result;
@@ -1620,9 +1648,10 @@ function callIterInfo(ctx, node, result) {
     }
     if (name === 'zip') {
       const parts = args.map((arg) => iterInfo(ctx, arg));
+      // zip stops at the shortest argument; to keep it simple the first argument's length is used.
       return {
         ...result,
-        count: parts.map((part) => part.count).reduce(addOrNull, C.constant()),
+        count: parts.length > 0 ? parts[0].count : C.constant(),
         elems: parts.map((part) => part.elem)
       };
     }
@@ -2087,13 +2116,17 @@ function exprStmtCost(ctx, node) {
     isReadRooted(program, value.args[0])) {
     const element = value.args[0];
     let kind = 'unknown';
+    let nested = false;
     if (isIntRead(program, element)) {
       kind = 'intList';
     } else if (isLineList(program, element)) {
       kind = 'lines';
+    } else if (isIntsSource(program, element) || wrappedIntsSource(program, element)) {
+      kind = 'intList';
+      nested = true;
     }
     const base = rootName(value.func.value);
-    recordInput(ctx, node, base ? [base] : [], kind, inputCount(ctx, null));
+    recordInput(ctx, node, base ? [base] : [], kind, inputCount(ctx, null), nested);
     ctx.handledInputs.add(element);
   }
   return exprCost(ctx, value);
@@ -2114,7 +2147,7 @@ function assignCost(ctx, node, targets) {
 
 function applyInputRead(ctx, node, targets, read) {
   const names = targetNames(targets[0]);
-  recordInput(ctx, node, names, read.kind, inputCount(ctx, read.count));
+  recordInput(ctx, node, names, read.kind, inputCount(ctx, read.count), Boolean(read.nested));
   for (const target of targets) {
     bindInputTarget(ctx, target, read);
   }
@@ -2153,7 +2186,16 @@ function bindInputTarget(ctx, target, read) {
   } else {
     const size = read.count || symbolSize;
     const kind = read.kind === 'unknown' && !read.count ? null : 'list';
-    assignName(ctx, name, makeInfo({ kind, size, memory: size, fresh: true }));
+    const rows = read.kind === 'lines' || read.nested;
+    const elemSize = rows ? elementSymbol(name) : null;
+    assignName(ctx, name, makeInfo({
+      kind,
+      size,
+      elemSize,
+      elemKind: read.kind === 'lines' ? 'str' : rows ? 'list' : null,
+      memory: elemSize ? C.multiply(size, elemSize) : size,
+      fresh: true
+    }));
   }
 }
 

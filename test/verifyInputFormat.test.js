@@ -9,10 +9,17 @@ const {
   collectNames,
   createRow,
   createVar,
+  countStrings,
+  getCharsetChars,
   getSizeVariables,
+  isFixedWidth,
   normalizeFormat,
   validateFormat
 } = require('../src/verify/inputFormat');
+
+function gridRow(fields) {
+  return { kind: 'grid', name: 'G', rows: '3', minCols: '', cols: '3', charset: 'custom', chars: '.#', distinct: false, ...fields };
+}
 
 function designExample() {
   return {
@@ -173,9 +180,28 @@ test('normalizeFormat fills defaults and converts types', () => {
     needsReview: true, reviewReason: '長さが不明'
   });
   assert.deepEqual(format.rows[4], {
-    kind: 'grid', name: 'G', rows: '3', cols: '4', charset: 'custom', chars: '.#', needsReview: false, reviewReason: ''
+    kind: 'grid', name: 'G', rows: '3', minCols: '', cols: '4', charset: 'custom', chars: '.#', distinct: false,
+    needsReview: false, reviewReason: ''
   });
   assert.equal(warnings.length, 4);
+});
+
+test('normalizeFormat keeps an old grid row fixed-width and reads the new grid fields', () => {
+  const oldRow = { kind: 'grid', name: 'S', rows: 'H', cols: 'W', charset: 'custom', chars: '.#' };
+  const { format, warnings } = normalizeFormat({ rows: [intsRow(['H', '1', '5'], ['W', '1', '5']), oldRow] });
+  assert.deepEqual(warnings, []);
+  assert.deepEqual(format.rows[1], {
+    kind: 'grid', name: 'S', rows: 'H', minCols: '', cols: 'W', charset: 'custom', chars: '.#', distinct: false,
+    needsReview: false, reviewReason: ''
+  });
+  assert.equal(isFixedWidth(format.rows[1]), true);
+  assert.equal(isFixedWidth(oldRow), true);
+  assert.deepEqual(validateFormat(format), { ok: true, errors: [] });
+
+  const newer = normalizeFormat({ rows: [{ kind: 'grid', name: 'S', rows: 4, minCols: 1, cols: '3', charset: 'lower', distinct: true }] });
+  assert.equal(newer.format.rows[0].minCols, '1');
+  assert.equal(newer.format.rows[0].distinct, true);
+  assert.equal(isFixedWidth(newer.format.rows[0]), false);
 });
 
 test('validateFormat accepts the design example and valid forward references', () => {
@@ -277,6 +303,55 @@ test('validateFormat checks custom characters', () => {
   assert.equal(validateFormat({ rows: [{ kind: 'grid', name: 'G', rows: '2', cols: '2', charset: 'lower', chars: '' }] }).ok, true);
 });
 
+test('createRow makes a fixed-width grid without distinct lines', () => {
+  const grid = createRow('grid');
+  assert.equal(grid.minCols, '');
+  assert.equal(grid.distinct, false);
+  assert.equal(isFixedWidth(grid), true);
+});
+
+test('validateFormat checks the grid line-length fields', () => {
+  const sizes = intsRow(['H', '1', '10'], ['W', '1', '10']);
+  assert.deepEqual(validateFormat({ rows: [sizes, gridRow({ rows: 'H', minCols: '1', cols: 'W' })] }), { ok: true, errors: [] });
+  assert.deepEqual(validateFormat({ rows: [sizes, gridRow({ rows: 'H', minCols: 'W-1', cols: 'W' })] }), { ok: true, errors: [] });
+
+  assertSingleError({ rows: [gridRow({ minCols: '2N' })] }, 0, 'minCols', /2N/);
+  assertSingleError({ rows: [gridRow({ minCols: 'X' })] }, 0, 'minCols', /X.*定義されていません/);
+  assertSingleError({ rows: [gridRow({ minCols: 'H' }), sizes] }, 0, 'minCols', /まだ使えません/);
+  assertSingleError({ rows: [gridRow({ minCols: '-1' })] }, 0, 'minCols', /負/);
+  assertSingleError({ rows: [gridRow({ minCols: '5', cols: '3' })] }, 0, 'cols', /最短の長さが最長の長さ/);
+  assertSingleError({ rows: [sizes, gridRow({ minCols: 'W+1', cols: 'W' })] }, 1, 'cols');
+  assertSingleError({ rows: [gridRow({ distinct: 'yes' })] }, 0, 'distinct');
+  assert.equal(validateFormat({ rows: [{ kind: 'grid', name: 'G', rows: '2', cols: '2', charset: 'lower', chars: '' }] }).ok, true);
+});
+
+test('validateFormat reports grid lines that can never all differ', () => {
+  assertSingleError({ rows: [gridRow({ rows: '5', cols: '2', distinct: true })] }, 0, 'distinct', /4 種類/);
+  assertSingleError({ rows: [gridRow({ rows: '15', minCols: '1', cols: '3', distinct: true })] }, 0, 'distinct', /14 種類/);
+  assertSingleError({ rows: [gridRow({ rows: '5', minCols: '0', cols: '3', charset: 'custom', chars: 'aaa', distinct: true })] }, 0, 'distinct', /4 種類/);
+  assert.equal(validateFormat({ rows: [gridRow({ rows: '4', minCols: '0', cols: '3', charset: 'custom', chars: 'aaa', distinct: true })] }).ok, true);
+  assertSingleError({ rows: [intsRow(['H', '20', '30']), gridRow({ rows: 'H', cols: '4', distinct: true })] }, 1, 'distinct');
+
+  assert.equal(validateFormat({ rows: [gridRow({ rows: '14', minCols: '1', cols: '3', distinct: true })] }).ok, true);
+  assert.equal(validateFormat({ rows: [gridRow({ rows: '4', cols: '2', distinct: true })] }).ok, true);
+  assert.equal(validateFormat({ rows: [gridRow({ rows: '10^6', cols: '10^5', charset: 'lower', distinct: true })] }).ok, true);
+  // Could work for small H, so the generator decides at run time.
+  assert.equal(validateFormat({ rows: [intsRow(['H', '1', '30']), gridRow({ rows: 'H', cols: '4', distinct: true })] }).ok, true);
+});
+
+test('countStrings and getCharsetChars count the possible strings', () => {
+  assert.equal(countStrings(2, 1n, 3n, 100n), 14n);
+  assert.equal(countStrings(2, 0n, 0n, 100n), 1n);
+  assert.equal(countStrings(26, 1n, 100000n, 1000n), 1000n);
+  assert.equal(countStrings(1, 5n, 10n ** 18n, 7n), 7n);
+  assert.equal(countStrings(1, 5n, 9n, 100n), 5n);
+  assert.equal(countStrings(2, 3n, 2n, 100n), 0n);
+  assert.deepEqual(getCharsetChars({ charset: 'custom', chars: '..##a' }), ['.', '#', 'a']);
+  assert.equal(getCharsetChars({ charset: 'digit' }).join(''), '0123456789');
+  assert.equal(getCharsetChars({ charset: 'lower' }).length, 26);
+  assert.equal(getCharsetChars({ charset: 'upper' })[0], 'A');
+});
+
 test('validateFormat reports impossible distinct values', () => {
   assertSingleError({ rows: [listRow({ length: '5', min: '1', max: '3', order: 'strictAsc' })] }, 0, 'order', /3 種類/);
   assertSingleError({ rows: [listRow({ length: '5', min: '1', max: '3', order: 'strictDesc' })] }, 0, 'order');
@@ -331,4 +406,10 @@ test('getSizeVariables adds variables that bound a size variable', () => {
     intsRow(['M', 'N', '20']),
     { kind: 'grid', name: 'G', rows: 'M', cols: '3', charset: 'lower', chars: '' }
   ] }), new Set(['M', 'N']));
+
+  assert.deepEqual(getSizeVariables({ rows: [
+    intsRow(['H', '1', '10'], ['L', '1', '5'], ['W', 'L', '10'], ['K', '1', '9']),
+    gridRow({ rows: 'H', minCols: 'L', cols: '20' }),
+    gridRow({ name: 'G2', rows: '2', minCols: '', cols: 'W' })
+  ] }), new Set(['H', 'L', 'W']));
 });

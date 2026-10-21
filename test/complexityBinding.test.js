@@ -15,8 +15,17 @@ function stringRow(name, maxLength) {
   return { kind: 'string', name, minLength: '', maxLength, charset: 'lower', chars: '' };
 }
 
+// The old grid shape, without minCols and distinct.
 function gridRow(name, rows, cols) {
   return { kind: 'grid', name, rows, cols, charset: 'custom', chars: '.#' };
+}
+
+function linesGridRow(name, rows, cols, minCols = '') {
+  return { kind: 'grid', name, rows, cols, minCols, charset: 'lower', chars: '', distinct: false };
+}
+
+function matrixRow(name, rows, cols) {
+  return { kind: 'matrix', name, rows, cols, min: '1', max: '10^9' };
 }
 
 const FORMAT = {
@@ -274,6 +283,141 @@ test('bindSymbols still binds the other symbols when one maximum is broken', () 
   const result = bindSymbols({ symbols: ['n', 'm'], inputs: [] }, format);
   assert.deepEqual(result.values, { n: 100 });
   assert.deepEqual(result.unbound, ['m']);
+});
+
+test('bindSymbols binds element lengths in the ABC-style lines case', () => {
+  const format = {
+    rows: [
+      intsRow(['N', '1', '100'], ['M', '1', '100']),
+      linesGridRow('S', 'N', '10', '1'),
+      linesGridRow('T', 'M', '10')
+    ]
+  };
+  const analysis = {
+    symbols: ['N', 'M', '|S[]|', '|T[]|'],
+    inputs: [input('ints', ['N', 'M']), input('lines', ['S'], 2), input('lines', ['T'], 3)]
+  };
+  const result = bindSymbols(analysis, format);
+  assert.deepEqual(result.values, { N: 100, M: 100, '|S[]|': 10, '|T[]|': 10 });
+  assert.deepEqual(result.unbound, []);
+  assert.deepEqual(result.bindings.slice(2), [
+    { symbol: '|S[]|', source: 'name', formatVar: null, value: 10 },
+    { symbol: '|T[]|', source: 'name', formatVar: null, value: 10 }
+  ]);
+  assert.deepEqual(result.rename, { N: 'N', M: 'M' });
+});
+
+test('bindSymbols binds |g| to rows and |g[]| to cols by read order', () => {
+  const format = {
+    rows: [
+      intsRow(['H', '1', '500'], ['W', '1', '2000']),
+      linesGridRow('C', 'H', 'W', '1')
+    ]
+  };
+  const analysis = { symbols: ['|g|', '|g[]|'], inputs: [input('ints', ['h', 'w']), input('lines', ['g'], 2)] };
+  const result = bindSymbols(analysis, format);
+  assert.deepEqual(result.values, { '|g|': 500, '|g[]|': 2000 });
+  assert.deepEqual(result.bindings, [
+    { symbol: '|g|', source: 'order', formatVar: 'H', value: 500 },
+    { symbol: '|g[]|', source: 'order', formatVar: 'W', value: 2000 }
+  ]);
+  assert.deepEqual(result.rename, { '|g|': 'H', '|g[]|': 'W' });
+});
+
+test('bindSymbols binds |S[]| by name to the cols of a grid with variable cols', () => {
+  const format = {
+    rows: [
+      intsRow(['H', '1', '50'], ['W', '1', '80']),
+      linesGridRow('S', 'H', 'W')
+    ]
+  };
+  const result = bindSymbols({ symbols: ['|s[]|', '|S|'], inputs: [] }, format);
+  assert.deepEqual(result.values, { '|s[]|': 80, '|S|': 50 });
+  assert.deepEqual(result.bindings.map((binding) => binding.source), ['name', 'name']);
+  assert.deepEqual(result.rename, { '|s[]|': 'W', '|S|': 'H' });
+});
+
+test('bindSymbols binds element lengths of old grid rows without minCols', () => {
+  const format = {
+    rows: [
+      intsRow(['H', '1', '30'], ['W', '1', '40']),
+      gridRow('G', 'H', 'W')
+    ]
+  };
+  const byOrder = bindSymbols({ symbols: ['|x|', '|x[]|'], inputs: [input('ints', ['h', 'w']), input('lines', ['x'])] }, format);
+  assert.deepEqual(byOrder.values, { '|x|': 30, '|x[]|': 40 });
+  assert.deepEqual(byOrder.rename, { '|x|': 'H', '|x[]|': 'W' });
+
+  const byName = bindSymbols({ symbols: ['|G[]|'], inputs: [] }, format);
+  assert.deepEqual(byName.values, { '|G[]|': 40 });
+});
+
+test('bindSymbols binds |a| to rows and |a[]| to cols of a matrix', () => {
+  const format = {
+    rows: [
+      intsRow(['N', '1', '300'], ['M', '1', '20']),
+      matrixRow('A', 'N', 'M')
+    ]
+  };
+  const byOrder = bindSymbols({
+    symbols: ['|grid|', '|grid[]|'],
+    inputs: [input('ints', ['n', 'm']), input('intList', ['grid'], 2)]
+  }, format);
+  assert.deepEqual(byOrder.values, { '|grid|': 300, '|grid[]|': 20 });
+  assert.deepEqual(byOrder.bindings.map((binding) => [binding.symbol, binding.source, binding.formatVar]), [
+    ['|grid|', 'order', 'N'],
+    ['|grid[]|', 'order', 'M']
+  ]);
+  assert.deepEqual(byOrder.rename, { '|grid|': 'N', '|grid[]|': 'M' });
+
+  const byName = bindSymbols({ symbols: ['|a|', '|a[]|'], inputs: [] }, format);
+  assert.deepEqual(byName.values, { '|a|': 300, '|a[]|': 20 });
+  assert.deepEqual(byName.bindings.map((binding) => binding.source), ['name', 'name']);
+});
+
+test('bindSymbols binds a literal matrix width without renaming it', () => {
+  const format = { rows: [intsRow(['N', '1', '300']), matrixRow('A', 'N', '3')] };
+  const result = bindSymbols({ symbols: ['|a[]|'], inputs: [] }, format);
+  assert.deepEqual(result.values, { '|a[]|': 3 });
+  assert.deepEqual(result.bindings, [{ symbol: '|a[]|', source: 'name', formatVar: null, value: 3 }]);
+  assert.deepEqual(result.rename, {});
+});
+
+test('bindSymbols lets a manual choice override |S[]|', () => {
+  const format = {
+    rows: [
+      intsRow(['N', '1', '100'], ['M', '1', '100']),
+      linesGridRow('S', 'N', '10', '1')
+    ]
+  };
+  const analysis = { symbols: ['|S[]|'], inputs: [input('ints', ['N', 'M']), input('lines', ['S'])] };
+
+  const byValue = bindSymbols(analysis, format, { manual: { '|S[]|': { value: 5 } } });
+  assert.deepEqual(byValue.values, { '|S[]|': 5 });
+  assert.deepEqual(byValue.bindings, [{ symbol: '|S[]|', source: 'manual', formatVar: null, value: 5 }]);
+  assert.deepEqual(byValue.rename, {});
+
+  const byVar = bindSymbols(analysis, format, { manual: { '|S[]|': { formatVar: 'M' } } });
+  assert.deepEqual(byVar.values, { '|S[]|': 100 });
+  assert.equal(byVar.bindings[0].source, 'manual');
+  assert.deepEqual(byVar.rename, { '|S[]|': 'M' });
+});
+
+test('bindSymbols leaves element lengths of flat rows unbound', () => {
+  const format = {
+    rows: [
+      intsRow(['N', '1', '100']),
+      intListRow('A', 'N'),
+      stringRow('S', 'N')
+    ]
+  };
+  const analysis = {
+    symbols: ['|a|', '|a[]|', '|s|', '|s[]|', '|[]|'],
+    inputs: [input('ints', ['n']), input('intList', ['a']), input('string', ['s'])]
+  };
+  const result = bindSymbols(analysis, format);
+  assert.deepEqual(result.values, { '|a|': 100, '|s|': 100 });
+  assert.deepEqual(result.unbound, ['|a[]|', '|s[]|', '|[]|']);
 });
 
 test('bindSymbols tolerates odd arguments', () => {

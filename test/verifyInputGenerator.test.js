@@ -153,6 +153,49 @@ function checkValues(values, lo, hi, row, options) {
   }
 }
 
+function isBlank(value) {
+  return value === undefined || value === null || String(value).trim() === '';
+}
+
+function charCountOf(row) {
+  return row.charset === 'custom' ? new Set(row.chars).size : { lower: 26, upper: 26, digit: 10 }[row.charset];
+}
+
+// How many different strings have a length in [lo, hi]; stops counting at `cap`.
+function stringsUpTo(charCount, lo, hi, cap) {
+  let total = 0n;
+  for (let length = hi; length >= lo && total < cap; length -= 1n) {
+    let count = 1n;
+    for (let step = 0n; step < length && count < cap; step += 1n) {
+      count *= BigInt(charCount);
+    }
+
+    total += count;
+  }
+
+  return total;
+}
+
+function checkGridLines(grid, row, minCols, cols, options) {
+  const top = cappedTop(minCols, cols, options.sizeCap);
+  const low = options.mode === 'max' ? top : minCols;
+  const lengths = grid.map((line) => BigInt(line.length));
+  // Distinct lines may use longer or shorter lines only when the capped range has too few strings.
+  const fits = row.distinct !== true || stringsUpTo(charCountOf(row), low, top, BigInt(grid.length)) >= BigInt(grid.length);
+  if (fits) {
+    lengths.forEach((length) => assertInRange(length, low, top, `${row.name} capped line length`));
+  }
+
+  if (row.distinct === true) {
+    assert.equal(new Set(grid).size, grid.length, `${row.name} has repeated lines`);
+  } else if (options.boundaryRate === 1 && grid.length > 0) {
+    const oneChar = new Set(grid.join('')).size <= 1;
+    const allMin = lengths.every((length) => length === minCols);
+    const allMax = lengths.every((length) => length === top);
+    assert.ok(oneChar || allMin || allMax, `${row.name} is not a boundary pattern`);
+  }
+}
+
 function checkInput(format, result, options = {}) {
   assert.equal(result.ok, true, result.message);
   const { input } = result;
@@ -244,16 +287,18 @@ function checkInput(format, result, options = {}) {
       parsed.push({ row, text });
     } else if (row.kind === 'grid') {
       const rows = Number(evalBound(row.rows, env));
-      const cols = Number(evalBound(row.cols, env));
+      const cols = evalBound(row.cols, env);
+      const minCols = isBlank(row.minCols) ? cols : evalBound(row.minCols, env);
       const grid = [];
       for (let r = 0; r < rows; r += 1) {
         const line = nextLine();
-        assert.equal(line.length, cols, `${row.name} row width`);
+        assertInRange(BigInt(line.length), minCols, cols, `${row.name} line length`);
         assertCharset(line, row);
         grid.push(line);
       }
 
-      parsed.push({ row, grid });
+      checkGridLines(grid, row, minCols, cols, options);
+      parsed.push({ row, grid, minCols, cols });
     } else {
       throw new Error(`unknown kind ${row.kind}`);
     }
@@ -468,6 +513,177 @@ test('generateInput builds strings and grids from the chosen characters', () => 
   const customText = runs.map((run) => run.parsed[4].text).join('');
   assert.ok(customText.includes('a') && customText.includes('b'));
   assert.ok(runs.some((run) => run.parsed[3].text.length !== run.parsed[2].text.length));
+});
+
+function grid(name, rows, minCols, cols, charset, chars = '', distinct = false) {
+  return { kind: 'grid', name, rows, minCols, cols, charset, chars, distinct };
+}
+
+function lineLengths(run, rowIndex) {
+  return run.parsed[rowIndex].grid.map((line) => line.length);
+}
+
+test('generateInput picks each grid line length between minCols and cols', () => {
+  const format = {
+    rows: [
+      ints(['H', '5', '8'], ['W', '3', '10']),
+      grid('G', 'H', '1', 'W', 'lower'),
+      grid('D', '4', 'H-4', '6', 'digit')
+    ]
+  };
+  for (const options of [{}, { boundaryRate: 0.3 }, { valueCap: 2 }]) {
+    runSeeds(format, options);
+  }
+
+  const runs = runSeeds(format, {});
+  assert.ok(runs.some((run) => new Set(lineLengths(run, 1)).size > 1), 'lengths should vary inside one input');
+  const seen = new Set(runs.flatMap((run) => lineLengths(run, 1)));
+  assert.ok(seen.has(1) && seen.has(10), 'both ends should appear');
+  assert.ok(new Set(runs.map((run) => lineLengths(run, 1).join(','))).size > 150);
+});
+
+test('generateInput keeps grids fixed-width when minCols is empty or missing', () => {
+  const oldGrid = { kind: 'grid', name: 'G', rows: 'H', cols: 'W', charset: 'custom', chars: '.#' };
+  const oldFormat = { rows: [ints(['H', '1', '6'], ['W', '1', '6']), oldGrid] };
+  const newFormat = { rows: [ints(['H', '1', '6'], ['W', '1', '6']), { ...oldGrid, minCols: '', distinct: false }] };
+  for (const run of runSeeds(oldFormat, { boundaryRate: 0.3 })) {
+    for (const length of lineLengths(run, 1)) {
+      assert.equal(BigInt(length), run.env.W);
+    }
+  }
+
+  for (const seed of SEEDS.slice(0, 50)) {
+    assert.deepEqual(generateInput(oldFormat, { seed, boundaryRate: 0.3 }), generateInput(newFormat, { seed, boundaryRate: 0.3 }));
+  }
+});
+
+test('generateInput makes every grid line cols long in max mode', () => {
+  const format = {
+    rows: [
+      ints(['H', '2', '6'], ['W', '3', '10']),
+      grid('G', 'H', '1', 'W', 'lower'),
+      grid('D', 'H', '0', '7', 'custom', '.#', true)
+    ]
+  };
+  for (const run of runSeeds(format, { mode: 'max' }, SEEDS.slice(0, 50))) {
+    assert.deepEqual(lineLengths(run, 1), [10, 10, 10, 10, 10, 10]);
+    assert.deepEqual(lineLengths(run, 2), [7, 7, 7, 7, 7, 7]);
+  }
+});
+
+test('generateInput sizeCap caps grid line lengths', () => {
+  const format = {
+    rows: [
+      ints(['W', '1', '50']),
+      grid('G', '6', '1', 'W', 'lower'),
+      grid('L', '6', '2', '100', 'upper')
+    ]
+  };
+  for (const run of runSeeds(format, { sizeCap: 4 })) {
+    assert.ok(run.env.W <= 4n);
+    assert.ok(lineLengths(run, 1).every((length) => length <= 4));
+    assert.ok(lineLengths(run, 2).every((length) => length >= 2 && length <= 4));
+  }
+
+  for (const run of runSeeds(format, { mode: 'max', sizeCap: 4 }, SEEDS.slice(0, 30))) {
+    assert.ok(lineLengths(run, 2).every((length) => length === 4));
+  }
+});
+
+test('generateInput keeps distinct grid lines different', () => {
+  const format = {
+    rows: [
+      ints(['H', '1', '12']),
+      grid('A', 'H', '1', '6', 'custom', '.#', true),
+      grid('B', '14', '1', '3', 'custom', '.#', true),
+      grid('C', '8', '', '3', 'custom', '#.', true),
+      grid('D', '50', '1', '5', 'lower', '', true),
+      grid('E', '5', '0', '10', 'custom', 'x', true)
+    ]
+  };
+  for (const options of [{}, { sizeCap: 2 }, { sizeCap: 3, boundaryRate: 0.5 }, { boundaryRate: 1 }, { mode: 'max' }]) {
+    const runs = runSeeds(format, options);
+    for (const run of runs) {
+      const all = ['.', '#', '..', '.#', '#.', '##'];
+      for (const a of ['.', '#']) {
+        for (const b of ['.', '#']) {
+          all.push(`${a}${b}.`, `${a}${b}#`);
+        }
+      }
+
+      assert.deepEqual([...run.parsed[2].grid].sort(), all.sort());
+      assert.equal(new Set(run.parsed[3].grid).size, 8);
+    }
+  }
+});
+
+test('generateInput widens the capped length range for distinct grid lines', () => {
+  const format = { rows: [grid('G', '8', '1', '3', 'custom', '.#', true)] };
+  const lengths = new Set();
+  for (const run of runSeeds(format, { sizeCap: 2 })) {
+    lineLengths(run, 0).forEach((length) => lengths.add(length));
+    assert.ok(lineLengths(run, 0).filter((length) => length === 3).length >= 2, 'six strings of length 1-2 are not enough');
+  }
+
+  assert.deepEqual([...lengths].sort(), [1, 2, 3]);
+
+  const maxFormat = { rows: [grid('G', '10', '1', '3', 'custom', '.#', true)] };
+  for (const run of runSeeds(maxFormat, { mode: 'max' }, SEEDS.slice(0, 50))) {
+    assert.ok(lineLengths(run, 0).every((length) => length >= 2), 'max mode widens toward shorter lines only as needed');
+  }
+});
+
+test('generateInput uses grid boundary lengths when boundaryRate is 1', () => {
+  const format = {
+    rows: [
+      ints(['H', '4', '4']),
+      grid('G', 'H', '1', '8', 'lower'),
+      grid('D', 'H', '1', '8', 'lower', '', true)
+    ]
+  };
+  const seen = new Set();
+  const distinctSeen = new Set();
+  for (const run of runSeeds(format, { boundaryRate: 1 })) {
+    const lengths = lineLengths(run, 1);
+    if (new Set(run.parsed[1].grid.join('')).size === 1) {
+      seen.add('sameChar');
+    } else if (lengths.every((length) => length === 1)) {
+      seen.add('minLength');
+    } else if (lengths.every((length) => length === 8)) {
+      seen.add('maxLength');
+    }
+
+    const distinctLengths = new Set(lineLengths(run, 2));
+    if (distinctLengths.size === 1) {
+      distinctSeen.add([...distinctLengths][0]);
+    }
+  }
+
+  assert.deepEqual([...seen].sort(), ['maxLength', 'minLength', 'sameChar']);
+  assert.deepEqual([...distinctSeen].sort((a, b) => a - b), [1, 8]);
+});
+
+test('generateInput fails when grid lines cannot all differ', () => {
+  const fixed = generateInput({ rows: [grid('G', '20', '', '4', 'custom', '.#', true)] }, { seed: 1 });
+  assert.equal(fixed.ok, false);
+  assert.match(fixed.message, /16 種類/);
+
+  const format = { rows: [ints(['H', '1', '30']), grid('G', 'H', '', '4', 'custom', '.#', true)] };
+  let failures = 0;
+  let successes = 0;
+  for (const seed of SEEDS) {
+    const result = generateInput(format, { seed });
+    if (result.ok) {
+      successes += 1;
+      checkInput(format, result, {});
+    } else {
+      failures += 1;
+      assert.match(result.message, /1行目の|2行目（G）/);
+      assert.match(result.message, /すべて異なる文字列にできません/);
+    }
+  }
+
+  assert.ok(failures > 0 && successes > 0, `${failures} failures, ${successes} successes`);
 });
 
 test('generateInput repeats the same input for the same seed only', () => {

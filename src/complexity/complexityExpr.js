@@ -312,7 +312,7 @@ function superscript(value) {
 }
 
 function wrapName(name) {
-  return /^[\p{L}\p{N}_|]+$/u.test(name) ? name : `(${name})`;
+  return /^[\p{L}\p{N}_|[\]]+$/u.test(name) ? name : `(${name})`;
 }
 
 function formatPower(name, pow) {

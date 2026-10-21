@@ -143,6 +143,7 @@ test('createEmptyVerifyData returns fresh defaults', () => {
     version: 1,
     format: { rows: [] },
     naivePath: '',
+    useNaive: true,
     compareMode: 'tokens',
     iterations: 100,
     counterexamples: []
@@ -162,6 +163,7 @@ test('serializeVerifyFile writes 2-space JSON with a final newline', () => {
     '    "rows": []',
     '  },',
     '  "naivePath": "",',
+    '  "useNaive": true,',
     '  "compareMode": "tokens",',
     '  "iterations": 100,',
     '  "counterexamples": []',
@@ -177,7 +179,15 @@ test('serializeVerifyFile orders fields and writes BigInt values as strings', ()
   });
   const text = serializeVerifyFile(data);
   const parsed = JSON.parse(text);
-  assert.deepEqual(Object.keys(parsed), ['version', 'format', 'naivePath', 'compareMode', 'iterations', 'counterexamples']);
+  assert.deepEqual(Object.keys(parsed), [
+    'version',
+    'format',
+    'naivePath',
+    'useNaive',
+    'compareMode',
+    'iterations',
+    'counterexamples'
+  ]);
   assert.deepEqual(Object.keys(parsed.counterexamples[0]), ['id', 'kind', 'input', 'expected', 'seed', 'createdAt']);
   assert.equal(parsed.format.rows[0].vars[0].max, '1000000000000000000');
 });
@@ -300,6 +310,53 @@ test('parseVerifyFile handles naivePath types and separators', () => {
   const backslashes = parseObject({ ...makeData(), naivePath: ' naive\\b.py ' });
   assert.equal(backslashes.data.naivePath, 'naive/b.py');
   assert.deepEqual(backslashes.warnings, []);
+});
+
+test('parseVerifyFile reads useNaive and defaults to true without a warning', () => {
+  for (const useNaive of [true, false]) {
+    const result = parseObject({ ...makeData(), useNaive });
+    assert.equal(result.ok, true);
+    assert.equal(result.data.useNaive, useNaive);
+    assert.deepEqual(result.warnings, []);
+  }
+
+  const missing = parseVerifyFile('{"version": 1, "naivePath": "a_naive.py"}');
+  assert.equal(missing.data.useNaive, true);
+  assert.deepEqual(missing.warnings, []);
+});
+
+test('parseVerifyFile uses true with a warning for a non-boolean useNaive', () => {
+  for (const useNaive of ['false', 0, 1, null, {}, []]) {
+    const result = parseObject({ ...makeData(), useNaive });
+    assert.equal(result.ok, true, JSON.stringify(useNaive));
+    assert.equal(result.data.useNaive, true, JSON.stringify(useNaive));
+    assert.equal(result.warnings.length, 1, JSON.stringify(useNaive));
+  }
+});
+
+test('serializeVerifyFile writes useNaive right after naivePath', () => {
+  const off = serializeVerifyFile(makeData({ useNaive: false }));
+  assert.match(off, /"naivePath": "a_naive\.py",\n {2}"useNaive": false,\n {2}"compareMode"/);
+  const parsed = parseVerifyFile(off);
+  assert.equal(parsed.data.useNaive, false);
+  assert.equal(serializeVerifyFile(parsed.data), off);
+
+  for (const useNaive of [undefined, 'no', 0]) {
+    const data = makeData();
+    if (useNaive === undefined) {
+      delete data.useNaive;
+    } else {
+      data.useNaive = useNaive;
+    }
+    assert.equal(JSON.parse(serializeVerifyFile(data)).useNaive, true, String(useNaive));
+  }
+});
+
+test('addCounterexample and removeCounterexample keep useNaive', () => {
+  const data = deepFreeze(makeData({ useNaive: false }));
+  const added = addCounterexample(data, makeCounterexample({ id: 'ce-x', input: '7\n' }));
+  assert.equal(added.useNaive, false);
+  assert.equal(removeCounterexample(added, 'ce-x').useNaive, false);
 });
 
 test('parseVerifyFile replaces an unknown compare mode', () => {

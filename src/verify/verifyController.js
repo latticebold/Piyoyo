@@ -213,6 +213,7 @@ class VerifyController {
         format: this.data.format,
         compareMode: this.data.compareMode,
         iterations: this.data.iterations,
+        useNaive: this.data.useNaive !== false,
         counterexamples: this.data.counterexamples
       },
       warnings: this.warnings
@@ -274,6 +275,9 @@ class VerifyController {
         }
         if (Number.isInteger(message.iterations) && message.iterations >= 1 && message.iterations <= 10000) {
           this.data.iterations = message.iterations;
+        }
+        if (typeof message.useNaive === 'boolean') {
+          this.data.useNaive = message.useNaive;
         }
         this.scheduleSave();
         return true;
@@ -495,7 +499,7 @@ class VerifyController {
     this.cancelRequested = false;
     try {
       await this.flushSave();
-      const prepared = await this.prepareRun({ naive: 'optional' });
+      const prepared = await this.prepareRun({ naive: this.data.useNaive === false ? 'none' : 'optional' });
       if (!prepared.ok) {
         stop(prepared.message, { showCreateNaive: prepared.showCreateNaive });
         return;

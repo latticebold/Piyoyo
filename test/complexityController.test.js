@@ -1246,7 +1246,7 @@ test('refreshDecorations marks the loops and the expensive list operations of a 
     [6, 'O(N)'],
     [7, 'O(N)'],
     [10, '× N'],
-    [11, '× N'],
+    [11, '× |S[]|'],
     [16, 'O(N)']
   ]);
   for (const line of [1, 2, 3, 4, 8, 9, 12, 13, 14]) {

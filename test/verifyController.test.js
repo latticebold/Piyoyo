@@ -188,6 +188,7 @@ test('setTargetFile loads <name>.piyoyo.json and posts verifyLoaded', async () =
     format: VALID_FORMAT,
     compareMode: 'exact',
     iterations: 30,
+    useNaive: true,
     counterexamples: [saved]
   });
   assert.deepEqual(loaded[0].warnings, []);
@@ -199,7 +200,7 @@ test('setTargetFile starts with empty data and naiveExists false when nothing is
   await h.controller.setTargetFile(MAIN);
   const loaded = h.last('verifyLoaded');
   assert.deepEqual(loaded.target, { mainFile: 'a.py', naiveFile: 'a_naive.py', naiveExists: false });
-  assert.deepEqual(loaded.data, { format: { rows: [] }, compareMode: 'tokens', iterations: 100, counterexamples: [] });
+  assert.deepEqual(loaded.data, { format: { rows: [] }, compareMode: 'tokens', iterations: 100, useNaive: true, counterexamples: [] });
   assert.deepEqual(loaded.warnings, []);
   assert.equal(h.fs.writes.length, 0);
 });
@@ -743,12 +744,13 @@ test('verifyStart does not save a failure found on a max-size input', async () =
   await h.load();
   await h.send({ type: 'verifyStart', iterations: 10, compareMode: 'tokens', seed: '99' });
 
+  // Without a naive solution every 5th iteration is max-size, so the timeout shows up at iteration 4.
   const result = h.last('verifyStressResult');
   assert.equal(result.status, 'mainTimeout');
   assert.equal(result.mode, 'max');
-  assert.equal(result.iteration, 9);
+  assert.equal(result.iteration, 4);
   assert.equal(result.seed, 99);
-  assert.equal(h.runs.length, 10);
+  assert.equal(h.runs.length, 5);
   assert.equal(h.ofType('verifyCounterexamples').length, 0);
   assert.equal(h.fs.writes.length, 0);
 });

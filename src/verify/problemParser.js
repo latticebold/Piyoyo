@@ -78,7 +78,6 @@ const REASONS = {
   missingLengthUpper: (name, hi) => `${name} の長さの上限が見つからなかったため、仮に ${hi} にしました。`,
   missingCharset: (name, label) => `${name} に使う文字の制約が見つからなかったため、仮に${label}にしました。`,
   missingCols: (name, cols) => `${name} の各行の長さの制約が見つからなかったため、仮に ${cols} にしました。`,
-  variableLength: (name) => `${name} の長さがそろっていない形には対応していないため、すべて最大の長さにしました。`,
   spacedChars: (name) => `${name} の文字が空白区切りで並ぶ形には対応していません。`,
   sizeUnknown: (text, fallback) => `個数 ${text} を式として使えないため、仮に ${fallback} にしました。`,
   relationIgnored: (raw) => `「${raw}」の関係は反映していません。`,
@@ -1509,20 +1508,27 @@ function resolveStringSpec(spec, ctx, threshold) {
 function resolveGridSpec(spec, ctx, threshold) {
   const notes = [...spec.notes];
   const rows = resolveCount(spec.rowsRange, ctx, threshold, notes);
+  let minCols = '';
   let cols;
   if (spec.colsRange) {
     cols = resolveCount(spec.colsRange, ctx, threshold, notes);
   } else {
     const len = resolveLengthRange(spec.key, spec.name, ctx, threshold);
     notes.push(...len.notes);
-    if (len.max !== null) {
-      cols = len.max;
-      if (len.min !== len.max) {
-        notes.push(REASONS.variableLength(spec.name));
-      }
-    } else {
+    if (len.min === null && len.max === null) {
       cols = ctx.isAvailable('W', threshold) ? 'W' : DEFAULT_COUNT;
       notes.push(REASONS.missingCols(spec.name, cols));
+    } else if (len.max === null) {
+      minCols = len.min;
+      cols = pickDefaultUpper(len.min, LENGTH_DEFAULTS.max);
+      notes.push(REASONS.missingLengthUpper(spec.name, cols));
+    } else if (len.min === null) {
+      minCols = pickDefaultLower(len.max, LENGTH_DEFAULTS.min);
+      cols = len.max;
+      notes.push(REASONS.missingLengthLower(spec.name, minCols));
+    } else {
+      minCols = len.min === len.max ? '' : len.min;
+      cols = len.max;
     }
   }
   const charset = resolveCharset(ctx.facts, spec.key, GRID_DEFAULT_CHARSET);
@@ -1536,9 +1542,11 @@ function resolveGridSpec(spec, ctx, threshold) {
     kind: 'grid',
     name: spec.name,
     rows,
+    minCols,
     cols,
     charset: charset.charset,
-    chars: charset.chars
+    chars: charset.chars,
+    distinct: ctx.facts.distinct.has(spec.key)
   }, notes);
 }
 
@@ -1581,7 +1589,7 @@ function claimName(name, used, notes) {
 }
 
 function collectSizeRefs(row, sizeVars) {
-  for (const field of ['length', 'rows', 'cols', 'minLength', 'maxLength']) {
+  for (const field of ['length', 'rows', 'minCols', 'cols', 'minLength', 'maxLength']) {
     if (typeof row[field] === 'string') {
       const expr = parseSimpleExpr(row[field]);
       if (expr && expr.type === 'var') {

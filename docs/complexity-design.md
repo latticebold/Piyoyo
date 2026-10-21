@@ -51,6 +51,7 @@ Term = {
 - 記号（symbol）はコードの言葉で持ちます。
   - 変数名：`n`、`m`、`k`
   - 集まりの長さ：`|a|`（`len(a)` や `for x in a`）
+  - 集まりの各要素の長さ：`|a[]|`（`S = [input() for _ in range(n)]` の `for c in S[i]`、`len(S[i])`、`zip(S[i], T[j])`、`for row in g: for c in row` など）。要素が文字列やリストで、その長さが分からないときに使います（前は N とみなして警告していたもの）。
 - 係数は持ちません（計算量の推定なので）。
 
 ### `complexityExpr.js` の関数
@@ -170,8 +171,10 @@ formatVariableMaxima(format)
      - `ints` の読み取り ↔ `ints` 行：変数を左から対応させる
      - `intList` の読み取り（`a`）↔ `intList` 行：`|a|` を行の `length` に対応させる
      - `string` の読み取り（`s`）↔ `string` 行：`|s|` を `maxLength` に対応させる
-     - `lines` の読み取り（`g`）↔ `grid` 行：`|g|` を `rows` に対応させる
-- `|a|` の値は、対応した式（`N` など）の上限です。
+     - `lines` の読み取り（`g`）↔ `grid` 行：`|g|` を `rows` に、`|g[]|` を `cols`（1行の長さの上限）に対応させる
+     - `intList` の読み取りを入れ子にした行列（`matrix` 行）：`|a|` を `rows` に、`|a[]|` を `cols` に対応させる
+- 名前での対応でも、`|S[]|` は `S` という名前の `grid` / `matrix` 行の `cols` に対応させます。
+- `|a|`・`|a[]|` の値は、対応した式（`N` など）の上限です。
 
 ## `judge.js`
 

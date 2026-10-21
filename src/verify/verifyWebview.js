@@ -386,25 +386,10 @@ ${COMPLEXITY_MARKUP}
       <details id="verifyStressSection" class="verifySection" open>
         <summary>ストレステスト<span id="verifyStressSummary" class="summaryValue"></span></summary>
         <div class="verifySectionBody">
-          <div class="verifyTarget">
-            <span>愚直解: <strong id="verifyNaiveFile">-</strong></span>
-          </div>
-          <div class="verifyButtons">
-            <button id="verifyChooseNaive" class="verifySecondary" type="button">愚直解を変更</button>
-            <button id="verifyCreateNaive" class="verifySecondary" type="button" hidden>愚直解の雛形を作る</button>
-          </div>
           <div class="verifyOptions">
             <div class="verifyField">
               <label for="verifyIterations">回数</label>
               <input id="verifyIterations" type="number" min="1" max="10000" step="1" value="100">
-            </div>
-            <div class="verifyField">
-              <label for="verifyCompareMode">出力の比べ方</label>
-              <select id="verifyCompareMode">
-                ${option('tokens', '空白区切り')}
-                ${option('exact', '完全一致')}
-                ${option('float', '小数の誤差を許す')}
-              </select>
             </div>
             <div class="verifyField">
               <label for="verifySeed">シード値（空なら毎回変える）</label>
@@ -414,7 +399,30 @@ ${COMPLEXITY_MARKUP}
           <div class="verifyButtons">
             <button id="verifyStart" type="button">開始</button>
             <button id="verifyCancel" class="verifySecondary" type="button" disabled>中止</button>
+            <span id="verifyMode" class="verifyStatus"></span>
           </div>
+          <details id="verifyNaiveSection">
+            <summary class="verifyStatus">愚直解と比べる（任意）</summary>
+            <div class="verifySectionBody">
+              <span id="verifyNaiveIntro" class="verifyStatus">愚直解（遅くてもよいので確実に正しい解）を用意すると、出力が正しいかも確かめられます。</span>
+              <label id="verifyUseNaiveLabel" class="verifyCheck" for="verifyUseNaive" hidden>
+                <input id="verifyUseNaive" type="checkbox" checked>
+                <span>愚直解 <strong id="verifyNaiveFile">-</strong> と出力を比べる</span>
+              </label>
+              <div class="verifyButtons">
+                <button id="verifyCreateNaive" class="verifySecondary" type="button" hidden>愚直解の雛形を作る</button>
+                <button id="verifyChooseNaive" class="verifySecondary" type="button">ファイルを選ぶ</button>
+              </div>
+              <div class="verifyField">
+                <label for="verifyCompareMode">出力の比べ方</label>
+                <select id="verifyCompareMode">
+                  ${option('tokens', '空白区切り')}
+                  ${option('exact', '完全一致')}
+                  ${option('float', '小数の誤差を許す')}
+                </select>
+              </div>
+            </div>
+          </details>
           <div id="verifyProgressBox" class="verifyProgress" hidden>
             <progress id="verifyProgress" max="100" value="0"></progress>
             <span id="verifyProgressText" class="verifyStatus" aria-live="polite"></span>
@@ -427,9 +435,10 @@ ${COMPLEXITY_MARKUP}
       <details id="verifyCounterSection" class="verifySection" open>
         <summary>反例 (<span id="verifyCounterCount">0</span>)</summary>
         <div class="verifySectionBody">
-          <div class="verifyButtons">
+          <span id="verifyCounterEmpty" class="verifyStatus">まだありません。ストレステストで見つかると、ここに残ります。</span>
+          <div id="verifyCounterActions" class="verifyButtons" hidden>
             <button id="verifyRecheck" type="button">反例で確かめる</button>
-            <button id="verifyRegenerate" class="verifySecondary" type="button">期待する出力を作り直す</button>
+            <button id="verifyRegenerate" class="verifySecondary" type="button" hidden>期待する出力を作り直す</button>
           </div>
           <span id="verifyCounterStatus" class="verifyStatus" aria-live="polite"></span>
           <ol id="verifyCounterList" class="verifyCounterList"></ol>
@@ -484,10 +493,18 @@ function initVerifyWorkspace({ vscode, sendInputToRun }) {
   const counterStatus = $('verifyCounterStatus');
   const recheckButton = $('verifyRecheck');
   const regenerateButton = $('verifyRegenerate');
+  const modeLabel = $('verifyMode');
+  const useNaiveCheckbox = $('verifyUseNaive');
+  const useNaiveLabel = $('verifyUseNaiveLabel');
+  const naiveIntro = $('verifyNaiveIntro');
+  const chooseNaiveButton = $('verifyChooseNaive');
+  const counterEmpty = $('verifyCounterEmpty');
+  const counterActions = $('verifyCounterActions');
 
   let format = { rows: [] };
   let errors = [];
   let hasTarget = false;
+  let naive = { file: '', exists: false };
   let busy = false;
   let formatTimer = null;
   let formatBeforeImport = null;
@@ -709,6 +726,19 @@ function initVerifyWorkspace({ vscode, sendInputToRun }) {
     ];
   }
 
+  function distinctField(row, rowIndex) {
+    const checkbox = el('input', { type: 'checkbox', id: fieldId(rowIndex, 'distinct'), 'data-row': rowIndex, 'data-path': 'distinct' });
+    checkbox.checked = Boolean(row.distinct);
+    checkbox.addEventListener('change', () => {
+      row.distinct = checkbox.checked;
+      scheduleFormatChange();
+    });
+    return el('div', { className: 'verifyField' }, [
+      el('label', { className: 'verifyCheck', for: checkbox.id }, [checkbox, el('span', { text: 'すべて異なる' })]),
+      errorSpan(rowIndex, 'distinct')
+    ]);
+  }
+
   function renderRowFields(row, rowIndex) {
     if (row.kind === 'ints') {
       return renderIntsFields(row, rowIndex);
@@ -721,18 +751,9 @@ function initVerifyWorkspace({ vscode, sendInputToRun }) {
         field('個数', textInput(row, 'length', rowIndex, 'length', { label: label('個数'), listId, placeholder: 'N' }), rowIndex, 'length'),
         rangeField('値の範囲', row, rowIndex, listId),
         field('並べ方', selectInput(row, 'layout', rowIndex, 'layout', LAYOUT_LABELS, { label: label('並べ方') }), rowIndex, 'layout'),
-        field('並び', selectInput(row, 'order', rowIndex, 'order', ORDER_LABELS, { label: label('並び') }), rowIndex, 'order')
+        field('並び', selectInput(row, 'order', rowIndex, 'order', ORDER_LABELS, { label: label('並び') }), rowIndex, 'order'),
+        distinctField(row, rowIndex)
       );
-      const checkbox = el('input', { type: 'checkbox', id: fieldId(rowIndex, 'distinct'), 'data-row': rowIndex, 'data-path': 'distinct' });
-      checkbox.checked = Boolean(row.distinct);
-      checkbox.addEventListener('change', () => {
-        row.distinct = checkbox.checked;
-        scheduleFormatChange();
-      });
-      fields.push(el('div', { className: 'verifyField' }, [
-        el('label', { className: 'verifyCheck', for: checkbox.id }, [checkbox, el('span', { text: 'すべて異なる' })]),
-        errorSpan(rowIndex, 'distinct')
-      ]));
     } else if (row.kind === 'matrix') {
       fields.push(
         field('行数', textInput(row, 'rows', rowIndex, 'rows', { label: label('行数'), listId, placeholder: 'H' }), rowIndex, 'rows'),
@@ -745,7 +766,8 @@ function initVerifyWorkspace({ vscode, sendInputToRun }) {
       } else {
         fields.push(
           field('行数', textInput(row, 'rows', rowIndex, 'rows', { label: label('行数'), listId, placeholder: 'H' }), rowIndex, 'rows'),
-          field('列数（文字数）', textInput(row, 'cols', rowIndex, 'cols', { label: label('列数'), listId, placeholder: 'W' }), rowIndex, 'cols')
+          rangeField('1行の長さ', row, rowIndex, listId, '（そろえるなら上限だけ）', 'minCols', 'cols'),
+          distinctField(row, rowIndex)
         );
       }
       fields.push(field('文字の種類', selectInput(row, 'charset', rowIndex, 'charset', CHARSET_LABELS, {
@@ -909,6 +931,29 @@ function initVerifyWorkspace({ vscode, sendInputToRun }) {
     });
   }
 
+  // Shows the naive solution state in one place: the mode line next to 開始 and the
+  // (normally closed) 愚直解と比べる section.
+  function renderNaiveState() {
+    const comparing = naive.exists && useNaiveCheckbox.checked;
+    if (!hasTarget) {
+      modeLabel.textContent = '';
+    } else if (comparing) {
+      modeLabel.textContent = '愚直解 ' + naive.file + ' と出力を比べます';
+    } else if (naive.exists) {
+      modeLabel.textContent = '愚直解は使わず、エラーと時間切れを確かめます';
+    } else {
+      modeLabel.textContent = '愚直解なし：エラーと時間切れを確かめます';
+    }
+    naiveFileLabel.textContent = naive.file || '-';
+    useNaiveLabel.hidden = !naive.exists;
+    naiveIntro.hidden = naive.exists;
+    createNaiveButton.hidden = !hasTarget || naive.exists;
+    chooseNaiveButton.textContent = naive.exists ? '別のファイルにする' : 'ファイルを選ぶ';
+    chooseNaiveButton.disabled = !hasTarget;
+    compareModeSelect.disabled = !comparing;
+    regenerateButton.hidden = !naive.exists;
+  }
+
   function readIterations() {
     const value = Math.floor(Number(iterationsInput.value));
     return Number.isFinite(value) ? Math.min(Math.max(value, 1), 10000) : 100;
@@ -918,7 +963,8 @@ function initVerifyWorkspace({ vscode, sendInputToRun }) {
     vscode.postMessage({
       type: 'verifySettingsChanged',
       compareMode: compareModeSelect.value,
-      iterations: readIterations()
+      iterations: readIterations(),
+      useNaive: useNaiveCheckbox.checked
     });
   }
 
@@ -985,6 +1031,8 @@ function initVerifyWorkspace({ vscode, sendInputToRun }) {
 
   function renderCounterexamples() {
     counterCount.textContent = String(counterexamples.length);
+    counterEmpty.hidden = counterexamples.length > 0;
+    counterActions.hidden = counterexamples.length === 0;
     counterList.replaceChildren(...counterexamples.map((counterexample, index) => {
       const recheck = recheckResults[counterexample.id];
       const header = el('div', { className: 'verifyCounterHeader' }, [
@@ -1039,11 +1087,10 @@ function initVerifyWorkspace({ vscode, sendInputToRun }) {
     const target = message.target;
     hasTarget = Boolean(target);
     mainFileLabel.textContent = target ? target.mainFile : 'Python ファイルを開いてください';
-    naiveFileLabel.textContent = target
-      ? target.naiveFile + (target.naiveExists ? '' : '（まだありません。なくても、本番の解の実行時エラーと時間切れは確かめられます）')
-      : '-';
-    createNaiveButton.hidden = !target || target.naiveExists;
+    naive = { file: target ? target.naiveFile : '', exists: Boolean(target && target.naiveExists) };
     const data = message.data || {};
+    useNaiveCheckbox.checked = data.useNaive !== false;
+    renderNaiveState();
     format = data.format && Array.isArray(data.format.rows) ? data.format : { rows: [] };
     compareModeSelect.value = data.compareMode || 'tokens';
     iterationsInput.value = String(data.iterations || 100);
@@ -1125,6 +1172,10 @@ function initVerifyWorkspace({ vscode, sendInputToRun }) {
 
   $('verifyChooseNaive').addEventListener('click', () => vscode.postMessage({ type: 'verifyChooseNaive' }));
   createNaiveButton.addEventListener('click', () => vscode.postMessage({ type: 'verifyCreateNaive' }));
+  useNaiveCheckbox.addEventListener('change', () => {
+    renderNaiveState();
+    postSettings();
+  });
 
   recheckButton.addEventListener('click', () => {
     setBusy(true);
@@ -1190,7 +1241,7 @@ function initVerifyWorkspace({ vscode, sendInputToRun }) {
       stressSummary.textContent = '';
       setStatus(stressStatus, message.message, 'error');
       if (message.showCreateNaive) {
-        createNaiveButton.hidden = false;
+        $('verifyNaiveSection').open = true;
       }
     } else if (message.type === 'verifyCounterexamples') {
       counterexamples = Array.isArray(message.counterexamples) ? message.counterexamples : [];
