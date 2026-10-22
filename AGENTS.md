@@ -9,17 +9,21 @@ Piyoyo は AI エージェント（Codex・Claude Code など）と一緒に開�
 このリポジトリは公開されています。ファイル、コミットメッセージ、Issue、Release の説明文には、次のものを書きません。
 
 - 個人の PC のフォルダのパス。例を書くときは `C:\Python\python.exe` のように個人名を含まないパスにする
-- 本名、個人のメールアドレス、`latticebold` 以外のアカウント名
+- 本名、個人のメールアドレス、リポジトリの持ち主以外のアカウント名
 - 秘密情報（`.env`、API キー、トークン）
 
-コミットの作者は GitHub の公開用の名前とアドレスにします。
+コミットの作者は、リポジトリの持ち主の GitHub アカウント名と、GitHub が用意する公開用アドレス（`<数字>+<アカウント名>@users.noreply.github.com`）にします。
+持ち主は `git remote get-url origin` の URL で分かります。
 
 ```powershell
-git config user.name   # latticebold
-git config user.email  # 344184099+latticebold@users.noreply.github.com
+git remote get-url origin   # https://github.com/<持ち主>/Piyoyo.git
+git config user.name        # <持ち主>
+git config user.email       # <数字>+<持ち主>@users.noreply.github.com
 ```
 
-違っていたらコミットせずに知らせます。push 先は `origin`（`latticebold/Piyoyo`）だけです。
+違っていたらコミットせずに知らせます。push 先は `origin` だけです。
+
+GitHub の secret scanning とプッシュ保護を有効にしてあり、API キーなどを含む push は GitHub が止めます。止められたら、その秘密情報をコミットから取り除いてから push し直します。
 
 ## コミットの粒度
 
@@ -49,12 +53,12 @@ push すると、GitHub Actions が Windows 上で `npm test` と `npm run check
 4. **VSIX を作る**：README の画像とリンクが、その版のタグを指すように固定する。`<バージョン>` は今回の番号に置き換える。
 
    ```powershell
-   npx --yes @vscode/vsce@3.9.2 package --baseImagesUrl https://github.com/latticebold/Piyoyo/raw/v<バージョン> --baseContentUrl https://github.com/latticebold/Piyoyo/blob/v<バージョン> --out dist/piyoyo-<バージョン>.vsix
+   npx --yes @vscode/vsce@3.9.2 package --baseImagesUrl https://github.com/<持ち主>/Piyoyo/raw/v<バージョン> --baseContentUrl https://github.com/<持ち主>/Piyoyo/blob/v<バージョン> --out dist/piyoyo-<バージョン>.vsix
    ```
 
 5. **VSIX の中身を確かめる**：VSIX（中身は zip）を展開し、次を確認する。
-   - `extension/readme.md` の画像 URL が `latticebold/Piyoyo/raw/v<バージョン>` になっている
-   - 個人の PC のパスや、`latticebold` 以外のアカウント名が入っていない
+   - `extension/readme.md` の画像 URL が `<持ち主>/Piyoyo/raw/v<バージョン>` になっている
+   - 個人の PC のパスや、持ち主以外のアカウント名が入っていない
 6. **Release を作る**：`v<バージョン>` のタグで Release を作り、**手順 4 で作った VSIX だけ**を添付する。説明文は日本語で、変更点、必要なもの（VS Code 1.90 以降と Python）、インストール方法（Assets の `.vsix` を Install from VSIX... で入れる）を書く。
 7. **公開を確認する**：ログインしていない状態でも、Release の VSIX をダウンロードできることを確かめる。
 
