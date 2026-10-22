@@ -4,8 +4,18 @@
   <img src="resources/piyoyo-128.png" alt="Piyoyoのロゴ" width="96">
 </p>
 
-Piyoyoは、Pythonの標準入力を試す実行パネルと、競技プログラミングでよく使うコードを挿入できるVS Code拡張機能です。
-保存したPythonファイルに入力を渡し、出力、エラー、終了コード、実行時間をVS Codeのサイドバーで確認できます。
+<p align="center">
+  <a href="https://github.com/latticebold/Piyoyo/releases/latest"><img src="https://img.shields.io/github/v/release/latticebold/Piyoyo?label=%E6%9C%80%E6%96%B0%E7%89%88" alt="最新版"></a>
+  <a href="https://github.com/latticebold/Piyoyo/actions/workflows/test.yml"><img src="https://github.com/latticebold/Piyoyo/actions/workflows/test.yml/badge.svg" alt="テスト"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="ライセンス GPL-3.0"></a>
+</p>
+
+Piyoyoは、競技プログラミングをPythonで始めた人のためのVS Code拡張機能です。
+サイドバーのパネルに、次の3つのタブがあります。
+
+- **実行**：保存したPythonファイルに標準入力を渡して実行し、出力、エラー（日本語の説明付き）、実行時間を確かめる。
+- **コード挿入**：よく使う短いコードを日本語で探し、計算量を見て挿入する。必要なimportも自動で入る。
+- **検証**：提出する前に、ランダムな入力で反例を探し（ストレステスト）、計算量から制限時間に間に合うかを見積もる。
 
 ![エディタの右側にPiyoyoを表示し、3行の標準入力を与えてPythonを実行した画面](docs/images/00-overview.png)
 
@@ -34,7 +44,7 @@ Pythonや競技プログラミングを始めた人が、入力と出力を気�
 ## 必要なもの
 
 - VS Code 1.90以降。
-- Pythonが実行できる環境。
+- Pythonが実行できる環境。PyPyが入っていれば、何も設定しなくてもPyPyで実行します（AtCoderでよく使われ、Pythonより速く動きます）。
 - Windowsで動作を確認しています。
 
 macOSとLinuxは未検証です。
@@ -114,6 +124,7 @@ Piyoyoパネル上部の歯車ボタン（または`Piyoyo Runner`の見出し�
 | `piyoyo.showPyPyInstallHint` | `true` | PyPyが見つからずPythonで実行したときに、PyPyの入れ方の案内を出します。 |
 | `piyoyo.complexity.showInlineHints` | `true` | 計算量の解析結果を、エディタのループの行と関数の行の右端に薄く表示します。 |
 | `piyoyo.errorDisplayMode` | `friendly` | Pythonのエラーの表示方法です。`friendly`（やさしい表示）は日本語の説明を表示し、元のエラーは「原文を見る」に折りたたみます。`both`（両方表示）は両方を表示し、`original`（原文表示）は元のエラーとトレースバックを中心に表示します。 |
+| `piyoyo.inputFocusShortcut` | `altI` | PythonのエディタとPiyoyoパネルを行き来するキーです。`altI`（`Alt+I`）、`shiftShift`（`Shift`を2回）、`both`（両方）から選びます。 |
 | `piyoyo.advanced.showOriginalErrors` | `false` | 以前の設定です。`piyoyo.errorDisplayMode`を設定していない場合に限り、`true`で「両方表示」になります。 |
 
 ## 開発者向け
@@ -125,16 +136,28 @@ npm test
 npm run check
 ```
 
+テストにはPythonと[uv](https://docs.astral.sh/uv/)が必要です。
 `main`へのpushとプルリクエストでは、GitHub Actionsが同じコマンドをWindows上で自動で実行します。結果はGitHubの「Actions」タブで確認できます。
+
+開発のルールは[AGENTS.md](AGENTS.md)、配布の手順は[リリース手順](docs/releasing.md)にあります。
+機能ごとの設計や仕様は次の文書にまとめています。
+
+| 文書 | 内容 |
+| --- | --- |
+| [検証タブの設計](docs/verify-design.md) | ストレステストと入力の自動生成の仕組み |
+| [計算量推定の設計](docs/complexity-design.md) | 静的解析と実測による計算量の見積もり |
+| [Pythonエラーの日本語説明の仕様](docs/python-error-explanation-spec.md) | どのエラーをどう説明するか |
+| [スニペットカタログ再設計案](docs/snippet-catalog-proposal.md) | 初期のスニペット整理の記録 |
+| [0.2.0 リリース評価](docs/release-evaluation-2026-09-28.md) | 最初の公開前に行った評価の記録 |
 
 ## 参考にしたサービス
 
 Piyoyoは、初心者向けのPython開発環境 [PyTry（パイトライ）](https://pro-ktmr.github.io/pytry/) の、入力と実行結果を分けて気軽に試せる体験に着想を得ています。
-そのような環境をVS Codeでも使いたいと考え、Codexを使って開発しました。
+そのような環境をVS Codeでも使いたいと考え、AIエージェントと一緒に開発しました。
 
 ## 開発クレジット
 
-この拡張機能は、Codex（OpenAIのGPTモデル）を使ったVibe Codingで開発しました。
+この拡張機能は、Codex（OpenAIのGPTモデル）とClaude Code（AnthropicのClaudeモデル）を使ったVibe Codingで開発しました。
 
 ## ライセンス
 

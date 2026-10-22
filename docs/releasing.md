@@ -33,8 +33,9 @@ git diff --check
 ```
 
 このリポジトリには実行時依存がなく、現状のテストにも`npm install`は不要です。
-テストにはPythonが必要です。
+テストにはPythonとuvが必要です。
 バージョンを変えたときは、パッケージのバージョンを検証するテストの期待値も更新します。
+`main`へpushすると、GitHub Actionsが同じテストをWindows上で実行します。タグを付ける前に、Actionsが成功していることも確認します。
 
 ## VSIXの作成
 
@@ -56,7 +57,6 @@ VSIXはGitの追跡対象外です。
 利用者向けのREADME、利用ガイド、PNG画像、実行コード、ロゴ、ライセンスは含めます。
 パッケージ作成時のファイル一覧で、除外対象が混入していないか確認してください。
 READMEの相対リンクや画像はvsceがGitHub向けURLへ書き換えるため、同じ文書と画像をGitHubにも反映してから配布します。
-private期間は、GitHub上の文書や画像の閲覧にもアクセス権が必要です。
 
 ## 分離したVS Codeで検証する
 
@@ -66,7 +66,7 @@ private期間は、GitHub上の文書や画像の閲覧にもアクセス権が�
 ```powershell
 $verifyRoot = Join-Path $env:TEMP ('piyoyo-check-' + [guid]::NewGuid())
 New-Item -ItemType Directory -Path $verifyRoot | Out-Null
-$vsixPath = (Resolve-Path '.\piyoyo-0.2.0.vsix').Path
+$vsixPath = (Resolve-Path '.\dist\piyoyo-<バージョン>.vsix').Path
 code --user-data-dir "$verifyRoot\profile" --extensions-dir "$verifyRoot\extensions" --install-extension $vsixPath
 code --user-data-dir "$verifyRoot\profile" --extensions-dir "$verifyRoot\extensions" --new-window
 ```
@@ -78,7 +78,8 @@ VSIXのファイル名は配布するバージョンに合わせます。
 - `main.py`を保存し、入力`3 5`から出力`8`が得られる。
 - 空の`snippets.py`へ`deque([start])`を挿入すると、`from collections import deque`が追加され、VS Code上で`start`を編集できる。
 - コード整理で非表示と順序変更を保存し、ウィンドウを再読み込みしても維持される。
-- エラーやタイムアウト時に日本語の説明を確認でき、詳細設定を有効にすると元のエラーを表示できる。
+- エラーやタイムアウト時に日本語の説明を確認でき、`piyoyo.errorDisplayMode`を変えると元のエラーの表示が切り替わる。
+- 「検証」タブで入力形式を作り、ストレステストを開始できる。保存すると「計算量」欄に結果が出る。
 
 ## スクリーンショットの更新
 
@@ -117,8 +118,8 @@ Dark Modernテーマ、エディタ文字サイズ18、ウィンドウの画像�
 自動で付く「Source code (zip)」は拡張機能のインストーラーではありません。
 更新版も同じ識別子で配布し、利用者には新しいVSIXを再インストールしてもらいます。
 
-privateの間はアクセス権のある人だけがReleaseを閲覧できます。
-世界へ公開するときは、履歴を含む公開対象とライセンスを確認してから、別途リポジトリの公開設定を変更します。
+リポジトリは公開しているため、Releaseはログインしていない人も閲覧できます。
+公開を確認するときは、ログインしていない状態でVSIXをダウンロードできることを確かめます。
 
 ## 0.1.0の検証記録
 
