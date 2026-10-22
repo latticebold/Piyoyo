@@ -125,6 +125,8 @@ npm test
 npm run check
 ```
 
+`main`へのpushとプルリクエストでは、GitHub Actionsが同じコマンドをWindows上で自動で実行します。結果はGitHubの「Actions」タブで確認できます。
+
 ## 参考にしたサービス
 
 Piyoyoは、初心者向けのPython開発環境 [PyTry（パイトライ）](https://pro-ktmr.github.io/pytry/) の、入力と実行結果を分けて気軽に試せる体験に着想を得ています。
