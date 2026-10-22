@@ -177,12 +177,38 @@ const VERIFY_STYLES = `
       min-width: 0;
     }
 
+    /* Fixed small widths: names are one or two letters, bounds rarely longer than 2×10^5. */
     .verifyInput-name {
-      width: 4.5em;
+      width: 3.2em;
     }
 
     .verifyInput-expr {
-      width: 7em;
+      width: 5.6em;
+    }
+
+    .verifyRowsHeading {
+      padding-top: 8px;
+      border-top: 1px solid var(--piyoyo-line);
+      color: var(--piyoyo-text);
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    /* Button sizes follow how often a button is pressed: the main action is the biggest. */
+    .verifyPrimary,
+    .verifyButtons .verifyPrimary {
+      min-height: 32px;
+      padding: 5px 22px;
+      color: var(--piyoyo-text);
+      background: var(--piyoyo-action-red);
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .verifyPrimary:hover,
+    .verifyButtons .verifyPrimary:hover {
+      background: var(--piyoyo-action-red);
+      filter: brightness(1.12);
     }
 
     /* Light input boxes stand out from the dark panel, so it is obvious where to type. */
@@ -254,8 +280,15 @@ const VERIFY_STYLES = `
       box-shadow: 0 0 0 1px var(--piyoyo-action-red);
     }
 
+    /* Helper and explanation text stays small so the inputs and main buttons stand out. */
     .verifyStatus {
       color: var(--vscode-descriptionForeground);
+      font-size: var(--piyoyo-font-small);
+    }
+
+    .verifyFields .verifyField label,
+    .verifyFields .verifyBlockLabel,
+    .verifyOptions label {
       font-size: var(--piyoyo-font-small);
     }
 
@@ -284,7 +317,11 @@ const VERIFY_STYLES = `
     }
 
     .verifyOptions input {
-      width: 7em;
+      width: 5.6em;
+    }
+
+    .verifyOptions #verifySeed {
+      width: 8.5em;
     }
 
     .verifyProgress {
@@ -430,6 +467,7 @@ const VERIFY_MARKUP = `
           </details>
           <span id="verifyImportStatus" class="verifyStatus" aria-live="polite"></span>
 
+          <span class="verifyRowsHeading" title="問題の「入力」を、上の行から順に並べます">入力の行</span>
           <div id="verifyRows" class="verifyRows"></div>
           <span id="verifyRowsEmpty" class="verifyStatus">まだ行がありません。問題から読み取るか、「行を足す」で作ります。</span>
           <div class="verifyButtons">
@@ -464,7 +502,7 @@ ${COMPLEXITY_MARKUP}
             </div>
           </div>
           <div class="verifyButtons">
-            <button id="verifyStart" type="button">開始</button>
+            <button id="verifyStart" class="verifyPrimary" type="button">開始</button>
             <button id="verifyCancel" class="verifySecondary" type="button" disabled>中止</button>
             <span id="verifyMode" class="verifyStatus"></span>
           </div>

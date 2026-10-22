@@ -1148,6 +1148,19 @@ test('verify workspace has the 計算量 section between 入力形式 and スト
   assert.deepEqual(bigItems, [['時間', 'complexityTime'], ['空間', 'complexitySpace']]);
   assert.match(section, /<div class="complexityBig">\s*<div class="complexityBigItem">/);
 
+  // The operation count is a third, full-width big item after 時間 / 空間.
+  const big = elementHtml(section.replace('<div class="complexityBig">', '<div id="complexityBigProbe" class="complexityBig">'), 'complexityBigProbe');
+  const opsItem = elementHtml(big, 'complexityOpsItem');
+  assert.ok(big.indexOf('id="complexityOpsItem"') > big.indexOf('id="complexitySpace"'));
+  assert.match(opsItem, /^<div id="complexityOpsItem" class="complexityBigItem">/);
+  assert.match(opsItem, /<span class="complexityBigLabel">計算回数<\/span>/);
+  assert.match(openingTag(opsItem, 'complexityVerdictLabel'), /^<span id="complexityVerdictLabel" class="complexityVerdictLabel" hidden>$/);
+  assert.match(opsItem, /<span id="complexityOps" class="complexityBigValue">\?<\/span>/);
+  assert.ok(opsItem.indexOf('計算回数') < opsItem.indexOf('id="complexityVerdictLabel"'));
+  assert.ok(opsItem.indexOf('id="complexityVerdictLabel"') < opsItem.indexOf('id="complexityOps"'));
+  assert.match(COMPLEXITY_STYLES, /\.complexityBig\s*\{[^}]*grid-template-columns:\s*repeat\(2,/);
+  assert.match(COMPLEXITY_STYLES, /#complexityOpsItem\s*\{[^}]*grid-column:\s*1 \/ -1;/);
+
   const result = elementHtml(section, 'complexityResult');
   assert.match(openingTag(section, 'complexityResult'), /\shidden>$/);
   for (const id of ['complexityTime', 'complexitySpace', 'complexityVerdict', 'complexityBreakdown', 'complexityWarnings', 'complexityAssumptions']) {
@@ -1158,7 +1171,8 @@ test('verify workspace has the 計算量 section between 入力形式 and スト
 
   // Closed or hidden until there is something to show.
   assert.doesNotMatch(openingTag(section, 'complexityBreakdown'), /\s(?:open|hidden)\b/);
-  assert.doesNotMatch(openingTag(section, 'complexityAssumptions'), /\s(?:open|hidden)\b/);
+  // Shown by the script only when there is a bound to decide.
+  assert.match(openingTag(section, 'complexityAssumptions'), /^<details id="complexityAssumptions" hidden>$/);
   assert.match(openingTag(section, 'complexityWarnings'), /^<details\b[^>]*\shidden>$/);
   assert.match(openingTag(section, 'complexityMeasureDetails'), /^<details\b[^>]*\shidden>$/);
 
@@ -1252,7 +1266,13 @@ function complexityResultMessage(overrides = {}) {
     space: 'O(N)',
     confidence: 'high',
     confidenceLabel: '高',
-    verdict: { text: 'N = 2×10^5 → 4×10^10 回', label: 'TLE の恐れ', verdict: 'tle' },
+    verdict: {
+      text: 'N = 2×10^5 → 4×10^10 回',
+      operationsText: '4×10^10 回',
+      sizesText: 'N = 2×10^5',
+      label: 'TLE の恐れ',
+      verdict: 'tle'
+    },
     verdictNote: '',
     speedText: '1 秒あたり 3×10^7 回として計算（PyPy・目安の値）、制限時間 2 秒',
     bindings: [{ symbol: 'n', display: 'N', source: 'name', formatVar: 'N', value: 200000, valueText: '2×10^5' }],
@@ -1275,29 +1295,59 @@ test('the 計算量 script shows time and space big and opens details only when 
   assert.equal(measure.disabled, false);
   assert.equal(measure.title, '入力形式がないため実測できません。');
 
-  page.send(complexityResultMessage());
+  const verdictLine = () => page.el('complexityVerdict').children.map((child) => child.textContent);
+  const verdictLabel = page.el('complexityVerdictLabel');
+  const assumptions = page.el('complexityAssumptions');
+  assert.equal(verdictLabel.hidden, true, 'no verdict label before a verdict exists');
+  assert.equal(assumptions.hidden, true);
+
+  const message = complexityResultMessage();
+  page.send(message);
   assert.equal(page.el('complexityResult').hidden, false);
   assert.equal(page.el('complexityTime').textContent, 'O(N²)');
   assert.equal(page.el('complexitySpace').textContent, 'O(N)');
-  assert.deepEqual(
-    page.el('complexityVerdict').children.map((child) => child.textContent),
-    ['TLE の恐れ', 'N = 2×10^5 → 4×10^10 回', '推定: 高']
-  );
+  // The big count shows the operations; the label carries the verdict.
+  assert.equal(page.el('complexityOps').textContent, '4×10^10 回');
+  assert.equal(verdictLabel.hidden, false);
+  assert.equal(verdictLabel.textContent, 'TLE の恐れ');
+  assert.equal(verdictLabel.className, 'complexityVerdictLabel tle');
+  assert.equal(page.el('complexityOpsItem').title, message.speedText);
+  assert.equal(page.el('complexitySpeed').textContent, message.speedText);
+  // The small line below: the sizes and the confidence.
+  assert.deepEqual(verdictLine(), ['N = 2×10^5', '推定: 高']);
   assert.equal(page.el('complexityStatus').textContent, '', 'no status text after a successful analysis');
   assert.equal(page.el('complexityWarnings').hidden, true);
   assert.equal(page.el('complexityBreakdown').open, false);
-  assert.equal(page.el('complexityAssumptions').open, false);
+  assert.equal(assumptions.hidden, true, 'nothing to decide: the assumptions stay hidden');
+  assert.equal(assumptions.open, false);
+
+  page.send(complexityResultMessage({
+    time: 'O(1)',
+    verdict: { text: '1 回', operationsText: '1 回', sizesText: '', label: '余裕', verdict: 'safe' },
+    bindings: []
+  }));
+  assert.equal(page.el('complexityOps').textContent, '1 回');
+  assert.equal(verdictLabel.className, 'complexityVerdictLabel safe');
+  assert.deepEqual(verdictLine(), ['推定: 高'], 'no sizes for O(1)');
 
   const unboundNote = '上限が決まっていない変数があります（n）。「計算の前提」で上限を選んでください。';
   page.send(complexityResultMessage({ verdict: null, verdictNote: unboundNote, bindings: [], unbound: ['n'], formatVars: [] }));
-  assert.equal(page.el('complexityAssumptions').open, true, 'opened when a limit is missing');
-  assert.deepEqual(page.el('complexityVerdict').children.map((child) => child.textContent), [unboundNote, '推定: 高']);
+  assert.equal(page.el('complexityOps').textContent, '?');
+  assert.equal(verdictLabel.hidden, true);
+  assert.deepEqual(verdictLine(), [unboundNote, '推定: 高']);
+  assert.equal(page.el('complexityVerdict').children[0].className, 'error');
+  assert.equal(assumptions.hidden, false, 'a missing limit shows the assumptions');
+  assert.equal(assumptions.open, true, 'and opens them');
+
+  assumptions.open = false;
+  page.send(complexityResultMessage({
+    bindings: [{ symbol: 'n', display: 'N', source: 'manual', formatVar: '', value: 2000, valueText: '2×10^3' }]
+  }));
+  assert.equal(assumptions.hidden, false, 'a hand-set limit keeps the assumptions visible');
+  assert.equal(assumptions.open, false, 'without opening them');
 
   page.send(complexityResultMessage());
-  assert.equal(page.el('complexityAssumptions').open, true, 'never closed by the script');
-  page.el('complexityAssumptions').open = false;
-  page.send(complexityResultMessage());
-  assert.equal(page.el('complexityAssumptions').open, false, 'a closed section stays closed without a missing limit');
+  assert.equal(assumptions.hidden, true, 'hidden again when there is nothing to decide');
 
   page.send(complexityResultMessage({ warnings: [{ line: 3, message: 'N 回とみなしました。' }] }));
   assert.equal(page.el('complexityWarnings').hidden, false);
@@ -1399,6 +1449,21 @@ test('the counterexample section shows a note and hides its buttons while it is 
   assert.match(actions, /\sid="verifyRegenerate"/);
   assert.match(openingTag(actions, 'verifyRegenerate'), /\shidden>$/);
   assert.doesNotMatch(counter, /\sstyle\s*=/i);
+});
+
+test('the 検証 tab heads the input rows with 入力の行 and makes 開始 the main button', () => {
+  const html = getWebviewHtml();
+  const format = elementHtml(verifyPanelHtml(html), 'verifyFormatSection');
+  assert.match(format, /<span class="verifyRowsHeading"[^>]*>入力の行<\/span>\s*<div id="verifyRows" class="verifyRows"><\/div>/);
+  assert.equal((html.match(/>入力の行</g) || []).length, 1);
+  assert.ok(format.indexOf('入力の行') > format.indexOf('id="verifyImportStatus"'), 'below the import controls');
+
+  const stress = elementHtml(verifyPanelHtml(html), 'verifyStressSection');
+  assert.match(openingTag(stress, 'verifyStart'), /^<button id="verifyStart" class="verifyPrimary" type="button">$/);
+  assert.doesNotMatch(openingTag(stress, 'verifyCancel'), /verifyPrimary/);
+  const style = html.match(/<style nonce="[^"]+">([\s\S]*?)<\/style>/)[1];
+  assert.match(style, /\.verifyPrimary,\s*\.verifyButtons \.verifyPrimary\s*\{[^}]*min-height:/);
+  assert.match(style, /\.verifyRowsHeading\s*\{/);
 });
 
 test('検証 inputs are light boxes with size classes in the page styles', () => {

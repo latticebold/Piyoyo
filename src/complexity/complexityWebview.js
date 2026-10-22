@@ -18,6 +18,18 @@ const COMPLEXITY_STYLES = `
       gap: 8px;
     }
 
+    /* The operation count gets its own full-width row so long complexities keep room above. */
+    #complexityOpsItem {
+      grid-column: 1 / -1;
+    }
+
+    .complexityBigHead {
+      display: flex;
+      gap: 6px;
+      align-items: baseline;
+      justify-content: space-between;
+    }
+
     .complexityBigItem {
       display: grid;
       gap: 2px;
@@ -48,6 +60,7 @@ const COMPLEXITY_STYLES = `
       flex-wrap: wrap;
       gap: 2px 10px;
       align-items: baseline;
+      color: var(--vscode-descriptionForeground);
       font-size: var(--piyoyo-font-small);
     }
 
@@ -72,6 +85,10 @@ const COMPLEXITY_STYLES = `
 
     .complexityConfidence {
       color: var(--vscode-descriptionForeground);
+    }
+
+    .complexityVerdict .error {
+      color: var(--vscode-errorForeground);
     }
 
     .complexityBinding {
@@ -142,6 +159,13 @@ const COMPLEXITY_MARKUP = `
                 <span class="complexityBigLabel">空間</span>
                 <span id="complexitySpace" class="complexityBigValue"></span>
               </div>
+              <div id="complexityOpsItem" class="complexityBigItem">
+                <span class="complexityBigHead">
+                  <span class="complexityBigLabel">計算回数</span>
+                  <span id="complexityVerdictLabel" class="complexityVerdictLabel" hidden></span>
+                </span>
+                <span id="complexityOps" class="complexityBigValue">?</span>
+              </div>
             </div>
             <div id="complexityVerdict" class="complexityVerdict" aria-live="polite"></div>
             <details id="complexityBreakdown">
@@ -152,7 +176,7 @@ const COMPLEXITY_MARKUP = `
               <summary>警告 (<span id="complexityWarningCount">0</span>)</summary>
               <ul id="complexityWarningList" class="complexityList"></ul>
             </details>
-            <details id="complexityAssumptions">
+            <details id="complexityAssumptions" hidden>
               <summary>計算の前提（変数の上限・速さ）</summary>
               <div id="complexityBindings" class="verifyVarList" aria-label="変数の上限"></div>
               <span id="complexitySpeed" class="verifyStatus"></span>
@@ -288,8 +312,12 @@ function initComplexitySection({ vscode }) {
       row.append(el('code', {}, name), el('span', {}, description), controls);
       return row;
     }));
-    // Opened when the user has something to decide; never closed under them while they edit.
-    if ((message.unbound || []).length > 0) {
+    // Shown only when there is something to decide: a missing bound, or a bound the user set by
+    // hand (so it can be changed back). Hidden otherwise.
+    const missing = (message.unbound || []).length > 0;
+    const manual = (message.bindings || []).some((binding) => binding.source === 'manual');
+    assumptions.hidden = !missing && !manual;
+    if (missing) {
       assumptions.open = true;
     }
   }
@@ -304,17 +332,25 @@ function initComplexitySection({ vscode }) {
     setStatus('');
     $('complexityTime').textContent = message.time;
     $('complexitySpace').textContent = message.space;
-    const verdictBox = $('complexityVerdict');
-    const confidence = el('span', { className: 'complexityConfidence' }, '推定: ' + message.confidenceLabel);
+    const verdictLabel = $('complexityVerdictLabel');
+    // The speed assumption is rarely needed, so it lives in the tooltip of the count.
+    $('complexityOpsItem').title = message.speedText || '';
+    const details = [];
     if (message.verdict) {
-      verdictBox.replaceChildren(
-        el('span', { className: 'complexityVerdictLabel ' + message.verdict.verdict }, message.verdict.label),
-        el('span', {}, message.verdict.text),
-        confidence
-      );
+      $('complexityOps').textContent = message.verdict.operationsText || message.verdict.text;
+      verdictLabel.textContent = message.verdict.label;
+      verdictLabel.className = 'complexityVerdictLabel ' + message.verdict.verdict;
+      verdictLabel.hidden = false;
+      if (message.verdict.sizesText) {
+        details.push(el('span', {}, message.verdict.sizesText));
+      }
     } else {
-      verdictBox.replaceChildren(el('span', { className: 'verifyStatus' }, message.verdictNote || ''), confidence);
+      $('complexityOps').textContent = '?';
+      verdictLabel.hidden = true;
+      details.push(el('span', { className: 'error' }, message.verdictNote || ''));
     }
+    details.push(el('span', { className: 'complexityConfidence' }, '推定: ' + message.confidenceLabel));
+    $('complexityVerdict').replaceChildren(...details);
     $('complexitySpeed').textContent = message.speedText || '';
     renderBindings(message);
     linesList.replaceChildren(...(message.lines || []).map((item) => (

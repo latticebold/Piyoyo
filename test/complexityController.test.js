@@ -162,6 +162,17 @@ function timeoutRun(elapsedMs = 2000) {
   return { ...okRun('', elapsedMs), exitCode: null, timedOut: true, errorMessage: '2000 ms でタイムアウトしました。' };
 }
 
+// The expected verdict; text joins the sizes and the operation count.
+function verdictOf(sizesText, operationsText, label, verdict) {
+  return {
+    text: sizesText ? `${sizesText} → ${operationsText}` : operationsText,
+    operationsText,
+    sizesText,
+    label,
+    verdict
+  };
+}
+
 function firstNumber(input) {
   return Number(String(input).split('\n')[0]);
 }
@@ -444,7 +455,7 @@ test('analyze posts the time, space, confidence and a TLE verdict for a double l
   assert.equal(result.space, 'O(1)');
   assert.equal(result.confidence, 'high');
   assert.equal(result.confidenceLabel, '高');
-  assert.deepEqual(result.verdict, { text: 'N = 2×10^5 → 4×10^10 回', label: 'TLE の恐れ', verdict: 'tle' });
+  assert.deepEqual(result.verdict, verdictOf('N = 2×10^5', '4×10^10 回', 'TLE の恐れ', 'tle'));
   assert.equal(result.verdictNote, '');
   assert.equal(result.speedText, '1 秒あたり 3×10^7 回として計算（PyPy・目安の値）、制限時間 2 秒');
   assert.deepEqual(result.bindings, [
@@ -458,6 +469,15 @@ test('analyze posts the time, space, confidence and a TLE verdict for a double l
   ]);
   assert.deepEqual(result.warnings, []);
   assert.deepEqual(JSON.parse(JSON.stringify(result)), result);
+});
+
+test('a constant-time program has a verdict without sizes', async () => {
+  const source = code(['a = int(input())', 'print(a * 2)']);
+  const h = createHarness({ files: { [MAIN]: source } });
+  await h.controller.analyze(MAIN);
+  const result = h.last('complexityResult');
+  assert.equal(result.time, 'O(1)');
+  assert.deepEqual(result.verdict, verdictOf('', '1 回', '余裕', 'safe'));
 });
 
 test('the speed text and the verdict follow PyPy or CPython from the Python path', async () => {
@@ -786,7 +806,7 @@ test('complexityBindingChanged with a value gives an unbound symbol a limit and 
   ]);
   assert.equal(result.time, 'O(N²)');
   assert.equal(result.verdictNote, '');
-  assert.deepEqual(result.verdict, { text: 'N = 2×10^3 → 4×10^6 回', label: '余裕', verdict: 'safe' });
+  assert.deepEqual(result.verdict, verdictOf('N = 2×10^3', '4×10^6 回', '余裕', 'safe'));
   assert.equal(h.astRuns().length, 1, 'changing a binding does not run Python again');
 });
 
@@ -807,7 +827,7 @@ test('complexityBindingChanged can pick another format variable, clear the choic
     { symbol: 'n', display: 'M', source: 'manual', formatVar: 'M', value: 10, valueText: '10' }
   ]);
   assert.equal(result.time, 'O(M²)');
-  assert.deepEqual(result.verdict, { text: 'M = 10 → 100 回', label: '余裕', verdict: 'safe' });
+  assert.deepEqual(result.verdict, verdictOf('M = 10', '100 回', '余裕', 'safe'));
 
   await h.send({ type: 'complexityBindingChanged', symbol: 'n', value: '2×10^3' });
   result = h.last('complexityResult');
@@ -815,7 +835,7 @@ test('complexityBindingChanged can pick another format variable, clear the choic
     { symbol: 'n', display: 'N', source: 'manual', formatVar: '', value: 2000, valueText: '2×10^3' }
   ]);
   assert.equal(result.time, 'O(N²)');
-  assert.deepEqual(result.verdict, { text: 'N = 2×10^3 → 4×10^6 回', label: '余裕', verdict: 'safe' });
+  assert.deepEqual(result.verdict, verdictOf('N = 2×10^3', '4×10^6 回', '余裕', 'safe'));
 
   await h.send({ type: 'complexityBindingChanged', symbol: 'n', clear: true });
   result = h.last('complexityResult');
@@ -870,7 +890,7 @@ test('element lengths without a format read |S_i| in the time, space, lines and 
     ['h', 'H', 100],
     ['|g[]|', '|g_i|', 50]
   ]);
-  assert.deepEqual(result.verdict, { text: 'H = 100、|g_i| = 50 → 5×10^3 回', label: '余裕', verdict: 'safe' });
+  assert.deepEqual(result.verdict, verdictOf('H = 100、|g_i| = 50', '5×10^3 回', '余裕', 'safe'));
   assert.equal(result.time, 'O(H·|g_i|)');
 
   const words = createHarness({ files: { [MAIN]: WORD_MATCH } });
@@ -891,7 +911,7 @@ test('a literal grid width keeps |S_i| while a variable width shows its name', a
     ['h', 'H', 500],
     ['|g[]|', '|g_i|', 10]
   ]);
-  assert.deepEqual(result.verdict, { text: 'H = 500、|g_i| = 10 → 5×10^3 回', label: '余裕', verdict: 'safe' });
+  assert.deepEqual(result.verdict, verdictOf('H = 500、|g_i| = 10', '5×10^3 回', '余裕', 'safe'));
 
   const variable = createHarness({ files: { [MAIN]: GRID_COUNT }, format: gridFormat('W') });
   await variable.controller.analyze(MAIN);
@@ -903,7 +923,7 @@ test('a literal grid width keeps |S_i| while a variable width shows its name', a
     ['h', 'H', 500],
     ['|g[]|', 'W', 2000]
   ]);
-  assert.deepEqual(result.verdict, { text: 'H = 500、W = 2×10^3 → 1×10^6 回', label: '余裕', verdict: 'safe' });
+  assert.deepEqual(result.verdict, verdictOf('H = 500、W = 2×10^3', '1×10^6 回', '余裕', 'safe'));
 });
 
 // ---------- complexityState ----------

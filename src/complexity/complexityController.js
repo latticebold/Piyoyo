@@ -246,6 +246,8 @@ class ComplexityController {
       const sizes = [...shown.values()].join('、');
       verdict = {
         text: `${sizes ? sizes + ' → ' : ''}${formatOperations(operations)} 回`,
+        operationsText: `${formatOperations(operations)} 回`,
+        sizesText: sizes,
         label: judged.label,
         verdict: judged.verdict
       };
