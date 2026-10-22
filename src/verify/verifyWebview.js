@@ -664,7 +664,9 @@ function initVerifyWorkspace({ vscode, sendInputToRun }) {
 
   function rangeField(labelText, row, rowIndex, listId, prefix, minKey = 'min', maxKey = 'max') {
     const rowLabel = (rowIndex + 1) + '行目の' + labelText;
-    const minInput = textInput(row, minKey, rowIndex, minKey, { label: rowLabel + 'の下限', listId, placeholder: '1' });
+    // An empty lower bound of a length means "fixed length", so no example value is shown there.
+    const minPlaceholder = minKey === 'min' ? '1' : '';
+    const minInput = textInput(row, minKey, rowIndex, minKey, { label: rowLabel + 'の下限', listId, placeholder: minPlaceholder });
     const maxInput = textInput(row, maxKey, rowIndex, maxKey, { label: rowLabel + 'の上限', listId, placeholder: '2×10^5' });
     return el('div', { className: 'verifyField' }, [
       el('span', { className: 'verifyBlockLabel', text: labelText + (prefix || '') }),
@@ -1269,6 +1271,7 @@ function initVerifyWorkspace({ vscode, sendInputToRun }) {
 
   renderRows();
   renderCounterexamples();
+  renderNaiveState();
   setBusy(false);
 }
 

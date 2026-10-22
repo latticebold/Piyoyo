@@ -211,7 +211,14 @@ class ComplexityController {
     const { filePath, result } = this.analysis;
     const format = this.currentFormat();
     const binding = bindSymbols(result, format, { manual: this.manualBindings.get(filePath) || {} });
-    const rename = binding.rename || {};
+    const rename = { ...(binding.rename || {}) };
+    // Element lengths read better in AtCoder's notation when no format name applies (|S[]| → |S_i|).
+    (result.symbols || []).forEach((symbol) => {
+      const element = /^\|(.+)\[\]\|$/.exec(symbol);
+      if (element && !rename[symbol]) {
+        rename[symbol] = `|${element[1]}_i|`;
+      }
+    });
     // Same naming rule as formatComplexity, so the verdict and O(...) agree (n → N).
     const displayName = (symbol) => formatCount(symbolComplexity(symbol), { rename });
     const operations = evaluateComplexity(result.time, binding.values);
@@ -244,7 +251,7 @@ class ComplexityController {
       };
     } else {
       verdictNote = binding.unbound.length > 0
-        ? `上限が決まっていない変数があります（${binding.unbound.join('、')}）。「計算の前提」で上限を選んでください。`
+        ? `上限が決まっていない変数があります（${binding.unbound.map(displayName).join('、')}）。「計算の前提」で上限を選んでください。`
         : '演算回数を計算できませんでした。';
     }
     const lines = result.lines.map((item) => ({
@@ -288,6 +295,7 @@ class ComplexityController {
           valueText: formatOperations(item.value)
         })),
         unbound: binding.unbound,
+        unboundDisplays: Object.fromEntries(binding.unbound.map((symbol) => [symbol, displayName(symbol)])),
         formatVars,
         lines,
         warnings: result.warnings

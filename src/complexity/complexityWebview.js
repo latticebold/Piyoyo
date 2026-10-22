@@ -234,10 +234,16 @@ function initComplexitySection({ vscode }) {
     const formatVars = Array.isArray(message.formatVars) ? message.formatVars : [];
     const items = [
       ...(message.bindings || []),
-      ...(message.unbound || []).map((symbol) => ({ symbol, display: symbol, unbound: true }))
+      ...(message.unbound || []).map((symbol) => ({
+        symbol,
+        display: (message.unboundDisplays || {})[symbol] || symbol,
+        unbound: true
+      }))
     ];
     bindingsBox.replaceChildren(...items.map((binding) => {
-      const select = el('select', { 'aria-label': binding.symbol + ' の上限の決め方' });
+      // The code symbol (e.g. |S[]|) is only used to talk to the extension; people see the display name.
+      const name = binding.display || binding.symbol;
+      const select = el('select', { 'aria-label': name + ' の上限の決め方' });
       select.append(el('option', { value: '' }, binding.unbound ? '（決まっていません）' : '自動'));
       formatVars.forEach((name) => select.append(el('option', { value: 'var:' + name }, '入力形式の ' + name)));
       select.append(el('option', { value: 'value' }, '数値を入れる'));
@@ -245,7 +251,7 @@ function initComplexitySection({ vscode }) {
         type: 'text',
         inputmode: 'numeric',
         placeholder: '例: 2×10^5',
-        'aria-label': binding.symbol + ' の上限'
+        'aria-label': name + ' の上限'
       });
       if (binding.source === 'manual' && binding.formatVar) {
         select.value = 'var:' + binding.formatVar;
@@ -279,7 +285,7 @@ function initComplexitySection({ vscode }) {
       const controls = el('div', { className: 'verifyRange' });
       controls.append(select, el('span'), input);
       const row = el('div', { className: 'complexityBinding' });
-      row.append(el('code', {}, binding.symbol), el('span', {}, description), controls);
+      row.append(el('code', {}, name), el('span', {}, description), controls);
       return row;
     }));
     // Opened when the user has something to decide; never closed under them while they edit.

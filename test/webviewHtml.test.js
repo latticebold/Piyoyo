@@ -1347,3 +1347,400 @@ test('every element initComplexitySection looks up exists exactly once in the pa
     assert.equal((html.match(new RegExp(`\\sid="${id}"`, 'g')) || []).length, 1, id);
   }
 });
+
+// ---------- 検証 tab: naive settings, counterexamples, grid rows ----------
+
+const { VERIFY_MARKUP } = require('../src/verify/verifyWebview');
+
+test('the stress section shows only the basic settings and keeps the naive settings in a closed section', () => {
+  const panel = verifyPanelHtml(getWebviewHtml());
+  const stress = elementHtml(panel, 'verifyStressSection');
+  const naive = elementHtml(stress, 'verifyNaiveSection');
+  const outside = stress.replace(naive, '');
+
+  assert.match(openingTag(stress, 'verifyNaiveSection'), /^<details id="verifyNaiveSection">$/, 'closed by default');
+  assert.match(naive, /^<details id="verifyNaiveSection">\s*<summary[^>]*>愚直解と比べる（任意）<\/summary>/);
+  for (const id of ['verifyIterations', 'verifySeed', 'verifyStart', 'verifyCancel', 'verifyMode']) {
+    assert.match(outside, new RegExp(`\\sid="${id}"`), id);
+    assert.doesNotMatch(openingTag(outside, id), /\shidden\b/, id);
+  }
+  assert.match(outside, /<label for="verifyIterations">回数<\/label>/);
+  assert.match(outside, /<label for="verifySeed">シード値/);
+  for (const id of ['verifyNaiveIntro', 'verifyUseNaiveLabel', 'verifyUseNaive', 'verifyNaiveFile', 'verifyCreateNaive', 'verifyChooseNaive', 'verifyCompareMode']) {
+    assert.match(naive, new RegExp(`\\sid="${id}"`), id);
+    assert.doesNotMatch(outside, new RegExp(`\\sid="${id}"`), `${id} stays inside the naive section`);
+  }
+
+  assert.doesNotMatch(openingTag(naive, 'verifyNaiveIntro'), /\shidden\b/);
+  assert.match(openingTag(naive, 'verifyUseNaiveLabel'), /\shidden>$/);
+  assert.match(openingTag(naive, 'verifyCreateNaive'), /\shidden>$/);
+  assert.match(openingTag(naive, 'verifyUseNaive'), /^<input id="verifyUseNaive" type="checkbox" checked>$/);
+  const useNaiveLabel = elementHtml(naive, 'verifyUseNaiveLabel');
+  assert.match(useNaiveLabel, /^<label\b[^>]*\sfor="verifyUseNaive"/);
+  assert.match(useNaiveLabel, /\sid="verifyNaiveFile"/);
+  assert.match(naive, /<button id="verifyChooseNaive"[^>]*type="button">ファイルを選ぶ<\/button>/);
+  assert.match(naive, /<label for="verifyCompareMode">[^<]+<\/label>/);
+
+  assert.doesNotMatch(stress, /\sstyle\s*=/i);
+});
+
+test('the counterexample section shows a note and hides its buttons while it is empty', () => {
+  const counter = elementHtml(verifyPanelHtml(getWebviewHtml()), 'verifyCounterSection');
+  assert.match(counter, /<span id="verifyCounterEmpty" class="verifyStatus">[^<]+<\/span>/);
+  assert.doesNotMatch(openingTag(counter, 'verifyCounterEmpty'), /\shidden\b/);
+  assert.match(openingTag(counter, 'verifyCounterActions'), /\shidden>$/);
+  const actions = elementHtml(counter, 'verifyCounterActions');
+  assert.match(actions, /\sid="verifyRecheck"/);
+  assert.match(actions, /\sid="verifyRegenerate"/);
+  assert.match(openingTag(actions, 'verifyRegenerate'), /\shidden>$/);
+  assert.doesNotMatch(counter, /\sstyle\s*=/i);
+});
+
+function parseAttributes(text) {
+  const attributes = {};
+  for (const match of text.matchAll(/([a-zA-Z][\w-]*)(?:="([^"]*)")?/g)) {
+    attributes[match[1]] = match[2] === undefined ? '' : match[2];
+  }
+  return attributes;
+}
+
+// Matches compound selectors such as 'datalist[data-row]' or '[data-row="1"][data-path$=".name"]'.
+function selectorMatcher(selector) {
+  const parts = /^([a-z]*)((?:\[[^\]]+\])*)$/.exec(selector);
+  assert.ok(parts, `unsupported selector ${selector}`);
+  const checks = Array.from(parts[2].matchAll(/\[([\w-]+)(?:(\$?=)"([^"]*)")?\]/g), (match) => ({
+    name: match[1],
+    operator: match[2],
+    value: match[3]
+  }));
+  return (node) => {
+    if (parts[1] && node.tagName !== parts[1]) {
+      return false;
+    }
+    return checks.every(({ name, operator, value }) => {
+      const actual = node.getAttribute(name);
+      if (actual === null) {
+        return false;
+      }
+      if (operator === '=') {
+        return actual === value;
+      }
+      if (operator === '$=') {
+        return actual.endsWith(value);
+      }
+      return true;
+    });
+  };
+}
+
+class FakeNode {
+  constructor(tagName, attributes = {}) {
+    this.tagName = tagName;
+    this.attributes = { ...attributes };
+    this.children = [];
+    this.listeners = {};
+    this.id = attributes.id || '';
+    this.className = attributes.class || '';
+    this.hidden = 'hidden' in attributes;
+    this.open = 'open' in attributes;
+    this.disabled = 'disabled' in attributes;
+    this.checked = 'checked' in attributes;
+    this.value = attributes.value || '';
+    this.textContent = '';
+  }
+
+  get dataset() {
+    const data = {};
+    for (const [name, value] of Object.entries(this.attributes)) {
+      if (name.startsWith('data-')) {
+        data[name.slice(5).replace(/-([a-z])/g, (_, letter) => letter.toUpperCase())] = value;
+      }
+    }
+    return data;
+  }
+
+  setAttribute(name, value) {
+    this.attributes[name] = String(value);
+    if (name === 'id') {
+      this.id = String(value);
+    } else if (name === 'value') {
+      this.value = String(value);
+    }
+  }
+
+  getAttribute(name) {
+    return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null;
+  }
+
+  removeAttribute(name) {
+    delete this.attributes[name];
+  }
+
+  append(...nodes) {
+    this.children.push(...nodes);
+  }
+
+  replaceChildren(...nodes) {
+    this.children = nodes;
+  }
+
+  addEventListener(type, listener) {
+    (this.listeners[type] = this.listeners[type] || []).push(listener);
+  }
+
+  dispatch(type) {
+    (this.listeners[type] || []).forEach((listener) => listener({ type, target: this }));
+  }
+
+  focus() {}
+
+  descendants() {
+    const found = [];
+    const walk = (node) => node.children.forEach((child) => {
+      if (child instanceof FakeNode) {
+        found.push(child);
+        walk(child);
+      }
+    });
+    walk(this);
+    return found;
+  }
+
+  querySelectorAll(selector) {
+    return this.descendants().filter(selectorMatcher(selector));
+  }
+
+  querySelector(selector) {
+    return this.querySelectorAll(selector)[0] || null;
+  }
+
+  findText(text) {
+    return this.descendants().find((node) => node.textContent === text) || null;
+  }
+}
+
+function runVerifyScript() {
+  const elements = new Map();
+  for (const match of VERIFY_MARKUP.matchAll(/<([a-z0-9]+)\b([^>]*)>/g)) {
+    const attributes = parseAttributes(match[2]);
+    if (attributes.id) {
+      elements.set(attributes.id, new FakeNode(match[1], attributes));
+    }
+  }
+  const posted = [];
+  const timers = [];
+  let onMessage = null;
+  const fakeDocument = {
+    getElementById(id) {
+      if (elements.has(id)) {
+        return elements.get(id);
+      }
+      for (const node of elements.values()) {
+        const found = node.descendants().find((child) => child.id === id);
+        if (found) {
+          return found;
+        }
+      }
+      return null;
+    },
+    createElement: (tagName) => new FakeNode(tagName),
+    createTextNode: (text) => ({ textContent: text })
+  };
+  const fakeWindow = {
+    addEventListener(type, listener) {
+      if (type === 'message') {
+        onMessage = listener;
+      }
+    }
+  };
+  const vscode = { postMessage: (message) => posted.push(JSON.parse(JSON.stringify(message))) };
+  const fakeSetTimeout = (callback) => {
+    timers.push(callback);
+    return timers.length;
+  };
+  const fakeClearTimeout = (handle) => {
+    if (handle) {
+      timers[handle - 1] = null;
+    }
+  };
+  new Function(
+    'document', 'window', 'vscode', 'setTimeout', 'clearTimeout',
+    `${initVerifyWorkspace.toString()}\ninitVerifyWorkspace({ vscode, sendInputToRun() {} });`
+  )(fakeDocument, fakeWindow, vscode, fakeSetTimeout, fakeClearTimeout);
+  assert.equal(typeof onMessage, 'function');
+  return {
+    el: (id) => fakeDocument.getElementById(id),
+    posted,
+    send: (data) => onMessage({ data }),
+    flushTimers() {
+      timers.splice(0).forEach((callback) => callback && callback());
+    },
+    lastPosted(type) {
+      const found = posted.filter((message) => message.type === type);
+      assert.ok(found.length > 0, `no ${type} was posted`);
+      return found[found.length - 1];
+    }
+  };
+}
+
+function verifyLoaded({ target = null, naiveExists = false, data = {} } = {}) {
+  return {
+    type: 'verifyLoaded',
+    target: target ? { mainFile: 'a.py', naiveFile: 'a_naive.py', naiveExists } : null,
+    data: { format: { rows: [] }, compareMode: 'tokens', iterations: 100, counterexamples: [], ...data },
+    warnings: []
+  };
+}
+
+test('the 検証 script shows the naive mode in one line and naive settings only when they apply', () => {
+  const page = runVerifyScript();
+  const mode = page.el('verifyMode');
+  const useNaive = page.el('verifyUseNaive');
+  const state = () => ({
+    mode: mode.textContent,
+    useNaiveLabelHidden: page.el('verifyUseNaiveLabel').hidden,
+    introHidden: page.el('verifyNaiveIntro').hidden,
+    createHidden: page.el('verifyCreateNaive').hidden,
+    choose: page.el('verifyChooseNaive').textContent,
+    chooseDisabled: page.el('verifyChooseNaive').disabled,
+    compareDisabled: page.el('verifyCompareMode').disabled,
+    regenerateHidden: page.el('verifyRegenerate').hidden
+  });
+
+  page.send(verifyLoaded());
+  assert.deepEqual(state(), {
+    mode: '',
+    useNaiveLabelHidden: true,
+    introHidden: false,
+    createHidden: true,
+    choose: 'ファイルを選ぶ',
+    chooseDisabled: true,
+    compareDisabled: true,
+    regenerateHidden: true
+  });
+
+  page.send(verifyLoaded({ target: true, naiveExists: true }));
+  assert.equal(useNaive.checked, true, 'useNaive defaults to true');
+  assert.equal(page.el('verifyNaiveFile').textContent, 'a_naive.py');
+  assert.deepEqual(state(), {
+    mode: '愚直解 a_naive.py と出力を比べます',
+    useNaiveLabelHidden: false,
+    introHidden: true,
+    createHidden: true,
+    choose: '別のファイルにする',
+    chooseDisabled: false,
+    compareDisabled: false,
+    regenerateHidden: false
+  });
+
+  useNaive.checked = false;
+  useNaive.dispatch('change');
+  assert.equal(mode.textContent, '愚直解は使わず、エラーと時間切れを確かめます');
+  assert.equal(page.el('verifyCompareMode').disabled, true);
+  assert.deepEqual(page.lastPosted('verifySettingsChanged'), {
+    type: 'verifySettingsChanged', compareMode: 'tokens', iterations: 100, useNaive: false
+  });
+  useNaive.checked = true;
+  useNaive.dispatch('change');
+  assert.equal(mode.textContent, '愚直解 a_naive.py と出力を比べます');
+  assert.equal(page.lastPosted('verifySettingsChanged').useNaive, true);
+
+  page.send(verifyLoaded({ target: true, naiveExists: true, data: { useNaive: false } }));
+  assert.equal(useNaive.checked, false);
+  assert.equal(mode.textContent, '愚直解は使わず、エラーと時間切れを確かめます');
+  assert.equal(page.el('verifyRegenerate').hidden, false, 'regenerating needs only the naive file');
+
+  page.send(verifyLoaded({ target: true, naiveExists: false }));
+  assert.deepEqual(state(), {
+    mode: '愚直解なし：エラーと時間切れを確かめます',
+    useNaiveLabelHidden: true,
+    introHidden: false,
+    createHidden: false,
+    choose: 'ファイルを選ぶ',
+    chooseDisabled: false,
+    compareDisabled: true,
+    regenerateHidden: true
+  });
+
+  const naiveSection = page.el('verifyNaiveSection');
+  assert.equal(naiveSection.open, false);
+  page.send({ type: 'verifyStressStopped', message: '先に「入力形式」を作ってください。' });
+  assert.equal(naiveSection.open, false);
+  page.send({ type: 'verifyStressStopped', message: '愚直解 a_naive.py が見つかりません。', showCreateNaive: true });
+  assert.equal(naiveSection.open, true);
+});
+
+test('the 検証 script shows counterexample buttons only when there are counterexamples', () => {
+  const page = runVerifyScript();
+  page.send(verifyLoaded({ target: true, naiveExists: true }));
+  assert.equal(page.el('verifyCounterEmpty').hidden, false);
+  assert.equal(page.el('verifyCounterActions').hidden, true);
+  assert.equal(page.el('verifyCounterCount').textContent, '0');
+
+  const saved = { id: 'ce-1', kind: 'mismatch', input: '1\n', expected: '1\n', seed: 1, createdAt: '2026-10-19T12:00:00.000Z' };
+  page.send({ type: 'verifyCounterexamples', counterexamples: [saved] });
+  assert.equal(page.el('verifyCounterEmpty').hidden, true);
+  assert.equal(page.el('verifyCounterActions').hidden, false);
+  assert.equal(page.el('verifyCounterCount').textContent, '1');
+  assert.equal(page.el('verifyCounterList').children.length, 1);
+  assert.equal(page.el('verifyRecheck').disabled, false);
+
+  page.send({ type: 'verifyCounterexamples', counterexamples: [] });
+  assert.equal(page.el('verifyCounterEmpty').hidden, false);
+  assert.equal(page.el('verifyCounterActions').hidden, true);
+});
+
+test('a grid row edits 行数, the 1行の長さ range, すべて異なる and the characters', () => {
+  const page = runVerifyScript();
+  const format = {
+    rows: [
+      { kind: 'ints', vars: [{ name: 'H', min: '1', max: '50' }, { name: 'W', min: '1', max: '80' }], needsReview: false, reviewReason: '' },
+      { kind: 'grid', name: 'S', rows: 'H', minCols: '', cols: 'W', charset: 'custom', chars: '.#', distinct: false, needsReview: false, reviewReason: '' },
+      { kind: 'intList', name: 'A', length: 'H', min: '1', max: '9', layout: 'row', distinct: false, order: 'none', needsReview: false, reviewReason: '' }
+    ]
+  };
+  page.send(verifyLoaded({ target: true, data: { format } }));
+  const rows = page.el('verifyRows');
+  const input = (rowIndex, path) => rows.querySelector(`[data-row="${rowIndex}"][data-path="${path}"]`);
+
+  const rowCount = input(1, 'rows');
+  assert.equal(rowCount.value, 'H');
+  assert.ok(rows.descendants().some((node) => node.tagName === 'label' && node.textContent === '行数' && node.getAttribute('for') === rowCount.id));
+
+  assert.ok(rows.findText('1行の長さ（そろえるなら上限だけ）'), 'the length range label');
+  const minCols = input(1, 'minCols');
+  const cols = input(1, 'cols');
+  assert.equal(minCols.value, '');
+  assert.equal(cols.value, 'W');
+  assert.ok(!minCols.getAttribute('placeholder'), 'no example value in the lower length');
+  assert.equal(cols.getAttribute('placeholder'), '2×10^5');
+  assert.equal(minCols.getAttribute('aria-label'), '2行目の1行の長さの下限');
+  assert.equal(cols.getAttribute('aria-label'), '2行目の1行の長さの上限');
+  assert.equal(input(2, 'min').getAttribute('placeholder'), '1', 'value ranges still show 1');
+
+  const distinct = input(1, 'distinct');
+  assert.equal(distinct.getAttribute('type'), 'checkbox');
+  assert.equal(distinct.checked, false);
+  assert.ok(rows.findText('すべて異なる'));
+  assert.equal(input(1, 'charset').value, 'custom');
+  assert.equal(input(1, 'chars').value, '.#');
+
+  minCols.value = '1';
+  minCols.dispatch('input');
+  distinct.checked = true;
+  distinct.dispatch('change');
+  page.flushTimers();
+  let posted = page.lastPosted('verifyFormatChanged').format.rows[1];
+  assert.equal(posted.minCols, '1');
+  assert.equal(posted.cols, 'W');
+  assert.equal(posted.distinct, true);
+
+  const charset = input(1, 'charset');
+  charset.value = 'lower';
+  charset.dispatch('change');
+  page.flushTimers();
+  assert.equal(input(1, 'chars'), null, '使う文字 is only for custom characters');
+  posted = page.lastPosted('verifyFormatChanged').format.rows[1];
+  assert.equal(posted.charset, 'lower');
+  assert.equal(posted.distinct, true);
+});

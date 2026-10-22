@@ -755,6 +755,84 @@ test('verifyStart does not save a failure found on a max-size input', async () =
   assert.equal(h.fs.writes.length, 0);
 });
 
+// ---------- useNaive ----------
+
+test('verifySettingsChanged stores a boolean useNaive and verifyLoaded sends it back', async () => {
+  const h = createHarness({ files: { [VERIFY]: verifyFileText({ format: VALID_FORMAT }), [NAIVE]: 'print(0)\n' } });
+  await h.load();
+  assert.equal(h.controller.data.useNaive, true);
+
+  for (const useNaive of ['false', 0, null]) {
+    await h.send({ type: 'verifySettingsChanged', useNaive });
+  }
+  assert.equal(h.controller.data.useNaive, true, 'a non-boolean useNaive is ignored');
+
+  await h.send({ type: 'verifySettingsChanged', useNaive: false });
+  await h.controller.flushSave();
+  assert.equal(h.saved().useNaive, false);
+  await h.controller.postLoaded();
+  assert.equal(h.last('verifyLoaded').data.useNaive, false);
+
+  // A fresh load of the saved file keeps the choice.
+  const reloaded = createHarness({ files: { [VERIFY]: h.fs.files.get(VERIFY), [NAIVE]: 'print(0)\n' } });
+  await reloaded.controller.setTargetFile(MAIN);
+  const loaded = reloaded.last('verifyLoaded');
+  assert.equal(loaded.data.useNaive, false);
+  assert.equal(loaded.target.naiveExists, true);
+
+  await h.send({ type: 'verifySettingsChanged', useNaive: true });
+  await h.controller.flushSave();
+  assert.equal(h.saved().useNaive, true);
+});
+
+test('verifyStart with useNaive false never runs the existing naive file', async () => {
+  const h = createHarness({
+    files: { [VERIFY]: verifyFileText({ format: VALID_FORMAT, useNaive: false }), [NAIVE]: 'print(0)\n' },
+    run: ({ filePath }) => (filePath === NAIVE ? okRun('right\n') : okRun('wrong\n'))
+  });
+  await h.load();
+  await h.send({ type: 'verifyStart', iterations: 12, compareMode: 'tokens', seed: '7' });
+
+  assert.equal(h.runs.length, 12);
+  assert.ok(h.runs.every((run) => run.filePath === MAIN));
+  assert.match(h.ofType('verifyProgress')[0].text, /愚直解なし/);
+  const result = h.last('verifyStressResult');
+  assert.equal(result.status, 'passed', 'outputs are not compared without the naive solution');
+  assert.match(result.message, /愚直解がない/);
+  assert.equal(h.ofType('verifyCounterexamples').length, 0);
+});
+
+test('without the naive solution the max size comes every 5th iteration, with it every 10th', async () => {
+  const format = {
+    rows: [
+      intsRow([{ name: 'N', min: '1', max: '100000' }]),
+      { kind: 'intList', name: 'A', length: 'N', min: '1', max: '9', layout: 'row', distinct: false, order: 'none', needsReview: false, reviewReason: '' }
+    ]
+  };
+  const cases = [
+    { useNaive: false, iteration: 4, runs: 5, progress: /愚直解なし/, naiveRuns: 0 },
+    { useNaive: true, iteration: 9, runs: 19, progress: /愚直解と比較/, naiveRuns: 9 }
+  ];
+  for (const item of cases) {
+    const where = `useNaive ${item.useNaive}`;
+    const h = createHarness({
+      files: { [VERIFY]: verifyFileText({ format, useNaive: item.useNaive }), [NAIVE]: 'print(0)\n' },
+      run: ({ input }) => (Number(input.split('\n')[0]) > 1000 ? timeoutRun() : okRun())
+    });
+    await h.load();
+    await h.send({ type: 'verifyStart', iterations: 20, compareMode: 'tokens', seed: '99' });
+
+    const result = h.last('verifyStressResult');
+    assert.equal(result.status, 'mainTimeout', where);
+    assert.equal(result.mode, 'max', where);
+    assert.equal(result.iteration, item.iteration, where);
+    assert.equal(h.runs.length, item.runs, where);
+    assert.equal(h.runs.filter((run) => run.filePath === NAIVE).length, item.naiveRuns, where);
+    assert.match(h.ofType('verifyProgress')[0].text, item.progress, where);
+    assert.equal(h.ofType('verifyCounterexamples').length, 0, where);
+  }
+});
+
 // ---------- verifyRecheck ----------
 
 test('verifyRecheck runs main on each counterexample and compares when an expected output exists', async () => {

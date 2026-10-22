@@ -111,6 +111,17 @@ const WORD_MATCH = code([
   'print(*ans_lst,sep="\\n")'
 ]);
 [DOUBLE_LOOP, SINGLE_LOOP, SYNTAX_ERROR, FUNCTION_CODE, SORTED_LOOP_AND_RECURSION, WORD_MATCH].forEach(dumpAst);
+const GRID_COUNT = code([
+  'h, w = map(int, input().split())',
+  'g = [input() for _ in range(h)]',
+  'cnt = 0',
+  'for row in g:',
+  '    for c in row:',
+  '        if c == "#":',
+  '            cnt += 1',
+  'print(cnt)'
+]);
+dumpAst(GRID_COUNT);
 // FUNCTION_CODE hints: the function line, two loop lines and the solve(n) call line.
 const FUNCTION_CODE_HINT_COUNT = 4;
 
@@ -477,7 +488,8 @@ test('without an input format the verdict is null and the note lists the unbound
   assert.equal(result.time, 'O(N²)');
   assert.equal(result.verdict, null);
   assert.deepEqual(result.unbound, ['n']);
-  assert.match(result.verdictNote, /上限が決まっていない変数があります（n）/);
+  // The note names variables the same way as O(...) does (n is shown as N).
+  assert.match(result.verdictNote, /上限が決まっていない変数があります（N）/);
   assert.deepEqual(result.bindings, []);
   assert.deepEqual(result.formatVars, []);
   assert.equal(h.last('complexityState').canMeasure, false);
@@ -824,6 +836,74 @@ test('complexityBindingChanged can pick another format variable, clear the choic
   assert.equal(h.ofType('complexityResult').length, resultCount);
   await h.controller.handleFormatChanged();
   assert.equal(h.last('complexityResult').bindings[0].source, 'name', 'a rejected limit is not stored');
+});
+
+// ---------- element-length names ----------
+
+function gridFormat(cols) {
+  return {
+    rows: [
+      intsRow([{ name: 'H', min: '1', max: '500' }, { name: 'W', min: '1', max: '2000' }]),
+      {
+        kind: 'grid', name: 'G', rows: 'H', minCols: '', cols, charset: 'custom', chars: '.#', distinct: false,
+        needsReview: false, reviewReason: ''
+      }
+    ]
+  };
+}
+
+test('element lengths without a format read |S_i| in the time, space, lines and verdict', async () => {
+  const h = createHarness({ files: { [MAIN]: GRID_COUNT } });
+  await h.controller.analyze(MAIN);
+  let result = h.last('complexityResult');
+  assert.equal(result.time, 'O(H·|g_i|)');
+  assert.equal(result.space, 'O(H·|g_i|)');
+  assert.deepEqual(result.lines.map(({ line, label }) => [line, label]), [[4, '× H'], [5, '× |g_i|']]);
+  assert.equal(result.verdict, null);
+  assert.deepEqual(result.unbound, ['h', '|g[]|']);
+
+  await h.send({ type: 'complexityBindingChanged', symbol: 'h', value: '100' });
+  await h.send({ type: 'complexityBindingChanged', symbol: '|g[]|', value: '50' });
+  result = h.last('complexityResult');
+  assert.deepEqual(result.unbound, []);
+  assert.deepEqual(result.bindings.map(({ symbol, display, value }) => [symbol, display, value]), [
+    ['h', 'H', 100],
+    ['|g[]|', '|g_i|', 50]
+  ]);
+  assert.deepEqual(result.verdict, { text: 'H = 100、|g_i| = 50 → 5×10^3 回', label: '余裕', verdict: 'safe' });
+  assert.equal(result.time, 'O(H·|g_i|)');
+
+  const words = createHarness({ files: { [MAIN]: WORD_MATCH } });
+  await words.controller.analyze(MAIN);
+  const wordsResult = words.last('complexityResult');
+  assert.equal(wordsResult.time, 'O(N·M·|S_i|)');
+  assert.equal(wordsResult.space, 'O(N·|S_i| + M·|T_i|)');
+  assert.doesNotMatch(JSON.stringify([wordsResult.time, wordsResult.space, wordsResult.lines]), /\[\]/);
+});
+
+test('a literal grid width keeps |S_i| while a variable width shows its name', async () => {
+  const literal = createHarness({ files: { [MAIN]: GRID_COUNT }, format: gridFormat('10') });
+  await literal.controller.analyze(MAIN);
+  let result = literal.last('complexityResult');
+  assert.equal(result.time, 'O(H·|g_i|)');
+  assert.deepEqual(result.lines.map(({ line, label }) => [line, label]), [[4, '× H'], [5, '× |g_i|']]);
+  assert.deepEqual(result.bindings.map(({ symbol, display, value }) => [symbol, display, value]), [
+    ['h', 'H', 500],
+    ['|g[]|', '|g_i|', 10]
+  ]);
+  assert.deepEqual(result.verdict, { text: 'H = 500、|g_i| = 10 → 5×10^3 回', label: '余裕', verdict: 'safe' });
+
+  const variable = createHarness({ files: { [MAIN]: GRID_COUNT }, format: gridFormat('W') });
+  await variable.controller.analyze(MAIN);
+  result = variable.last('complexityResult');
+  assert.equal(result.time, 'O(H·W)');
+  assert.equal(result.space, 'O(H·W)');
+  assert.deepEqual(result.lines.map(({ line, label }) => [line, label]), [[4, '× H'], [5, '× W']]);
+  assert.deepEqual(result.bindings.map(({ symbol, display, value }) => [symbol, display, value]), [
+    ['h', 'H', 500],
+    ['|g[]|', 'W', 2000]
+  ]);
+  assert.deepEqual(result.verdict, { text: 'H = 500、W = 2×10^3 → 1×10^6 回', label: '余裕', verdict: 'safe' });
 });
 
 // ---------- complexityState ----------
@@ -1246,7 +1326,7 @@ test('refreshDecorations marks the loops and the expensive list operations of a 
     [6, 'O(N)'],
     [7, 'O(N)'],
     [10, '× N'],
-    [11, '× |S[]|'],
+    [11, '× |S_i|'],
     [16, 'O(N)']
   ]);
   for (const line of [1, 2, 3, 4, 8, 9, 12, 13, 14]) {
