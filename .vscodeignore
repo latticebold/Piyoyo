@@ -18,3 +18,5 @@ docs/images/05-snippet-inserted.png
 AGENTS.md
 CLAUDE.md
 dist/**
+docs/verify-design.md
+docs/complexity-design.md
