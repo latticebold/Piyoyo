@@ -1045,9 +1045,13 @@ test('verify workspace controls exist with accessible names', () => {
 
   for (const id of ['verifyProblemUrl', 'verifyIterations', 'verifyCompareMode', 'verifySeed']) {
     openingTag(panel, id);
-    assert.match(panel, new RegExp(`<label for="${id}">[^<]+</label>`), id);
+    assert.match(panel, new RegExp(`<label for="${id}"(?: title="[^"]+")?>[^<]+</label>`), id);
   }
   assert.match(openingTag(panel, 'verifyProblemUrl'), /<input\b[^>]*type="url"/);
+  // Short label with the explanation in its title; the URL and the fetch button share one line.
+  assert.match(panel, /<label for="verifyProblemUrl" title="[^"]+">問題の URL<\/label>/);
+  assert.match(panel, /<div class="verifyInline">\s*<input id="verifyProblemUrl"[^>]*>\s*<button id="verifyFetchProblem" class="verifySmallButton" type="button">読み取る<\/button>\s*<\/div>/);
+  assert.match(panel, /<div class="verifyButtons">\s*<button id="verifyUndoImport"[^>]*hidden>[^<]+<\/button>\s*<\/div>/);
   assert.match(openingTag(panel, 'verifyProblemText'), /<textarea\b[^>]*aria-label="[^"]+"/);
   assert.match(openingTag(panel, 'verifyAddRowKind'), /<select\b[^>]*aria-label="[^"]+"/);
   for (const id of ['verifyFetchProblem', 'verifyAddRow', 'verifyStart', 'verifyCancel', 'verifyRecheck', 'verifyRegenerate']) {
@@ -1365,7 +1369,8 @@ test('the stress section shows only the basic settings and keeps the naive setti
     assert.doesNotMatch(openingTag(outside, id), /\shidden\b/, id);
   }
   assert.match(outside, /<label for="verifyIterations">回数<\/label>/);
-  assert.match(outside, /<label for="verifySeed">シード値/);
+  assert.match(outside, /<label for="verifySeed" title="[^"]+">シード値<\/label>/);
+  assert.match(openingTag(outside, 'verifySeed'), /\splaceholder="空なら毎回変わる"/);
   for (const id of ['verifyNaiveIntro', 'verifyUseNaiveLabel', 'verifyUseNaive', 'verifyNaiveFile', 'verifyCreateNaive', 'verifyChooseNaive', 'verifyCompareMode']) {
     assert.match(naive, new RegExp(`\\sid="${id}"`), id);
     assert.doesNotMatch(outside, new RegExp(`\\sid="${id}"`), `${id} stays inside the naive section`);
@@ -1394,6 +1399,19 @@ test('the counterexample section shows a note and hides its buttons while it is 
   assert.match(actions, /\sid="verifyRegenerate"/);
   assert.match(openingTag(actions, 'verifyRegenerate'), /\shidden>$/);
   assert.doesNotMatch(counter, /\sstyle\s*=/i);
+});
+
+test('検証 inputs are light boxes with size classes in the page styles', () => {
+  const html = getWebviewHtml();
+  const style = html.match(/<style nonce="[^"]+">([\s\S]*?)<\/style>/)[1];
+  assert.match(
+    style,
+    /\.verifyWorkspace input\[type="text"\],\s*\.verifyWorkspace input\[type="url"\],\s*\.verifyWorkspace input\[type="number"\],\s*\.verifyWorkspace select,\s*\.verifyWorkspace textarea\s*\{(?=[^}]*color-scheme:\s*light;)(?=[^}]*\scolor:\s*#141414;)(?=[^}]*background:\s*#f4f4f1;)[^}]*\}/
+  );
+  assert.match(style, /\.verifyInput-name\s*\{[^}]*width:/);
+  assert.match(style, /\.verifyInput-expr\s*\{[^}]*width:/);
+  assert.match(style, /\.verifyFields\s*\{(?=[^}]*display:\s*flex;)(?=[^}]*flex-wrap:\s*wrap;)[^}]*\}/);
+  assert.match(style, /\.verifyOptions\s*\{(?=[^}]*display:\s*flex;)(?=[^}]*flex-wrap:\s*wrap;)[^}]*\}/);
 });
 
 function parseAttributes(text) {
@@ -1690,7 +1708,7 @@ test('the 検証 script shows counterexample buttons only when there are counter
   assert.equal(page.el('verifyCounterActions').hidden, true);
 });
 
-test('a grid row edits 行数, the 1行の長さ range, すべて異なる and the characters', () => {
+test('a grid row edits 行数, the 長さ range, the characters and すべて異なる with short labels', () => {
   const page = runVerifyScript();
   const format = {
     rows: [
@@ -1702,28 +1720,61 @@ test('a grid row edits 行数, the 1行の長さ range, すべて異なる and t
   page.send(verifyLoaded({ target: true, data: { format } }));
   const rows = page.el('verifyRows');
   const input = (rowIndex, path) => rows.querySelector(`[data-row="${rowIndex}"][data-path="${path}"]`);
+  const labelFor = (control) => rows.descendants().find((node) => node.tagName === 'label' && node.getAttribute('for') === control.id);
+  // The .verifyField wrapper of a control, which carries the long explanation as its title.
+  const wrapperOf = (control) => rows.descendants()
+    .find((node) => node.className === 'verifyField' && node.descendants().includes(control));
+
+  // The ints row has no long label; its explanation is the title of the variable list.
+  assert.equal(rows.findText('変数（名前・下限〜上限）。1行に空白区切りで並べます'), null);
+  const varList = rows.descendants().find((node) => node.className === 'verifyVarList');
+  assert.ok(varList.title);
+  assert.equal(input(0, 'vars.0.name').className, 'verifyInput-name');
+  assert.equal(input(0, 'vars.0.max').className, 'verifyInput-expr');
 
   const rowCount = input(1, 'rows');
   assert.equal(rowCount.value, 'H');
-  assert.ok(rows.descendants().some((node) => node.tagName === 'label' && node.textContent === '行数' && node.getAttribute('for') === rowCount.id));
+  assert.equal(labelFor(rowCount).textContent, '行数');
 
-  assert.ok(rows.findText('1行の長さ（そろえるなら上限だけ）'), 'the length range label');
   const minCols = input(1, 'minCols');
   const cols = input(1, 'cols');
+  const lengthField = wrapperOf(minCols);
+  assert.ok(lengthField.descendants().some((node) => node.className === 'verifyBlockLabel' && node.textContent === '長さ'));
+  assert.ok(lengthField.descendants().includes(cols));
+  assert.match(lengthField.getAttribute('title'), /下限を空にすると/);
   assert.equal(minCols.value, '');
   assert.equal(cols.value, 'W');
   assert.ok(!minCols.getAttribute('placeholder'), 'no example value in the lower length');
   assert.equal(cols.getAttribute('placeholder'), '2×10^5');
-  assert.equal(minCols.getAttribute('aria-label'), '2行目の1行の長さの下限');
-  assert.equal(cols.getAttribute('aria-label'), '2行目の1行の長さの上限');
-  assert.equal(input(2, 'min').getAttribute('placeholder'), '1', 'value ranges still show 1');
+  assert.equal(minCols.getAttribute('aria-label'), '2行目の長さの下限');
+  assert.equal(cols.getAttribute('aria-label'), '2行目の長さの上限');
+  assert.equal(minCols.className, 'verifyInput-expr');
+  assert.equal(cols.className, 'verifyInput-expr');
 
+  const valueMin = input(2, 'min');
+  assert.equal(valueMin.getAttribute('placeholder'), '1', 'value ranges still show 1');
+  const valueField = wrapperOf(valueMin);
+  assert.ok(valueField.descendants().some((node) => node.className === 'verifyBlockLabel' && node.textContent === '範囲'));
+  assert.equal(valueField.getAttribute('title'), '値の下限〜上限');
+  assert.equal(valueMin.getAttribute('aria-label'), '3行目の範囲の下限');
+
+  const charsetSelect = input(1, 'charset');
+  assert.equal(labelFor(charsetSelect).textContent, '文字');
+  assert.equal(charsetSelect.getAttribute('aria-label'), '2行目の文字の種類');
+  assert.equal(charsetSelect.value, 'custom');
+  assert.equal(input(1, 'chars').value, '.#');
+  assert.equal(input(1, 'chars').className, 'verifyInput-name');
+  assert.equal(input(1, 'name').className, 'verifyInput-name');
+
+  // すべて異なる comes last in a grid row.
+  assert.deepEqual(
+    rows.querySelectorAll('[data-row="1"][data-path]').map((node) => node.getAttribute('data-path')),
+    ['name', 'rows', 'minCols', 'cols', 'charset', 'chars', 'distinct']
+  );
   const distinct = input(1, 'distinct');
   assert.equal(distinct.getAttribute('type'), 'checkbox');
   assert.equal(distinct.checked, false);
   assert.ok(rows.findText('すべて異なる'));
-  assert.equal(input(1, 'charset').value, 'custom');
-  assert.equal(input(1, 'chars').value, '.#');
 
   minCols.value = '1';
   minCols.dispatch('input');

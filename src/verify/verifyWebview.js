@@ -104,10 +104,18 @@ const VERIFY_STYLES = `
     }
 
     .verifyRowHeader {
-      display: grid;
-      grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+      display: flex;
       gap: 6px;
       align-items: center;
+    }
+
+    .verifyRowHeader select {
+      width: auto;
+    }
+
+    /* Push the move/remove buttons to the right edge. */
+    .verifyRowHeader .verifyIconButton:first-of-type {
+      margin-left: auto;
     }
 
     .verifyRowNumber {
@@ -134,29 +142,80 @@ const VERIFY_STYLES = `
     }
 
     .verifyFields {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-      gap: 6px 8px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 14px;
+      align-items: flex-end;
     }
 
     .verifyField {
       display: grid;
-      gap: 3px;
+      gap: 2px;
       min-width: 0;
     }
 
-    .verifyRange {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    .verifyFields .verifyField label,
+    .verifyFields .verifyBlockLabel {
+      gap: 0;
+      font-size: var(--piyoyo-font-small);
+    }
+
+    .verifyFields select {
+      width: auto;
+    }
+
+    .verifyRange,
+    .verifyVar,
+    .verifyInline {
+      display: flex;
       gap: 4px;
       align-items: center;
     }
 
-    .verifyVar {
-      display: grid;
-      grid-template-columns: minmax(48px, 0.6fr) minmax(0, 1fr) auto minmax(0, 1fr) auto;
-      gap: 4px;
-      align-items: center;
+    .verifyInline > input {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .verifyInput-name {
+      width: 4.5em;
+    }
+
+    .verifyInput-expr {
+      width: 7em;
+    }
+
+    /* Light input boxes stand out from the dark panel, so it is obvious where to type. */
+    .verifyWorkspace input[type="text"],
+    .verifyWorkspace input[type="url"],
+    .verifyWorkspace input[type="number"],
+    .verifyWorkspace select,
+    .verifyWorkspace textarea {
+      color-scheme: light;
+      padding: 3px 6px;
+      border-color: #8c8c8c;
+      border-radius: 4px;
+      color: #141414;
+      background: #f4f4f1;
+    }
+
+    .verifyWorkspace option {
+      color: #141414;
+      background: #f4f4f1;
+    }
+
+    .verifyWorkspace input::placeholder,
+    .verifyWorkspace textarea::placeholder {
+      color: #8a8a8a;
+    }
+
+    .verifyWorkspace select:disabled {
+      color: #6f6f6f;
+      background: #cfcfcb;
+    }
+
+    .verifyWorkspace input[type="checkbox"] {
+      accent-color: var(--piyoyo-orange);
     }
 
     .verifyVarList {
@@ -191,7 +250,8 @@ const VERIFY_STYLES = `
     }
 
     .verifyWorkspace input[aria-invalid="true"] {
-      border-color: var(--vscode-errorForeground);
+      border-color: var(--piyoyo-action-red);
+      box-shadow: 0 0 0 1px var(--piyoyo-action-red);
     }
 
     .verifyStatus {
@@ -217,9 +277,14 @@ const VERIFY_STYLES = `
     }
 
     .verifyOptions {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-      gap: 6px 8px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 14px;
+      align-items: flex-end;
+    }
+
+    .verifyOptions input {
+      width: 7em;
     }
 
     .verifyProgress {
@@ -345,11 +410,13 @@ const VERIFY_MARKUP = `
         <summary>入力形式<span id="verifyFormatSummary" class="summaryValue"></span></summary>
         <div class="verifySectionBody">
           <div class="verifyField">
-            <label for="verifyProblemUrl">問題の URL（終わったコンテストの atcoder.jp の問題ページ）</label>
-            <input id="verifyProblemUrl" type="url" autocomplete="off" spellcheck="false" placeholder="例: atcoder.jp/contests/abc001/tasks/abc001_a の URL を貼る">
+            <label for="verifyProblemUrl" title="終わったコンテストの atcoder.jp の問題ページ（ログインしなくても見られるもの）">問題の URL</label>
+            <div class="verifyInline">
+              <input id="verifyProblemUrl" type="url" autocomplete="off" spellcheck="false" placeholder="atcoder.jp の問題ページ">
+              <button id="verifyFetchProblem" class="verifySmallButton" type="button">読み取る</button>
+            </div>
           </div>
           <div class="verifyButtons">
-            <button id="verifyFetchProblem" type="button">問題から読み取る</button>
             <button id="verifyUndoImport" class="verifySecondary" type="button" hidden>読み取る前に戻す</button>
           </div>
           <details id="verifyPasteSection">
@@ -392,8 +459,8 @@ ${COMPLEXITY_MARKUP}
               <input id="verifyIterations" type="number" min="1" max="10000" step="1" value="100">
             </div>
             <div class="verifyField">
-              <label for="verifySeed">シード値（空なら毎回変える）</label>
-              <input id="verifySeed" type="text" inputmode="numeric" autocomplete="off" spellcheck="false">
+              <label for="verifySeed" title="同じシード値と回数なら、同じ入力を作り直せます">シード値</label>
+              <input id="verifySeed" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="空なら毎回変わる">
             </div>
           </div>
           <div class="verifyButtons">
@@ -615,9 +682,11 @@ function initVerifyWorkspace({ vscode, sendInputToRun }) {
     return el('span', { className: 'verifyFieldError', 'data-error-for': rowIndex + ':' + path, 'aria-live': 'polite' });
   }
 
-  function textInput(row, key, rowIndex, path, { label, listId, placeholder, onChange } = {}) {
+  // size: 'name' for short names (N, A, S), 'expr' for numbers and expressions (2×10^5, N-1).
+  function textInput(row, key, rowIndex, path, { label, listId, placeholder, onChange, size = 'expr' } = {}) {
     const input = el('input', {
       id: fieldId(rowIndex, path),
+      className: 'verifyInput-' + size,
       type: 'text',
       value: row[key] === undefined ? '' : row[key],
       list: listId,
@@ -654,22 +723,23 @@ function initVerifyWorkspace({ vscode, sendInputToRun }) {
     return select;
   }
 
-  function field(labelText, control, rowIndex, path) {
-    return el('div', { className: 'verifyField' }, [
+  // Labels stay short; longer explanations go to the tooltip (title).
+  function field(labelText, control, rowIndex, path, title) {
+    return el('div', { className: 'verifyField', title }, [
       el('label', { for: control.id, text: labelText }),
       control,
       errorSpan(rowIndex, path)
     ]);
   }
 
-  function rangeField(labelText, row, rowIndex, listId, prefix, minKey = 'min', maxKey = 'max') {
+  function rangeField(labelText, row, rowIndex, listId, title, minKey = 'min', maxKey = 'max') {
     const rowLabel = (rowIndex + 1) + '行目の' + labelText;
     // An empty lower bound of a length means "fixed length", so no example value is shown there.
     const minPlaceholder = minKey === 'min' ? '1' : '';
     const minInput = textInput(row, minKey, rowIndex, minKey, { label: rowLabel + 'の下限', listId, placeholder: minPlaceholder });
     const maxInput = textInput(row, maxKey, rowIndex, maxKey, { label: rowLabel + 'の上限', listId, placeholder: '2×10^5' });
-    return el('div', { className: 'verifyField' }, [
-      el('span', { className: 'verifyBlockLabel', text: labelText + (prefix || '') }),
+    return el('div', { className: 'verifyField', title }, [
+      el('span', { className: 'verifyBlockLabel', text: labelText }),
       el('div', { className: 'verifyRange' }, [minInput, el('span', { text: '〜' }), maxInput]),
       errorSpan(rowIndex, minKey),
       errorSpan(rowIndex, maxKey)
@@ -689,7 +759,7 @@ function initVerifyWorkspace({ vscode, sendInputToRun }) {
       const base = 'vars.' + varIndex + '.';
       const label = (rowIndex + 1) + '行目の' + (varIndex + 1) + '番目の変数';
       const nameInput = textInput(variable, 'name', rowIndex, base + 'name', {
-        label: label + 'の名前', placeholder: 'N', onChange: refreshDatalists
+        label: label + 'の名前', placeholder: 'N', onChange: refreshDatalists, size: 'name'
       });
       const minInput = textInput(variable, 'min', rowIndex, base + 'min', { label: label + 'の下限', listId, placeholder: '1' });
       const maxInput = textInput(variable, 'max', rowIndex, base + 'max', { label: label + 'の上限', listId, placeholder: '2×10^5' });
@@ -720,8 +790,8 @@ function initVerifyWorkspace({ vscode, sendInputToRun }) {
         inputs[inputs.length - 1].focus();
       }
     }));
+    container.title = '1行に空白区切りで並べる整数です（名前・下限〜上限）';
     return [
-      el('span', { className: 'verifyBlockLabel', text: '変数（名前・下限〜上限）。1行に空白区切りで並べます' }),
       container,
       errorSpan(rowIndex, 'vars'),
       el('div', { className: 'verifyButtons' }, addButton)
@@ -747,11 +817,11 @@ function initVerifyWorkspace({ vscode, sendInputToRun }) {
     }
     const { id: listId, list } = datalist(rowIndex);
     const label = (text) => (rowIndex + 1) + '行目の' + text;
-    const fields = [field('名前', textInput(row, 'name', rowIndex, 'name', { label: label('名前') }), rowIndex, 'name')];
+    const fields = [field('名前', textInput(row, 'name', rowIndex, 'name', { label: label('名前'), size: 'name' }), rowIndex, 'name')];
     if (row.kind === 'intList') {
       fields.push(
         field('個数', textInput(row, 'length', rowIndex, 'length', { label: label('個数'), listId, placeholder: 'N' }), rowIndex, 'length'),
-        rangeField('値の範囲', row, rowIndex, listId),
+        rangeField('範囲', row, rowIndex, listId, '値の下限〜上限'),
         field('並べ方', selectInput(row, 'layout', rowIndex, 'layout', LAYOUT_LABELS, { label: label('並べ方') }), rowIndex, 'layout'),
         field('並び', selectInput(row, 'order', rowIndex, 'order', ORDER_LABELS, { label: label('並び') }), rowIndex, 'order'),
         distinctField(row, rowIndex)
@@ -760,19 +830,18 @@ function initVerifyWorkspace({ vscode, sendInputToRun }) {
       fields.push(
         field('行数', textInput(row, 'rows', rowIndex, 'rows', { label: label('行数'), listId, placeholder: 'H' }), rowIndex, 'rows'),
         field('列数', textInput(row, 'cols', rowIndex, 'cols', { label: label('列数'), listId, placeholder: 'W' }), rowIndex, 'cols'),
-        rangeField('値の範囲', row, rowIndex, listId)
+        rangeField('範囲', row, rowIndex, listId, '値の下限〜上限')
       );
     } else if (row.kind === 'string' || row.kind === 'grid') {
       if (row.kind === 'string') {
-        fields.push(rangeField('長さ', row, rowIndex, listId, '（固定なら上限だけ）', 'minLength', 'maxLength'));
+        fields.push(rangeField('長さ', row, rowIndex, listId, '文字列の長さ。下限を空にすると、長さは上限で固定です', 'minLength', 'maxLength'));
       } else {
         fields.push(
           field('行数', textInput(row, 'rows', rowIndex, 'rows', { label: label('行数'), listId, placeholder: 'H' }), rowIndex, 'rows'),
-          rangeField('1行の長さ', row, rowIndex, listId, '（そろえるなら上限だけ）', 'minCols', 'cols'),
-          distinctField(row, rowIndex)
+          rangeField('長さ', row, rowIndex, listId, '1行の長さ。下限を空にすると、すべての行が上限の長さ（グリッド）になります', 'minCols', 'cols')
         );
       }
-      fields.push(field('文字の種類', selectInput(row, 'charset', rowIndex, 'charset', CHARSET_LABELS, {
+      fields.push(field('文字', selectInput(row, 'charset', rowIndex, 'charset', CHARSET_LABELS, {
         label: label('文字の種類'),
         onChange: () => {
           renderRows();
@@ -785,7 +854,10 @@ function initVerifyWorkspace({ vscode, sendInputToRun }) {
         }
       }), rowIndex, 'charset'));
       if (row.charset === 'custom') {
-        fields.push(field('使う文字', textInput(row, 'chars', rowIndex, 'chars', { label: label('使う文字'), placeholder: '.#' }), rowIndex, 'chars'));
+        fields.push(field('使う文字', textInput(row, 'chars', rowIndex, 'chars', { label: label('使う文字'), placeholder: '.#', size: 'name' }), rowIndex, 'chars'));
+      }
+      if (row.kind === 'grid') {
+        fields.push(distinctField(row, rowIndex));
       }
     }
     return [el('div', { className: 'verifyFields' }, fields), list];
