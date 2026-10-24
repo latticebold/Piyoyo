@@ -513,11 +513,13 @@ function getWebviewHtml({
   const snippetTabShortcut = escapeHtml(workspaceShortcutLabels.snippetsAlias);
   const verifyTabShortcut = escapeHtml(workspaceShortcutLabels.verifyAlias);
   const tabSwitchLabel = escapeHtml(workspaceShortcutLabels.switch);
-  // Inside text fields Shift+Arrow only switches at the caret edge (getTextFieldEdgeWorkspaceTarget).
-  const tabTitleSuffix = `。${tabSwitchLabel}で隣のタブへ移ります。文字の入力欄の中では、文字を選んでおらずカーソルが端にあるときに切り替わります`;
+  // Inside text fields Shift+Arrow only switches at the caret edge, except in stdin
+  // (getTextFieldEdgeWorkspaceTarget).
+  const tabTitleSuffix = `。${tabSwitchLabel}で隣のタブへ移ります。文字の入力欄の中では、文字を選んでおらずカーソルが端にあるときに切り替わります`
+    + '（標準入力の欄ではいつでも切り替わります）';
   const tabSwitchHelp = 'Shift+←→でタブを切り替えます。文字の入力欄の中では、文字を選んでいないときに、'
     + 'カーソルが左端ならShift+←、右端ならShift+→で切り替わります。それ以外は文字の選択になります。'
-    + '標準入力の欄ではEscでタブへ移動できます';
+    + '標準入力の欄では、カーソルの位置にかかわらずShift+←→で切り替わります。Escでタブへ移動することもできます';
   const inputFocusMode = normalizeInputFocusShortcut(inputFocusShortcut && inputFocusShortcut.mode);
   const inputFocusLabel = String((inputFocusShortcut && inputFocusShortcut.label) || 'Alt+I');
   const escapedRunShortcutLabel = escapeHtml(runShortcutLabel);
@@ -3061,7 +3063,7 @@ ${COMPLEXITY_STYLES}
     }
 
     runButton.addEventListener('click', () => startRun());
-    // Esc leaves the stdin box for the run tab, where Shift+Right switches tabs again.
+    // Esc leaves the stdin box for the run tab.
     stdin.addEventListener('keydown', (event) => {
       if (event.key !== 'Escape' || isImeComposing(event)
         || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
@@ -3113,7 +3115,9 @@ ${COMPLEXITY_STYLES}
         allowArrows: !inTextField,
         currentWorkspace: viewState.workspace
       })
-        || (inTextField ? getTextFieldEdgeWorkspaceTarget(event, event.target, viewState.workspace) : '');
+        || (inTextField
+          ? getTextFieldEdgeWorkspaceTarget(event, event.target, viewState.workspace, { anywhere: event.target === stdin })
+          : '');
       if (shortcutWorkspace) {
         // Let it bubble: VS Code must still see the Alt key combo (see Alt+I).
         event.preventDefault();

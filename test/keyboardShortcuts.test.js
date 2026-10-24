@@ -361,6 +361,22 @@ test('getTextFieldEdgeWorkspaceTarget ignores other keys, modifiers, IME and fie
   assert.equal(getTextFieldEdgeWorkspaceTarget(undefined, end, 'run'), '');
 });
 
+test('getTextFieldEdgeWorkspaceTarget with anywhere switches from any caret or selection', () => {
+  const anywhere = { anywhere: true };
+  assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_RIGHT, caret('1 2\n3', 0), 'run', anywhere), 'snippets');
+  assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_RIGHT, caret('1 2\n3', 2), 'run', anywhere), 'snippets');
+  assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_RIGHT, caret('1 2\n3', 1, 4), 'run', anywhere), 'snippets');
+  assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_LEFT, caret('abc', 2), 'snippets', anywhere), 'run');
+  // No neighbour: leave the key to the text field instead of moving focus.
+  assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_LEFT, caret('abc', 2), 'run', anywhere), '');
+  assert.equal(getTextFieldEdgeWorkspaceTarget(SHIFT_RIGHT, caret('abc', 2), 'verify', anywhere), '');
+  // Other keys and modifiers still do nothing.
+  assert.equal(getTextFieldEdgeWorkspaceTarget({ shiftKey: true, code: 'ArrowUp', key: 'ArrowUp' }, caret('abc', 2), 'run', anywhere), '');
+  assert.equal(getTextFieldEdgeWorkspaceTarget({ ...SHIFT_RIGHT, ctrlKey: true }, caret('abc', 2), 'run', anywhere), '');
+  assert.equal(getTextFieldEdgeWorkspaceTarget({ ...SHIFT_RIGHT, isComposing: true }, caret('abc', 2), 'run', anywhere), '');
+  assert.equal(getTextFieldEdgeWorkspaceTarget({ code: 'ArrowRight', key: 'ArrowRight' }, caret('abc', 2), 'run', anywhere), '');
+});
+
 test('getDisclosureArrowAction collapses with Left and expands with Right', () => {
   assert.equal(getDisclosureArrowAction({ key: 'ArrowLeft' }, true), 'close');
   assert.equal(getDisclosureArrowAction({ key: 'ArrowLeft' }, false), '');

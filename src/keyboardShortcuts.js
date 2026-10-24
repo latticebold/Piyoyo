@@ -61,7 +61,9 @@ function getWorkspaceShortcutTarget(event, { allowArrows = true, currentWorkspac
 // Shift+Left / Shift+Right inside a text field: switches only when nothing is selected and the
 // caret is at the edge the arrow points to, so selecting text is never interrupted.
 // field is { value, selectionStart, selectionEnd }; returns the neighbouring tab or ''.
-function getTextFieldEdgeWorkspaceTarget(event, field, currentWorkspace) {
+// anywhere skips the caret and selection checks (the stdin box, where Shift+Up/Down/Home/End
+// still select text).
+function getTextFieldEdgeWorkspaceTarget(event, field, currentWorkspace, { anywhere = false } = {}) {
   const workspaces = ['run', 'snippets', 'verify'];
   if (!event || !event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) {
     return '';
@@ -70,8 +72,8 @@ function getTextFieldEdgeWorkspaceTarget(event, field, currentWorkspace) {
     return '';
   }
   const { value, selectionStart, selectionEnd } = field;
-  if (typeof value !== 'string' || !Number.isInteger(selectionStart)
-    || selectionStart !== selectionEnd) {
+  if (!anywhere && (typeof value !== 'string' || !Number.isInteger(selectionStart)
+    || selectionStart !== selectionEnd)) {
     return '';
   }
   const index = workspaces.indexOf(currentWorkspace);
@@ -79,10 +81,12 @@ function getTextFieldEdgeWorkspaceTarget(event, field, currentWorkspace) {
     return '';
   }
   if (event.code === 'ArrowLeft') {
-    return index > 0 && selectionStart === 0 ? workspaces[index - 1] : '';
+    return index > 0 && (anywhere || selectionStart === 0) ? workspaces[index - 1] : '';
   }
   if (event.code === 'ArrowRight') {
-    return index < workspaces.length - 1 && selectionEnd === value.length ? workspaces[index + 1] : '';
+    return index < workspaces.length - 1 && (anywhere || selectionEnd === value.length)
+      ? workspaces[index + 1]
+      : '';
   }
   return '';
 }

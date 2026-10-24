@@ -825,7 +825,7 @@ test('workspace tabs advertise their digit alias, and the titles explain the rel
   for (const [id, label, digit] of tabs) {
     assert.match(
       html,
-      new RegExp(`id="${id}"[^>]*title="${label} \\(Alt\\+${digit}\\)。Shift\\+←→で隣のタブへ移ります。文字の入力欄の中では、文字を選んでおらずカーソルが端にあるときに切り替わります"[^>]*aria-keyshortcuts="Alt\\+${digit}"`),
+      new RegExp(`id="${id}"[^>]*title="${label} \\(Alt\\+${digit}\\)。Shift\\+←→で隣のタブへ移ります。文字の入力欄の中では、文字を選んでおらずカーソルが端にあるときに切り替わります（標準入力の欄ではいつでも切り替わります）"[^>]*aria-keyshortcuts="Alt\\+${digit}"`),
       id
     );
     // macOS shows Option in the title; aria-keyshortcuts keeps the DOM key name Alt.
@@ -845,8 +845,9 @@ test('Shift+Left / Shift+Right switch to the neighbouring workspace and Alt+1 / 
   assert.match(html, /function getWorkspaceShortcutTarget\(event, \{ allowArrows = true, currentWorkspace = 'run' \} = \{\}\)/);
   assert.match(html, /function isTextEntryTarget\(element\)/);
   // Inside text fields Shift+Arrow only switches at the caret edge; otherwise it selects text.
-  assert.match(html, /function getTextFieldEdgeWorkspaceTarget\(event, field, currentWorkspace\)/);
-  assert.match(html, /const inTextField = isTextEntryTarget\(event\.target\);\s*const shortcutWorkspace = getWorkspaceShortcutTarget\(event, \{\s*allowArrows: !inTextField,\s*currentWorkspace: viewState\.workspace\s*\}\)\s*\|\| \(inTextField \? getTextFieldEdgeWorkspaceTarget\(event, event\.target, viewState\.workspace\) : ''\);\s*if \(shortcutWorkspace\) \{[\s\S]*?event\.preventDefault\(\);[\s\S]*?setWorkspace\(shortcutWorkspace, \{ focusPanel: true, avoidTextEntry: event\.shiftKey \}\);/);
+  // The stdin box switches from any caret position.
+  assert.match(html, /function getTextFieldEdgeWorkspaceTarget\(event, field, currentWorkspace, \{ anywhere = false \} = \{\}\)/);
+  assert.match(html, /const inTextField = isTextEntryTarget\(event\.target\);\s*const shortcutWorkspace = getWorkspaceShortcutTarget\(event, \{\s*allowArrows: !inTextField,\s*currentWorkspace: viewState\.workspace\s*\}\)\s*\|\| \(inTextField\s*\? getTextFieldEdgeWorkspaceTarget\(event, event\.target, viewState\.workspace, \{ anywhere: event\.target === stdin \}\)\s*: ''\);\s*if \(shortcutWorkspace\) \{[\s\S]*?event\.preventDefault\(\);[\s\S]*?setWorkspace\(shortcutWorkspace, \{ focusPanel: true, avoidTextEntry: event\.shiftKey \}\);/);
   // Esc in stdin moves to the run tab without stopping the event for VS Code.
   assert.match(html, /stdin\.addEventListener\('keydown', \(event\) => \{\s*if \(event\.key !== 'Escape' \|\| isImeComposing\(event\)[\s\S]*?event\.preventDefault\(\);\s*document\.getElementById\('runWorkspaceTab'\)\.focus\(\);\s*\}\);/);
   assert.doesNotMatch(html, /stdin\.addEventListener\('keydown'[^}]*stopPropagation/);
@@ -864,7 +865,7 @@ test('shortcut hint bar sits above the tabs and follows the platform and input f
   const html = getWebviewHtml();
   assert.match(html, /<main class="runner">\s*<div class="shortcutHintBar"[\s\S]*?<\/div>\s*<div class="workspaceHeader">/);
   assert.match(html, /<kbd id="inputFocusHintKey">Alt\+I<\/kbd>: エディタ⇄パネル/);
-  assert.match(html, /<span class="shortcutHintItem" title="Shift\+←→でタブを切り替えます。文字の入力欄の中では[^"]*カーソルが左端ならShift\+←、右端ならShift\+→で切り替わります。[^"]*標準入力の欄ではEscでタブへ移動できます"><kbd>Shift\+←→<\/kbd>: タブ切替<\/span>/);
+  assert.match(html, /<span class="shortcutHintItem" title="Shift\+←→でタブを切り替えます。文字の入力欄の中では[^"]*カーソルが左端ならShift\+←、右端ならShift\+→で切り替わります。[^"]*標準入力の欄では、カーソルの位置にかかわらずShift\+←→で切り替わります。Escでタブへ移動することもできます"><kbd>Shift\+←→<\/kbd>: タブ切替<\/span>/);
   assert.match(html, /<kbd>Ctrl\+Enter<\/kbd>: 保存して実行/);
   assert.match(html, /\.shortcutHintBar\s*\{(?=[^}]*flex-wrap:\s*wrap;)(?=[^}]*font-size:\s*var\(--piyoyo-font-small\);)[^}]*\}/s);
   assert.match(html, /\.shortcutHintItem\s*\{[^}]*white-space:\s*nowrap;/s);
