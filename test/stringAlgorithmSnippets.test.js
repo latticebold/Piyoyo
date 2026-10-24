@@ -34,7 +34,8 @@ function runWithSnippet(id, checks) {
 
 test('string algorithm snippets insert a call and declare their def as a helper', () => {
   assert.deepEqual(
-    INPUT_SNIPPETS.filter((snippet) => snippet.helpers.length > 0).map((snippet) => snippet.id),
+    INPUT_SNIPPETS.filter((snippet) => snippet.category === 'string' && snippet.helpers.length > 0)
+      .map((snippet) => snippet.id),
     STRING_ALGORITHM_IDS
   );
   for (const id of STRING_ALGORITHM_IDS) {

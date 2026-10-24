@@ -17,11 +17,12 @@ const EXPECTED_CATEGORY_COUNTS = {
   string: 18,
   list: 20,
   tuple: 3,
-  aggregation: 8,
+  aggregation: 16,
   queue: 7,
   'brute-force': 2,
   'prefix-sum': 2,
   'binary-search': 3,
+  graph: 6,
   output: 7
 };
 
@@ -36,6 +37,7 @@ const EXPECTED_CATEGORY_LABELS = {
   'brute-force': '全探索',
   'prefix-sum': '累積和',
   'binary-search': '二分探索',
+  graph: 'グラフ・木',
   output: '出力・デバッグ'
 };
 
@@ -94,12 +96,12 @@ const ADDED_SNIPPET_IDS = [
   'set-add', 'set-contains', 'dict-lookup'
 ];
 
-test('97 snippets have complete frozen metadata in the 11-category usage order', () => {
+test('111 snippets have complete frozen metadata in the 12-category usage order', () => {
   const ids = INPUT_SNIPPETS.map((snippet) => snippet.id);
   const categories = [...new Set(INPUT_SNIPPETS.map((snippet) => snippet.category))];
 
-  assert.equal(INPUT_SNIPPETS.length, 97);
-  assert.equal(new Set(ids).size, 97);
+  assert.equal(INPUT_SNIPPETS.length, 111);
+  assert.equal(new Set(ids).size, 111);
   assert.deepEqual(SNIPPET_CATEGORY_ORDER, Object.keys(EXPECTED_CATEGORY_COUNTS));
   assert.deepEqual(categories, SNIPPET_CATEGORY_ORDER);
   assert.deepEqual(

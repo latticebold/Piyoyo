@@ -169,11 +169,11 @@ test('webview renders every snippet row in the intended category order', () => {
   assert.match(html, /class="snippetCategoryList" aria-label="入力コードのジャンル"/);
   const categoryIds = [
     'input', 'number-conversion', 'string', 'list', 'tuple', 'aggregation',
-    'queue', 'brute-force', 'prefix-sum', 'binary-search', 'output'
+    'queue', 'brute-force', 'prefix-sum', 'binary-search', 'graph', 'output'
   ];
   const categoryLabels = [
     '入力', '数値・型変換', '文字列', 'リスト', 'タプル・座標', '集合・辞書・数え上げ',
-    'キュー・deque', '全探索', '累積和', '二分探索', '出力・デバッグ'
+    'キュー・deque', '全探索', '累積和', '二分探索', 'グラフ・木', '出力・デバッグ'
   ];
   let previousIndex = html.indexOf('class="snippetCategoryList"');
   categoryIds.forEach((categoryId, index) => {
@@ -192,7 +192,7 @@ test('webview renders every snippet row in the intended category order', () => {
   });
   assert.match(html, /<summary>\s*<span[^>]*>入力<\/span>/s);
   assert.equal((html.match(/class="snippetCategoryDropdown"/g) || []).length, categoryIds.length);
-  assert.equal((html.match(/data-snippet-variants=/g) || []).length, 16);
+  assert.equal((html.match(/data-snippet-variants=/g) || []).length, 17);
   assert.ok((html.match(/data-snippet-entry=/g) || []).length > 60);
   assert.doesNotMatch(html, /data-snippet-select=/);
   assert.doesNotMatch(html, /class="snippetVariantSelect"/);

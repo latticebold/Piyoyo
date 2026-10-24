@@ -11,6 +11,7 @@ const SNIPPET_CATEGORY_ORDER = Object.freeze([
   'brute-force',
   'prefix-sum',
   'binary-search',
+  'graph',
   'output'
 ]);
 
@@ -25,6 +26,7 @@ const CATEGORY_LABELS = Object.freeze({
   'brute-force': '全探索',
   'prefix-sum': '累積和',
   'binary-search': '二分探索',
+  graph: 'グラフ・木',
   output: '出力・デバッグ'
 });
 
@@ -57,7 +59,8 @@ const SNIPPET_DISPLAY_ORDER = Object.freeze([
 
   'tuple-coordinate', 'tuple-single-item', 'tuple-unpack-coordinate',
 
-  'set-add', 'set-contains', 'dict-lookup',
+  'set-add', 'set-contains', 'dict-lookup', 'dict-get-default', 'dict-assign', 'dict-delete',
+  'dict-keys', 'dict-values', 'dict-items', 'dict-sorted-items', 'dict-max-key',
   'aggregation-counter', 'aggregation-counter-value',
   'aggregation-defaultdict-int', 'aggregation-increment', 'aggregation-defaultdict-list',
 
@@ -69,6 +72,9 @@ const SNIPPET_DISPLAY_ORDER = Object.freeze([
   'aggregation-accumulate', 'prefix-sum-range',
 
   'binary-bisect-left', 'binary-bisect-right', 'binary-count-closed-interval',
+
+  'graph-adjacency-list', 'graph-add-edge',
+  'graph-read-undirected', 'graph-bfs-distance', 'tree-parent-depth', 'tree-diameter',
 
   'output-value', 'output-text', 'output-two-values', 'output-unpack-list',
   'debug-type', 'debug-isinstance-int', 'debug-isinstance-str'
@@ -158,6 +164,20 @@ const COMPLEXITY_BY_ID = Object.freeze({
   'set-add': ['O(1)', '平均', '集合 S に要素を追加。衝突が集中すると最悪 O(n)'],
   'set-contains': ['O(1)', '平均', '集合 S の要素を検索。衝突が集中すると最悪 O(n)'],
   'dict-lookup': ['O(1)', '平均', '辞書 d のキーを検索。衝突が集中すると最悪 O(n)'],
+  'dict-get-default': ['O(1)', '平均', '辞書 d のキーを検索。衝突が集中すると最悪 O(n)'],
+  'dict-assign': ['O(1)', '平均', '辞書 d のキーを追加・更新。衝突が集中すると最悪 O(n)'],
+  'dict-delete': ['O(1)', '平均', '辞書 d のキーを削除。衝突が集中すると最悪 O(n)'],
+  'dict-keys': ['O(1)', '最悪', '一覧の窓口を作るだけ。全部を for で回すと O(n)'],
+  'dict-values': ['O(1)', '最悪', '一覧の窓口を作るだけ。全部を for で回すと O(n)'],
+  'dict-items': ['O(1)', '最悪', '一覧の窓口を作るだけ。全部を for で回すと O(n)'],
+  'dict-sorted-items': ['O(n log n)', '最悪', 'n=辞書 d の要素数。比較の費用は別'],
+  'dict-max-key': ['O(n)', '平均', 'n=辞書 d の要素数。比較の費用は別'],
+  'graph-adjacency-list': ['O(n)', '最悪', 'n=頂点数'],
+  'graph-add-edge': ['O(1)', '償却', '隣接リスト G[a] の末尾に b を追加'],
+  'graph-read-undirected': ['O(n + m)', '最悪', 'n=頂点数、m=辺数。整数変換の費用は別'],
+  'graph-bfs-distance': ['O(n + m)', '最悪', 'n=頂点数、m=辺数'],
+  'tree-parent-depth': ['O(n)', '最悪', 'n=木 G の頂点数'],
+  'tree-diameter': ['O(n)', '最悪', 'n=木 G の頂点数。BFS を2回行う'],
   'aggregation-accumulate': ['O(n)', '最悪', 'n=入力 a の要素数。加算の費用は別'],
   'prefix-sum-range': ['O(1)', '最悪', '添字2か所の参照と減算。大きな整数の費用は別'],
   'brute-combinations': ['O(r × C(n,r))', '最悪', 'n=リスト A の要素数。全ての組み合わせをリストに作る'],
@@ -179,6 +199,21 @@ const COMPLEXITY_BY_ID = Object.freeze({
   'debug-isinstance-int': ['O(1)', '最悪', '通常の組み込み型に対する判定'],
   'debug-isinstance-str': ['O(1)', '最悪', '通常の組み込み型に対する判定']
 });
+
+// Shared by graph-bfs-distance and tree-diameter, which calls it.
+const BFS_DISTANCE_HELPER_CODE = [
+  'def bfs_distance(G, start):',
+  '    dist = [-1] * len(G)',
+  '    dist[start] = 0',
+  '    q = deque([start])',
+  '    while q:',
+  '        v = q.popleft()',
+  '        for u in G[v]:',
+  '            if dist[u] == -1:',
+  '                dist[u] = dist[v] + 1',
+  '                q.append(u)',
+  '    return dist'
+].join('\n');
 
 const SNIPPET_DEFINITIONS = [
   createSnippet({
@@ -1228,6 +1263,122 @@ function createAdditionalSnippets() {
     }),
 
     createSnippet({
+      id: 'graph-adjacency-list',
+      category: 'graph',
+      summary: '頂点数nの空の隣接リストを作る',
+      description: '頂点0からn-1までの、それぞれの隣の頂点を入れる空のリストを作ります。グラフや木を表す基本の形です。',
+      input: '頂点数nを受け取ります。',
+      returns: '空リストをn個並べたリストを返します。G[v]に頂点vの隣の頂点を入れます。',
+      precondition: '[[]] * nと書くと、n個がすべて同じリストを指してしまうので使いません。',
+      label: '[[] for _ in range(n)]',
+      body: '[[] for _ in range(${1:n})]'
+    }),
+    createSnippet({
+      id: 'graph-add-edge',
+      category: 'graph',
+      summary: '隣接リストGに頂点aからbへの辺を追加',
+      description: '隣接リストGで、頂点aの隣に頂点bを追加します。',
+      input: '隣接リストG、辺の両端の頂点aとbを受け取ります。',
+      returns: '戻り値はありません。G[a]を変更します。',
+      precondition: '向きのない辺（無向グラフや木）では、逆向きのG[b].append(a)も追加します。入力の頂点番号が1から始まるときは、先にaとbから1を引きます。',
+      label: 'G[a].append(b)',
+      body: '${1:G}[${2:a}].append(${3:b})'
+    }),
+    createSnippet({
+      id: 'graph-read-undirected',
+      category: 'graph',
+      summary: 'n頂点m辺の無向グラフを入力から読む',
+      description: '「a b」の形の辺をm行読み、向きのないグラフの隣接リストを作ります。入力の頂点番号は1から始まるとし、0から始まる番号に直して入れます。',
+      input: '頂点数nと辺の数mを受け取ります。続くm行を標準入力から読みます。',
+      returns: '長さnの隣接リストGを返します。入力の頂点1はG[0]、頂点nはG[n - 1]です。',
+      precondition: '木はn頂点n-1辺なので、read_graph(n, n - 1)で読めます。向きのある辺（有向グラフ）にしたいときは、挿入された関数のG[b].append(a)の行を消します。',
+      label: 'read_graph(n, m)',
+      body: 'read_graph(${1:n}, ${2:m})',
+      helpers: [{
+        name: 'read_graph',
+        code: [
+          'def read_graph(n, m):',
+          '    G = [[] for _ in range(n)]',
+          '    for _ in range(m):',
+          '        a, b = map(int, input().split())',
+          '        a -= 1',
+          '        b -= 1',
+          '        G[a].append(b)',
+          '        G[b].append(a)',
+          '    return G'
+        ].join('\n')
+      }]
+    }),
+    createSnippet({
+      id: 'graph-bfs-distance',
+      category: 'graph',
+      summary: 'グラフGで頂点startから各頂点までの最短距離（BFS）',
+      description: '幅優先探索（BFS）で、頂点startから各頂点まで最少で何本の辺をたどれば着くかを求めます。',
+      input: '隣接リストGと出発する頂点startを受け取ります。',
+      returns: '長さlen(G)のリストdistを返します。dist[v]はstartから頂点vまでの辺の数で、たどり着けない頂点は-1です。',
+      precondition: '辺の長さがすべて1のときの最短距離です。辺ごとに長さが違うときは使えません。',
+      label: 'bfs_distance(G, start)',
+      body: 'bfs_distance(${1:G}, ${2:start})',
+      imports: ['from collections import deque'],
+      helpers: [{
+        name: 'bfs_distance',
+        code: BFS_DISTANCE_HELPER_CODE
+      }]
+    }),
+    createSnippet({
+      id: 'tree-parent-depth',
+      category: 'graph',
+      summary: '根rootの木Gで各頂点の親と深さ',
+      description: '頂点rootを根として木をたどり、各頂点の親と、根からの深さ（辺の数）を求めます。',
+      input: '木の隣接リストGと根の頂点rootを受け取ります。',
+      returns: '2つのリスト(parent, depth)を返します。parent[v]は頂点vの親で、根の親は-1です。depth[v]は根からvまでの辺の数です。',
+      precondition: 'Gは木（つながっていて、輪がない）である必要があります。再帰を使わないので、頂点数が多くても止まりません。parent, depth = tree_parent_depth(G, root)のように受け取ります。',
+      label: 'tree_parent_depth(G, root)',
+      body: 'tree_parent_depth(${1:G}, ${2:root})',
+      helpers: [{
+        name: 'tree_parent_depth',
+        code: [
+          'def tree_parent_depth(G, root):',
+          '    parent = [-1] * len(G)',
+          '    depth = [0] * len(G)',
+          '    stack = [root]',
+          '    while stack:',
+          '        v = stack.pop()',
+          '        for u in G[v]:',
+          '            if u != parent[v]:',
+          '                parent[u] = v',
+          '                depth[u] = depth[v] + 1',
+          '                stack.append(u)',
+          '    return parent, depth'
+        ].join('\n')
+      }]
+    }),
+    createSnippet({
+      id: 'tree-diameter',
+      category: 'graph',
+      summary: '木Gの直径（いちばん遠い2頂点の距離）',
+      description: '木の中でいちばん離れた2頂点の距離（辺の数）を求めます。適当な頂点から最も遠い頂点を探し、そこからもう一度最も遠い頂点までの距離を測ります。',
+      input: '木の隣接リストGを受け取ります。',
+      returns: '直径（辺の数）を返します。頂点が1つだけなら0です。',
+      precondition: 'Gは木である必要があります。BFSの関数bfs_distanceも一緒に追加します。',
+      label: 'tree_diameter(G)',
+      body: 'tree_diameter(${1:G})',
+      imports: ['from collections import deque'],
+      helpers: [{
+        name: 'bfs_distance',
+        code: BFS_DISTANCE_HELPER_CODE
+      }, {
+        name: 'tree_diameter',
+        code: [
+          'def tree_diameter(G):',
+          '    dist = bfs_distance(G, 0)',
+          '    far = dist.index(max(dist))',
+          '    return max(bfs_distance(G, far))'
+        ].join('\n')
+      }]
+    }),
+
+    createSnippet({
       id: 'queue-deque-empty',
       category: 'queue',
       selectorGroup: 'deque-create',
@@ -1424,6 +1575,103 @@ function createAdditionalSnippets() {
       precondition: 'キーxがない場合はKeyErrorが発生します。',
       label: 'd[x]',
       body: '${1:d}[${2:x}]'
+    }),
+    createSnippet({
+      id: 'dict-get-default',
+      category: 'aggregation',
+      summary: '辞書dからキーxの値を取得（なければ0）',
+      description: '辞書dでキーxに対応する値を返します。キーxがなければ、代わりに指定した値（ここでは0）を返します。',
+      input: '辞書d、キーx、キーがないときに返す値を受け取ります。',
+      returns: 'キーxの値を返します。キーxがなければ0を返します。',
+      precondition: 'd[x]と違い、キーxがなくてもKeyErrorになりません。dは変更されません。',
+      label: 'd.get(x, 0)',
+      body: '${1:d}.get(${2:x}, ${3:0})'
+    }),
+    createSnippet({
+      id: 'dict-assign',
+      category: 'aggregation',
+      summary: '辞書dのキーxに値vを入れる',
+      description: '辞書dのキーxに値vを結びつけます。キーxがすでにあれば、値をvに置き換えます。',
+      input: '辞書d、キーx、入れる値vを受け取ります。',
+      returns: '戻り値はありません。辞書dを変更します。',
+      precondition: 'xはハッシュ可能である必要があります。リストはキーにできないので、タプルにします。',
+      label: 'd[x] = v',
+      body: '${1:d}[${2:x}] = ${3:v}'
+    }),
+    createSnippet({
+      id: 'dict-delete',
+      category: 'aggregation',
+      summary: '辞書dからキーxを削除',
+      description: '辞書dからキーxとその値を取り除きます。',
+      input: '辞書dとキーxを受け取ります。',
+      returns: '戻り値はありません。辞書dを変更します。',
+      precondition: 'キーxがない場合はKeyErrorが発生します。',
+      label: 'del d[x]',
+      body: 'del ${1:d}[${2:x}]'
+    }),
+    createSnippet({
+      id: 'dict-keys',
+      category: 'aggregation',
+      selectorGroup: 'dict-view',
+      selectorGroupLabel: '辞書dの中身を順に取り出す',
+      choiceLabel: 'キー',
+      summary: '辞書dのキーを順に取り出す',
+      description: '辞書dのキーの一覧を返します。for文で1つずつ取り出せます。',
+      input: '辞書dを受け取ります。',
+      returns: 'キーの一覧を返します。順番は辞書に追加した順です。',
+      precondition: 'リストとして使いたいときはlist(d.keys())にします。for k in d:と書いても同じくキーを取り出せます。',
+      label: 'd.keys()',
+      body: '${1:d}.keys()'
+    }),
+    createSnippet({
+      id: 'dict-values',
+      category: 'aggregation',
+      selectorGroup: 'dict-view',
+      selectorGroupLabel: '辞書dの中身を順に取り出す',
+      choiceLabel: '値',
+      summary: '辞書dの値を順に取り出す',
+      description: '辞書dの値の一覧を返します。for文で1つずつ取り出せます。sum(d.values())で値の合計も求められます。',
+      input: '辞書dを受け取ります。',
+      returns: '値の一覧を返します。順番は辞書に追加した順です。',
+      precondition: 'リストとして使いたいときはlist(d.values())にします。',
+      label: 'd.values()',
+      body: '${1:d}.values()'
+    }),
+    createSnippet({
+      id: 'dict-items',
+      category: 'aggregation',
+      selectorGroup: 'dict-view',
+      selectorGroupLabel: '辞書dの中身を順に取り出す',
+      choiceLabel: 'キーと値',
+      summary: '辞書dのキーと値の組を順に取り出す',
+      description: '辞書dの（キー, 値）の組の一覧を返します。for k, v in d.items():のように、キーと値を同時に取り出せます。',
+      input: '辞書dを受け取ります。',
+      returns: '（キー, 値）のタプルの一覧を返します。順番は辞書に追加した順です。',
+      precondition: 'リストとして使いたいときはlist(d.items())にします。',
+      label: 'd.items()',
+      body: '${1:d}.items()'
+    }),
+    createSnippet({
+      id: 'dict-sorted-items',
+      category: 'aggregation',
+      summary: '辞書dのキーと値の組をキーの小さい順に並べる',
+      description: '辞書dの（キー, 値）の組を、キーの小さい順に並べたリストにします。',
+      input: '辞書dを受け取ります。',
+      returns: '（キー, 値）のタプルをキーの昇順に並べたリストを返します。dは変更されません。',
+      precondition: 'キーどうしを比べられる必要があります。値の小さい順にしたいときはsorted(d.items(), key=lambda kv: kv[1])にします。',
+      label: 'sorted(d.items())',
+      body: 'sorted(${1:d}.items())'
+    }),
+    createSnippet({
+      id: 'dict-max-key',
+      category: 'aggregation',
+      summary: '辞書dで値がいちばん大きいキー',
+      description: '辞書dの中で、値が最大になるキーを返します。Counterで最も多く現れた要素を求めるときにも使えます。',
+      input: '辞書dを受け取ります。',
+      returns: '値が最大のキーを返します。同じ最大値が複数あれば、先に追加したキーを返します。',
+      precondition: 'dが空だとValueErrorが発生します。値が最小のキーはmin(d, key=d.get)です。',
+      label: 'max(d, key=d.get)',
+      body: 'max(${1:d}, key=${1:d}.get)'
     }),
     createSnippet({
       id: 'debug-type',
